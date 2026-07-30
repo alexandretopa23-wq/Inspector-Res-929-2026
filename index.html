@@ -1,0 +1,1932 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Inspector Piscinas">
+<meta name="theme-color" content="#0a0d14">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Inspector de Piscinas · Res. 000929 de 2026</title>
+<style>
+:root{
+  --bg:#0a0d14;
+  --panel:#12161f;
+  --panel-2:#171c28;
+  --border:#242a3a;
+  --border-soft:#1c2130;
+  --text:#e7ebf3;
+  --text-dim:#8891a5;
+  --text-faint:#5b6377;
+  --accent:#3aa0ff;
+  --accent-dim:#1e3a5c;
+  --mono:'SFMono-Regular',ui-monospace,'Cascadia Code','Roboto Mono',Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+
+  --c-cumple:#22c55e;
+  --c-cumple-bg:#0f2a1a;
+  --c-nocumple:#ef4444;
+  --c-nocumple-bg:#2c1414;
+  --c-proceso:#3b82f6;
+  --c-proceso-bg:#122238;
+  --c-pendiente:#f59e0b;
+  --c-pendiente-bg:#2b2008;
+  --c-noaplica:#64748b;
+  --c-noaplica-bg:#1c212c;
+
+  --r-critico:#dc2626;
+  --r-alto:#f97316;
+  --r-medio:#eab308;
+  --r-bajo:#84cc16;
+  --r-sinriesgo:#22c55e;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-tap-highlight-color:transparent;}
+body{padding-bottom:100px;}
+::selection{background:var(--accent-dim);}
+button{font-family:inherit;cursor:pointer;}
+input,textarea,select{font-family:inherit;}
+.mono{font-family:var(--mono);}
+.hidden{display:none !important;}
+
+/* ---------- Topbar ---------- */
+#topbar{
+  position:sticky;top:0;z-index:50;
+  background:rgba(10,13,20,0.92);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+  padding:10px 14px;
+}
+#topbar .row1{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+#topbar .brand{display:flex;align-items:center;gap:8px;min-width:0;}
+#topbar .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;box-shadow:0 0 8px var(--accent);}
+#topbar .brand-text{font-size:13px;font-weight:600;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#topbar .brand-text .sub{color:var(--text-faint);font-weight:400;font-size:11px;display:block;margin-top:1px;}
+#topbar .actions{display:flex;gap:6px;flex:none;}
+.iconbtn{
+  background:var(--panel-2);border:1px solid var(--border);color:var(--text-dim);
+  border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  font-size:15px;
+}
+.iconbtn:active{background:var(--border);}
+#progressWrap{margin-top:10px;}
+#progressBarOuter{height:6px;border-radius:4px;background:var(--panel-2);overflow:hidden;border:1px solid var(--border-soft);}
+#progressBarInner{height:100%;background:linear-gradient(90deg,var(--accent),#7ad0ff);border-radius:4px;transition:width .25s ease;width:0%;}
+#progressLabel{display:flex;justify-content:space-between;font-size:11px;color:var(--text-faint);margin-top:4px;font-family:var(--mono);}
+#progressLabel b{color:var(--text);font-weight:600;}
+
+#pendingSwitchRow{display:flex;align-items:center;justify-content:space-between;margin-top:10px;background:var(--panel);border:1px solid var(--border-soft);border-radius:10px;padding:8px 10px;}
+#pendingSwitchRow .lbl{font-size:12px;color:var(--text-dim);}
+.switch{position:relative;width:40px;height:22px;flex:none;}
+.switch input{opacity:0;width:0;height:0;}
+.switch .slider{position:absolute;inset:0;background:var(--panel-2);border:1px solid var(--border);border-radius:20px;transition:.15s;}
+.switch .slider:before{content:'';position:absolute;width:16px;height:16px;left:2px;top:2px;background:var(--text-dim);border-radius:50%;transition:.15s;}
+.switch input:checked + .slider{background:var(--accent-dim);border-color:var(--accent);}
+.switch input:checked + .slider:before{transform:translateX(18px);background:var(--accent);}
+
+/* ---------- Home / Sessions ---------- */
+#homeView{padding:16px 14px;max-width:720px;margin:0 auto;}
+.section-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-faint);margin:22px 0 10px;font-weight:600;}
+.section-title:first-child{margin-top:4px;}
+#newInspectionBtn{
+  width:100%;background:var(--accent);color:#04101c;border:none;border-radius:12px;
+  padding:14px;font-size:14px;font-weight:700;letter-spacing:.2px;display:flex;align-items:center;justify-content:center;gap:8px;
+}
+#newInspectionBtn:active{opacity:.85;}
+.sessionCard{
+  background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;padding:12px 14px;margin-bottom:8px;
+  display:flex;align-items:center;gap:12px;
+}
+.sessionCard:active{background:var(--panel-2);}
+.sessionCard .ring{
+  width:42px;height:42px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;font-family:var(--mono);
+  background:conic-gradient(var(--accent) calc(var(--pct)*1%), var(--panel-2) 0);
+}
+.sessionCard .ring span{background:var(--panel);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.sessionCard .info{flex:1;min-width:0;}
+.sessionCard .info .t1{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sessionCard .info .t2{font-size:11.5px;color:var(--text-faint);margin-top:2px;font-family:var(--mono);}
+.sessionCard .chev{color:var(--text-faint);font-size:18px;flex:none;}
+.emptyState{color:var(--text-faint);font-size:12.5px;text-align:center;padding:26px 10px;border:1px dashed var(--border);border-radius:12px;}
+
+.exportRow{display:flex;gap:8px;margin-top:6px;}
+.btn2{
+  flex:1;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);
+  border-radius:10px;padding:11px 8px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.btn2:active{background:var(--panel-2);}
+.btn2.danger{color:#f38a8a;border-color:#3a1f1f;}
+
+/* ---------- Setup modal ---------- */
+.modalOverlay{position:fixed;inset:0;background:rgba(4,6,10,0.7);z-index:200;display:flex;align-items:flex-end;justify-content:center;}
+.modalSheet{
+  background:var(--panel);border-top:1px solid var(--border);border-radius:18px 18px 0 0;
+  width:100%;max-width:560px;padding:18px 18px 22px;max-height:88vh;overflow-y:auto;
+}
+.modalSheet h2{font-size:15px;margin:0 0 14px;font-weight:700;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11px;color:var(--text-faint);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
+.field input,.field select,.field textarea{
+  width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+  border-radius:9px;padding:11px 12px;font-size:14px;
+}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);}
+.field textarea{resize:vertical;min-height:56px;}
+.modalActions{display:flex;gap:10px;margin-top:16px;}
+.btnPrimary{flex:1;background:var(--accent);color:#04101c;border:none;border-radius:10px;padding:12px;font-weight:700;font-size:14px;}
+.btnGhost{flex:1;background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:10px;padding:12px;font-weight:600;font-size:14px;}
+
+/* ---------- Checklist view ---------- */
+#checklistView{max-width:720px;margin:0 auto;padding:12px 12px 0;}
+#sessionHeader{
+  background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;padding:10px 12px;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+#sessionHeader .shInfo{min-width:0;}
+#sessionHeader .shInfo .l1{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#sessionHeader .shInfo .l2{font-size:11px;color:var(--text-faint);margin-top:2px;font-family:var(--mono);}
+#sessionHeader .shBack{flex:none;background:var(--panel-2);border:1px solid var(--border);color:var(--text-dim);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:600;}
+
+.chapter{background:var(--panel);border:1px solid var(--border-soft);border-radius:12px;margin-bottom:10px;overflow:hidden;}
+.chapterHead{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;gap:10px;}
+.chapterHead:active{background:var(--panel-2);}
+.chapterHead .chTitle{font-size:13px;font-weight:700;line-height:1.3;}
+.chapterHead .chMeta{font-size:11px;color:var(--text-faint);margin-top:3px;font-family:var(--mono);}
+.chapterHead .chRight{display:flex;align-items:center;gap:8px;flex:none;}
+.chBadge{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;font-family:var(--mono);}
+.chBadge.complete{background:var(--c-cumple-bg);color:var(--c-cumple);}
+.chBadge.partial{background:var(--c-pendiente-bg);color:var(--c-pendiente);}
+.chBadge.empty{background:var(--panel-2);color:var(--text-faint);}
+.chArrow{color:var(--text-faint);font-size:13px;transition:transform .15s;}
+.chapter.open .chArrow{transform:rotate(90deg);}
+.chapterBody{display:none;border-top:1px solid var(--border-soft);padding:10px;}
+.chapter.open .chapterBody{display:block;}
+
+/* ---------- Item card ---------- */
+.item{background:var(--panel-2);border:1px solid var(--border-soft);border-radius:10px;padding:11px 12px;margin-bottom:8px;}
+.item:last-child{margin-bottom:0;}
+.item.answered.collapsed{padding:9px 12px;}
+.itemTop{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.itemId{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);font-weight:600;}
+.itemPrio{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;letter-spacing:.3px;text-transform:uppercase;}
+.itemPrio.Alta{background:#301213;color:#f38a8a;}
+.itemPrio.Media{background:#2b2008;color:#e0b04a;}
+.itemText{font-size:13.5px;line-height:1.4;margin:6px 0 4px;color:var(--text);}
+.itemMetaRow{font-size:10.5px;color:var(--text-faint);margin-bottom:8px;}
+.hintBox{background:#0e1826;border:1px solid #1c3350;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
+.hintBox .hintLbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);font-weight:700;margin-bottom:4px;}
+.hintBox .hintTxt{font-size:11.5px;color:#a9c4dd;line-height:1.45;}
+.hintBox .hintTxt + .hintTxt{margin-top:5px;padding-top:5px;border-top:1px dashed #1c3350;}
+.chapterGuide{background:#0e1826;border:1px solid #1c3350;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;color:#a9c4dd;line-height:1.5;}
+.chapterGuide .cgMarco{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);font-weight:700;margin-bottom:4px;}
+.chGuideToggle{font-size:11px;color:var(--accent);display:flex;align-items:center;gap:5px;padding:8px 10px;cursor:pointer;}
+
+.collapsedRow{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.collapsedDot{width:9px;height:9px;border-radius:50%;flex:none;}
+.collapsedText{flex:1;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-dim);}
+.collapsedBadge{font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;flex:none;}
+.collapsedEdit{color:var(--text-faint);font-size:11px;flex:none;}
+
+.pillRow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px;}
+.pill{
+  border:1px solid var(--border);background:var(--panel);color:var(--text-dim);
+  border-radius:8px;padding:8px 10px;font-size:12px;font-weight:600;flex:1;min-width:80px;text-align:center;
+}
+.pill.small{flex:none;min-width:0;padding:6px 10px;font-size:11px;}
+.pill[data-active="1"]{color:#04101c;border-color:transparent;}
+
+.pill[data-k="Cumple"][data-active="1"]{background:var(--c-cumple);}
+.pill[data-k="No cumple"][data-active="1"]{background:var(--c-nocumple);color:#fff;}
+.pill[data-k="En proceso"][data-active="1"]{background:var(--c-proceso);color:#fff;}
+.pill[data-k="Pendiente"][data-active="1"]{background:var(--c-pendiente);}
+.pill[data-k="No aplica"][data-active="1"]{background:var(--c-noaplica);color:#fff;}
+
+.pill[data-k="Critico"][data-active="1"]{background:var(--r-critico);color:#fff;}
+.pill[data-k="Alto"][data-active="1"]{background:var(--r-alto);}
+.pill[data-k="Medio"][data-active="1"]{background:var(--r-medio);}
+.pill[data-k="Bajo"][data-active="1"]{background:var(--r-bajo);}
+.pill[data-k="Sin riesgo"][data-active="1"]{background:var(--r-sinriesgo);}
+
+.subLabel{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin:10px 0 6px;}
+.extraFields{margin-top:4px;border-top:1px dashed var(--border);padding-top:10px;}
+.fieldSm{margin-bottom:8px;}
+.fieldSm label{display:block;font-size:10.5px;color:var(--text-faint);margin-bottom:4px;}
+.fieldSm input,.fieldSm textarea,.fieldSm select{
+  width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);
+  border-radius:7px;padding:8px 9px;font-size:12.5px;
+}
+.fieldSm textarea{min-height:44px;resize:vertical;}
+.twoCol{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+.moreToggle{font-size:11px;color:var(--accent);text-align:center;padding:7px;border:1px dashed var(--border);border-radius:7px;margin-top:6px;}
+.dueBadge{font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:5px;font-weight:700;margin-left:6px;}
+.dueBadge.ok{color:var(--text-faint);}
+.dueBadge.late{background:var(--c-nocumple-bg);color:var(--c-nocumple);}
+.dueBadge.soon{background:var(--c-pendiente-bg);color:var(--c-pendiente);}
+
+.chapterBulkRow{display:flex;gap:6px;margin-bottom:10px;}
+.bulkBtn{flex:1;background:var(--panel-2);border:1px solid var(--border);color:var(--text-faint);border-radius:8px;padding:7px;font-size:10.5px;font-weight:600;}
+
+/* ---------- Toast ---------- */
+#toast{
+  position:fixed;bottom:14px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:#16a34a;color:#fff;padding:9px 16px;border-radius:10px;font-size:12.5px;font-weight:600;
+  opacity:0;transition:.2s;z-index:500;box-shadow:0 6px 20px rgba(0,0,0,.4);
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+#fabSaveBar{
+  position:fixed;bottom:0;left:0;right:0;background:rgba(10,13,20,0.95);backdrop-filter:blur(10px);
+  border-top:1px solid var(--border);padding:10px 14px;z-index:60;display:flex;gap:8px;
+  max-width:720px;margin:0 auto;
+}
+#fabSaveBar .savedInfo{flex:1;display:flex;flex-direction:column;justify-content:center;font-size:10.5px;color:var(--text-faint);}
+#fabSaveBar .savedInfo b{color:var(--c-cumple);font-family:var(--mono);}
+#fabSaveBar button{flex:none;}
+
+@media(min-width:760px){
+  #fabSaveBar{left:50%;transform:translateX(-50%);width:720px;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:14px 14px 0 0;}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="row1">
+    <div class="brand">
+      <div class="dot"></div>
+      <div class="brand-text">Inspector de Piscinas
+        <span class="sub" id="topbarSub">Res. 000929 de 2026 · 227 ítems / 27 capítulos</span>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="iconbtn" id="btnSyncMode" title="Modo de sincronización" style="width:auto;padding:0 10px;font-size:11px;">🔄 <span id="syncModeLabel">Manual</span></button>
+      <button class="iconbtn" id="btnHomeTop" title="Inicio">⌂</button>
+    </div>
+  </div>
+  <div id="syncModeMenu" class="hidden" style="position:absolute;top:52px;right:14px;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:60;overflow:hidden;min-width:180px;">
+    <div class="syncModeOpt" data-mode="manual" style="padding:12px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border-soft);">
+      <div style="font-weight:700;">Manual</div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:2px;">Tú decides cuándo sincronizar cada sección</div>
+    </div>
+    <div class="syncModeOpt" data-mode="auto" style="padding:12px 14px;font-size:13px;cursor:pointer;">
+      <div style="font-weight:700;">Automático</div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:2px;">Cada sección se sincroniza sola al completarse</div>
+    </div>
+  </div>
+  <div id="progressWrap" class="hidden">
+    <div id="progressBarOuter"><div id="progressBarInner"></div></div>
+    <div id="progressLabel"><span>Avance de esta inspección</span><b id="progressPct">0%</b></div>
+  </div>
+  <div id="pendingSwitchRow" class="hidden">
+    <span class="lbl">Mostrar solo ítems pendientes</span>
+    <label class="switch"><input type="checkbox" id="onlyPendingToggle" checked><span class="slider"></span></label>
+  </div>
+</div>
+
+<div id="homeView"></div>
+<div id="checklistView" class="hidden"></div>
+
+<div id="fabSaveBar" class="hidden">
+  <div class="savedInfo">Guardado local automático<br><b id="lastSavedAt">—</b></div>
+  <button class="btn2" id="btnExportCsv">⤓ CSV</button>
+  <button class="btn2" id="btnExportJson">⤓ JSON</button>
+</div>
+
+<div id="toast"></div>
+
+<script id="items-data" type="application/json">[{"id": "CHK-001", "cap": "1. Documentación técnica y legal", "item": "Planos informativos disponibles y visibles.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-002", "cap": "1. Documentación técnica y legal", "item": "Planos técnicos constructivos actualizados por piscina.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-003", "cap": "1. Documentación técnica y legal", "item": "Planos hidráulicos, eléctricos, gas, tratamiento y calentamiento disponibles.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-004", "cap": "1. Documentación técnica y legal", "item": "Memorias o estudios estructurales, si aplica.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-005", "cap": "1. Documentación técnica y legal", "item": "Certificados o soportes de cumplimiento normativo disponibles.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-006", "cap": "1. Documentación técnica y legal", "item": "Plan de seguridad documentado y actualizado.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-007", "cap": "1. Documentación técnica y legal", "item": "Bitácoras de mantenimiento preventivo y correctivo.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-008", "cap": "1. Documentación técnica y legal", "item": "Registros de inspección diaria, semanal y mensual.", "enfoque": "Documental", "prioridad": "Media"}, {"id": "CHK-009", "cap": "2. Señalización general", "item": "Profundidades señalizadas en borde, paredes y cambios de nivel.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-010", "cap": "2. Señalización general", "item": "Señalización visible y resistente al agua, productos químicos y rayos UV.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-011", "cap": "2. Señalización general", "item": "Rutas de evacuación identificadas.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-012", "cap": "2. Señalización general", "item": "Reglamento de uso visible para usuarios.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-013", "cap": "2. Señalización general", "item": "Señalización de riesgos: pisos húmedos, cambios de nivel y zonas profundas.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-014", "cap": "2. Señalización general", "item": "Señalización de botón de emergencia y elementos de rescate.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-015", "cap": "2. Señalización general", "item": "Aforo máximo visible y controlado.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-016", "cap": "3. Vaso de piscina", "item": "Pisos y paredes uniformes, sin resaltos, filos ni piezas sueltas.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-017", "cap": "3. Vaso de piscina", "item": "Revestimiento impermeable y de fácil limpieza.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-018", "cap": "3. Vaso de piscina", "item": "Revestimiento resistente a químicos, abrasión y tracción mecánica.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-019", "cap": "3. Vaso de piscina", "item": "Juntas, enchapes y bordes en buen estado.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-020", "cap": "3. Vaso de piscina", "item": "Vértices redondeados, en media caña o con procedimiento documentado de limpieza.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-021", "cap": "3. Vaso de piscina", "item": "Ausencia de obstrucciones subacuáticas no controladas.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-022", "cap": "3. Vaso de piscina", "item": "Pendientes acordes al tipo y profundidad del estanque.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-023", "cap": "3. Vaso de piscina", "item": "Superficies antideslizantes en zonas requeridas.", "enfoque": "Infraestructura", "prioridad": "Media"}, {"id": "CHK-024", "cap": "4. Profundidad y cambios de nivel", "item": "Profundidad máxima, mínima e intermedia identificada.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-025", "cap": "4. Profundidad y cambios de nivel", "item": "Cambios de pendiente señalizados.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-026", "cap": "4. Profundidad y cambios de nivel", "item": "Corredores sumergidos, si existen, con profundidad controlada.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-027", "cap": "4. Profundidad y cambios de nivel", "item": "Bordes de cambio de nivel redondeados y demarcados.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-028", "cap": "4. Profundidad y cambios de nivel", "item": "Piscinas infantiles con profundidad acorde al uso.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-029", "cap": "4. Profundidad y cambios de nivel", "item": "Separación o control entre zonas de distinta profundidad.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-030", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Corredores libres de obstáculos.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-031", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Superficie antideslizante, uniforme, impermeable y sin filos.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-032", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Pendiente hacia drenajes o canaletas, sin empozamientos.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-033", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Ancho de corredor verificado o mitigado con señalización/procedimiento.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-034", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Rejillas de piso estables, completas y sin fracturas.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-035", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Tapas de cárcamos niveladas, resistentes y aseguradas.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-036", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Bordes redondeados o sin aristas cortantes.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-037", "cap": "5. Corredores, andenes y zonas de tránsito", "item": "Mobiliario, torres, equipos o barreras fuera del tránsito del bañista.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-038", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Canaletas perimetrales limpias y funcionales.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-039", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Rejillas completas, sin fisuras, deformaciones ni pérdida de rigidez.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-040", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Rejillas correctamente apoyadas, niveladas y aseguradas.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-041", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Material resistente a químicos, humedad y tránsito.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-042", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Ausencia de bordes cortantes o piezas inestables.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-043", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Cárcamos sin acumulación de residuos.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-044", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Programa de inspección y reposición preventiva de rejillas.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-045", "cap": "6. Canaletas, cárcamos y rejillas", "item": "Registro fotográfico de inspecciones críticas.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-046", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Drenajes hidráulicamente balanceados, si aplica.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-047", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Rejillas o cubiertas antiatrapamiento instaladas.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-048", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Cubiertas en buen estado, aseguradas y sin fracturas.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-049", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Sistema de liberación de vacío operativo.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-050", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Botón de apagado de emergencia operativo y señalizado.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-051", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Distancia y ubicación de drenajes verificada.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-052", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Evidencia de homologación o declaración de conformidad de dispositivos.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-053", "cap": "7. Drenajes sumergidos y seguridad contra atrapamiento", "item": "Prueba funcional documentada del sistema de emergencia.", "enfoque": "Seguridad", "prioridad": "Alta"}, {"id": "CHK-054", "cap": "8. Sistema de recirculación", "item": "Bombas operativas y dimensionadas.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-055", "cap": "8. Sistema de recirculación", "item": "Tuberías en buen estado, sin fugas ni corrosión.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-056", "cap": "8. Sistema de recirculación", "item": "Tuberías identificadas por fluido y dirección de flujo.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-057", "cap": "8. Sistema de recirculación", "item": "Medidor de flujo instalado y operativo.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-058", "cap": "8. Sistema de recirculación", "item": "Caudal real verificado frente al diseño.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-059", "cap": "8. Sistema de recirculación", "item": "Tiempo de recirculación validado según tipo de piscina.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-060", "cap": "8. Sistema de recirculación", "item": "Válvulas señalizadas y funcionales.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-061", "cap": "8. Sistema de recirculación", "item": "Pruebas de estanqueidad o presión documentadas.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-062", "cap": "8. Sistema de recirculación", "item": "Sistema independiente de recirculación por estanque, si aplica.", "enfoque": "Operación / Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-063", "cap": "9. Filtros y tratamiento físico del agua", "item": "Filtros dimensionados según volumen y caudal.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-064", "cap": "9. Filtros y tratamiento físico del agua", "item": "Manómetros instalados y funcionales.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-065", "cap": "9. Filtros y tratamiento físico del agua", "item": "Medio filtrante en buen estado.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-066", "cap": "9. Filtros y tratamiento físico del agua", "item": "Retrolavados programados y registrados.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-067", "cap": "9. Filtros y tratamiento físico del agua", "item": "Turbidez controlada dentro del parámetro exigido.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-068", "cap": "9. Filtros y tratamiento físico del agua", "item": "Mantenimiento preventivo de filtros documentado.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-069", "cap": "9. Filtros y tratamiento físico del agua", "item": "Ausencia de fugas en válvulas, uniones y manifolds.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-070", "cap": "9. Filtros y tratamiento físico del agua", "item": "Presión de operación dentro de rangos definidos.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-071", "cap": "10. Boquillas de inyección y retornos", "item": "Boquillas completas y sin obstrucción.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-072", "cap": "10. Boquillas de inyección y retornos", "item": "Distribución hidráulica adecuada.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-073", "cap": "10. Boquillas de inyección y retornos", "item": "Retornos de pared o piso funcionales.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-074", "cap": "10. Boquillas de inyección y retornos", "item": "Mezcla homogénea del agua verificada.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-075", "cap": "10. Boquillas de inyección y retornos", "item": "Boquillas sin elementos sueltos o cortantes.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-076", "cap": "10. Boquillas de inyección y retornos", "item": "Limpieza periódica registrada.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-077", "cap": "10. Boquillas de inyección y retornos", "item": "Pruebas de circulación o coloración, si aplica.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-078", "cap": "11. Desnatadores, sobreflujo y tanque de compensación", "item": "Desnatadores operativos, si aplica.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-079", "cap": "11. Desnatadores, sobreflujo y tanque de compensación", "item": "Canastas limpias y en buen estado.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-080", "cap": "11. Desnatadores, sobreflujo y tanque de compensación", "item": "Tapa de acceso segura y nivelada.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-081", "cap": "11. Desnatadores, sobreflujo y tanque de compensación", "item": "Sistema de sobreflujo perimetral funcional.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-082", "cap": "11. Desnatadores, sobreflujo y tanque de compensación", "item": "Tanque de compensación limpio y con capacidad operativa.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-083", "cap": "11. Desnatadores, sobreflujo y tanque de compensación", "item": "Sensores, flotadores o controles de nivel funcionales.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-084", "cap": "11. Desnatadores, sobreflujo y tanque de compensación", "item": "Ausencia de reboses, pérdidas o retornos deficientes.", "enfoque": "Calidad de agua", "prioridad": "Media"}, {"id": "CHK-085", "cap": "12. Cuarto de equipos", "item": "Acceso restringido.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-086", "cap": "12. Cuarto de equipos", "item": "Área limpia, ordenada y señalizada.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-087", "cap": "12. Cuarto de equipos", "item": "Equipos con espacio suficiente para mantenimiento.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-088", "cap": "12. Cuarto de equipos", "item": "Tuberías marcadas con sentido de flujo y tipo de fluido.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-089", "cap": "12. Cuarto de equipos", "item": "Válvulas identificadas.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-090", "cap": "12. Cuarto de equipos", "item": "Drenajes de piso con rejilla o protector.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-091", "cap": "12. Cuarto de equipos", "item": "Extintor disponible y vigente.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-092", "cap": "12. Cuarto de equipos", "item": "Ventilación suficiente.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-093", "cap": "12. Cuarto de equipos", "item": "Iluminación adecuada.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-094", "cap": "12. Cuarto de equipos", "item": "Tableros eléctricos protegidos contra humedad.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-095", "cap": "12. Cuarto de equipos", "item": "Equipos sin vibraciones, ruidos anormales o fugas.", "enfoque": "Infraestructura / Operación", "prioridad": "Alta"}, {"id": "CHK-096", "cap": "13. Instalaciones eléctricas", "item": "Cumplimiento RETIE o diagnóstico técnico disponible.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-097", "cap": "13. Instalaciones eléctricas", "item": "Tableros eléctricos señalizados y protegidos.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-098", "cap": "13. Instalaciones eléctricas", "item": "Puesta a tierra verificada.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-099", "cap": "13. Instalaciones eléctricas", "item": "Protecciones diferenciales operativas.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-100", "cap": "13. Instalaciones eléctricas", "item": "Canalizaciones en buen estado.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-101", "cap": "13. Instalaciones eléctricas", "item": "Equipos eléctricos protegidos contra humedad.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-102", "cap": "13. Instalaciones eléctricas", "item": "Luminarias seguras para ambiente húmedo.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-103", "cap": "13. Instalaciones eléctricas", "item": "Botones de emergencia funcionales.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-104", "cap": "13. Instalaciones eléctricas", "item": "Mantenimiento eléctrico documentado.", "enfoque": "Seguridad eléctrica", "prioridad": "Alta"}, {"id": "CHK-105", "cap": "14. Instalaciones de gas y calentamiento", "item": "Cumplimiento normativo de instalaciones de gas.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-106", "cap": "14. Instalaciones de gas y calentamiento", "item": "Equipos de calentamiento en buen estado.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-107", "cap": "14. Instalaciones de gas y calentamiento", "item": "Ventilación adecuada.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-108", "cap": "14. Instalaciones de gas y calentamiento", "item": "Detección o control de fugas, si aplica.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-109", "cap": "14. Instalaciones de gas y calentamiento", "item": "Señalización de redes de gas.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-110", "cap": "14. Instalaciones de gas y calentamiento", "item": "Mantenimiento certificado o documentado.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-111", "cap": "14. Instalaciones de gas y calentamiento", "item": "Temperaturas de operación controladas.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-112", "cap": "14. Instalaciones de gas y calentamiento", "item": "Válvulas de corte identificadas y accesibles.", "enfoque": "Seguridad / Energía", "prioridad": "Alta"}, {"id": "CHK-113", "cap": "15. Iluminación", "item": "Iluminación suficiente sobre toda la lámina de agua.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-114", "cap": "15. Iluminación", "item": "Ausencia de zonas oscuras o puntos ciegos.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-115", "cap": "15. Iluminación", "item": "Luminarias en buen estado.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-116", "cap": "15. Iluminación", "item": "Torres o postes fuera de zonas de tránsito.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-117", "cap": "15. Iluminación", "item": "Obstáculos señalizados.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-118", "cap": "15. Iluminación", "item": "Iluminación de emergencia, si aplica.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-119", "cap": "15. Iluminación", "item": "Mantenimiento de luminarias documentado.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-120", "cap": "16. Almacenamiento de sustancias químicas", "item": "Área exclusiva para químicos.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-121", "cap": "16. Almacenamiento de sustancias químicas", "item": "Acceso restringido.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-122", "cap": "16. Almacenamiento de sustancias químicas", "item": "Ventilación adecuada.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-123", "cap": "16. Almacenamiento de sustancias químicas", "item": "Iluminación suficiente.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-124", "cap": "16. Almacenamiento de sustancias químicas", "item": "Señalización de riesgo químico.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-125", "cap": "16. Almacenamiento de sustancias químicas", "item": "Productos segregados por compatibilidad.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-126", "cap": "16. Almacenamiento de sustancias químicas", "item": "Fichas de datos de seguridad disponibles.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-127", "cap": "16. Almacenamiento de sustancias químicas", "item": "Envases rotulados y cerrados.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-128", "cap": "16. Almacenamiento de sustancias químicas", "item": "Piso y muros de fácil limpieza.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-129", "cap": "16. Almacenamiento de sustancias químicas", "item": "Puerta resistente a corrosión.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-130", "cap": "16. Almacenamiento de sustancias químicas", "item": "Kit de derrames disponible.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-131", "cap": "16. Almacenamiento de sustancias químicas", "item": "Registro de inventario y consumo químico.", "enfoque": "Seguridad química", "prioridad": "Alta"}, {"id": "CHK-132", "cap": "17. Calidad del agua y operación sanitaria", "item": "Registro de pH.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-133", "cap": "17. Calidad del agua y operación sanitaria", "item": "Registro de cloro libre o sistema de desinfección aplicable.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-134", "cap": "17. Calidad del agua y operación sanitaria", "item": "Registro de alcalinidad.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-135", "cap": "17. Calidad del agua y operación sanitaria", "item": "Registro de turbidez.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-136", "cap": "17. Calidad del agua y operación sanitaria", "item": "Registro de temperatura, si aplica.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-137", "cap": "17. Calidad del agua y operación sanitaria", "item": "Control microbiológico según programa.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-138", "cap": "17. Calidad del agua y operación sanitaria", "item": "Frecuencia de medición definida.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-139", "cap": "17. Calidad del agua y operación sanitaria", "item": "Equipos de medición calibrados.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-140", "cap": "17. Calidad del agua y operación sanitaria", "item": "Acciones correctivas documentadas ante desviaciones.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-141", "cap": "17. Calidad del agua y operación sanitaria", "item": "Responsable técnico definido.", "enfoque": "Calidad de agua", "prioridad": "Alta"}, {"id": "CHK-142", "cap": "18. Accesos y escaleras", "item": "Medios de entrada y salida suficientes.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-143", "cap": "18. Accesos y escaleras", "item": "Escaleras firmes y ancladas.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-144", "cap": "18. Accesos y escaleras", "item": "Pasamanos en buen estado y resistentes a corrosión.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-145", "cap": "18. Accesos y escaleras", "item": "Peldaños antideslizantes.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-146", "cap": "18. Accesos y escaleras", "item": "Ausencia de holguras o piezas sueltas.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-147", "cap": "18. Accesos y escaleras", "item": "Bordes diferenciados o visibles.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-148", "cap": "18. Accesos y escaleras", "item": "Accesos sin obstáculos.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-149", "cap": "18. Accesos y escaleras", "item": "Mantenimiento documentado.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-150", "cap": "19. Accesibilidad para personas con movilidad reducida", "item": "Medio accesible de entrada y salida, si aplica.", "enfoque": "Accesibilidad", "prioridad": "Media"}, {"id": "CHK-151", "cap": "19. Accesibilidad para personas con movilidad reducida", "item": "Rampa, elevador o mecanismo equivalente operativo.", "enfoque": "Accesibilidad", "prioridad": "Media"}, {"id": "CHK-152", "cap": "19. Accesibilidad para personas con movilidad reducida", "item": "Mantenimiento del equipo accesible documentado.", "enfoque": "Accesibilidad", "prioridad": "Media"}, {"id": "CHK-153", "cap": "19. Accesibilidad para personas con movilidad reducida", "item": "Ruta libre de barreras hacia el estanque.", "enfoque": "Accesibilidad", "prioridad": "Media"}, {"id": "CHK-154", "cap": "19. Accesibilidad para personas con movilidad reducida", "item": "Señalización de acceso incluyente.", "enfoque": "Accesibilidad", "prioridad": "Media"}, {"id": "CHK-155", "cap": "19. Accesibilidad para personas con movilidad reducida", "item": "Condiciones de uso seguro verificadas.", "enfoque": "Accesibilidad", "prioridad": "Media"}, {"id": "CHK-156", "cap": "20. Primeros auxilios", "item": "Área de primeros auxilios demarcada.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-157", "cap": "20. Primeros auxilios", "item": "Área señalizada y accesible.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-158", "cap": "20. Primeros auxilios", "item": "Punto de agua para consumo humano.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-159", "cap": "20. Primeros auxilios", "item": "Lavamanos disponible.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-160", "cap": "20. Primeros auxilios", "item": "Botiquín completo y vigente.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-161", "cap": "20. Primeros auxilios", "item": "Lista de centros médicos y teléfonos actualizada.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-162", "cap": "20. Primeros auxilios", "item": "Ruta de evacuación desde piscina definida.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-163", "cap": "20. Primeros auxilios", "item": "Personal conoce protocolo de atención.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-164", "cap": "21. Salvavidas y rescate", "item": "Salvavidas disponibles durante operación.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-165", "cap": "21. Salvavidas y rescate", "item": "Número de salvavidas acorde al aforo y tipo de actividad.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-166", "cap": "21. Salvavidas y rescate", "item": "Salvavidas identificables visualmente.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-167", "cap": "21. Salvavidas y rescate", "item": "Certificaciones vigentes.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-168", "cap": "21. Salvavidas y rescate", "item": "Aro salvavidas disponible.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-169", "cap": "21. Salvavidas y rescate", "item": "Pértiga o elemento de alcance disponible.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-170", "cap": "21. Salvavidas y rescate", "item": "Camilla o elemento de traslado disponible.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-171", "cap": "21. Salvavidas y rescate", "item": "Equipos ubicados en puntos visibles y accesibles.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-172", "cap": "21. Salvavidas y rescate", "item": "Simulacros o entrenamientos documentados.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-173", "cap": "22. Medio de comunicación de emergencia", "item": "Teléfono, radio u otro medio operativo.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-174", "cap": "22. Medio de comunicación de emergencia", "item": "Comunicación disponible durante todo el horario de servicio.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-175", "cap": "22. Medio de comunicación de emergencia", "item": "Números de emergencia visibles y actualizados.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-176", "cap": "22. Medio de comunicación de emergencia", "item": "Personal conoce cadena de comunicación.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-177", "cap": "22. Medio de comunicación de emergencia", "item": "Pruebas periódicas del medio de comunicación.", "enfoque": "Emergencias", "prioridad": "Alta"}, {"id": "CHK-178", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Baños disponibles y operativos.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-179", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Duchas funcionales.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-180", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Lavamanos operativos.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-181", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Pisos antideslizantes y sin empozamiento.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-182", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Limpieza y desinfección documentada.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-183", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Ventilación adecuada.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-184", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Señalización de uso.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-185", "cap": "23. Unidades sanitarias, duchas y áreas anexas", "item": "Accesibilidad, si aplica.", "enfoque": "Infraestructura / Sanitario", "prioridad": "Media"}, {"id": "CHK-186", "cap": "24. Aforo y control de ingreso", "item": "Aforo máximo determinado por estanque.", "enfoque": "Operación / Seguridad", "prioridad": "Media"}, {"id": "CHK-187", "cap": "24. Aforo y control de ingreso", "item": "Control de ingreso implementado.", "enfoque": "Operación / Seguridad", "prioridad": "Media"}, {"id": "CHK-188", "cap": "24. Aforo y control de ingreso", "item": "Registro o sistema de conteo disponible.", "enfoque": "Operación / Seguridad", "prioridad": "Media"}, {"id": "CHK-189", "cap": "24. Aforo y control de ingreso", "item": "Aforo visible para usuarios.", "enfoque": "Operación / Seguridad", "prioridad": "Media"}, {"id": "CHK-190", "cap": "24. Aforo y control de ingreso", "item": "Procedimiento para control en temporada alta.", "enfoque": "Operación / Seguridad", "prioridad": "Media"}, {"id": "CHK-191", "cap": "24. Aforo y control de ingreso", "item": "Reglas específicas para menores y escuelas de formación.", "enfoque": "Operación / Seguridad", "prioridad": "Media"}, {"id": "CHK-192", "cap": "25. Operario de mantenimiento de piscinas", "item": "Operario certificado o con competencia documentada.", "enfoque": "Operación", "prioridad": "Media"}, {"id": "CHK-193", "cap": "25. Operario de mantenimiento de piscinas", "item": "Turnos y responsables definidos.", "enfoque": "Operación", "prioridad": "Media"}, {"id": "CHK-194", "cap": "25. Operario de mantenimiento de piscinas", "item": "Rutinas de operación establecidas.", "enfoque": "Operación", "prioridad": "Media"}, {"id": "CHK-195", "cap": "25. Operario de mantenimiento de piscinas", "item": "Bitácora diaria de operación.", "enfoque": "Operación", "prioridad": "Media"}, {"id": "CHK-196", "cap": "25. Operario de mantenimiento de piscinas", "item": "Capacitación en químicos, equipos y emergencias.", "enfoque": "Operación", "prioridad": "Media"}, {"id": "CHK-197", "cap": "25. Operario de mantenimiento de piscinas", "item": "Procedimiento de escalamiento de novedades.", "enfoque": "Operación", "prioridad": "Media"}, {"id": "CHK-198", "cap": "26. Toboganes, rodaderos o zonas de salto, si aplica", "item": "Estructura en buen estado.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-199", "cap": "26. Toboganes, rodaderos o zonas de salto, si aplica", "item": "Superficies sin filos, grietas ni desprendimientos.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-200", "cap": "26. Toboganes, rodaderos o zonas de salto, si aplica", "item": "Anclajes verificados.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-201", "cap": "26. Toboganes, rodaderos o zonas de salto, si aplica", "item": "Señalización de uso.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-202", "cap": "26. Toboganes, rodaderos o zonas de salto, si aplica", "item": "Profundidad segura en zona de caída.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-203", "cap": "26. Toboganes, rodaderos o zonas de salto, si aplica", "item": "Supervisión operativa.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-204", "cap": "26. Toboganes, rodaderos o zonas de salto, si aplica", "item": "Mantenimiento documentado.", "enfoque": "Seguridad", "prioridad": "Media"}, {"id": "CHK-205", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Matriz de hallazgos por piscina.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "CHK-206", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Clasificación de riesgo: alto, medio, bajo.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "CHK-207", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Acciones inmediatas definidas.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "CHK-208", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Responsable asignado.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "CHK-209", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Fecha compromiso.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "CHK-210", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Evidencia fotográfica antes/después.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "CHK-211", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Validación de cierre técnico.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "CHK-212", "cap": "27. Gestión preventiva y cierre de hallazgos", "item": "Seguimiento periódico por Facility Management.", "enfoque": "Gestión", "prioridad": "Media"}, {"id": "AD-001", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-002", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-003", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-004", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-005", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-006", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-007", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-008", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-009", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-010", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-011", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-012", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-013", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-014", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}, {"id": "AD-015", "cap": "Adicional", "item": "nan", "enfoque": "", "prioridad": ""}]</script>
+<script>
+(function(){
+'use strict';
+
+/* ============ CONFIG ============
+   Sedes (12) y Piscinas/estanques (25) — listas oficiales tomadas del
+   inventario PIMS ya depurado. Siguen siendo editables aquí si PIMS cambia. */
+var SEDES = ["CENTRO MAYOR","CUR","MOFLI","CALLE 94","CARRERA 60","CALLE 220","CAJICA","SUBA","JARDIN GIRARDOT","FUSAGASUGA","LAGO SOL","LAGO MAR"];
+var PISCINAS = ["SEMIOLIMPICA","ACUAMOTRICIDAD","RELAJACION","FAMILIAR","NINOS","ROMANA1","ROMANA2","JACUZZI 1","JACUZZI2","RECREATIVA","OLIMPICA I","OLIMPICA II","INFANTIL","TOBOGAN","TERRAZA","LAGO","JACUZZI TERRAZA","PLAYA","PISCINA 1","PISCINA 2","PISCINA 3","PISCINA HUESPEDES","OASIS 1 VIAJERO","OASIS 2 BISMARQUIA","OASIS 3 LATANIA","OASIS 4 SERENOA"];
+
+var ESTADOS = ["Cumple","No cumple","En proceso","Pendiente","No aplica"];
+var RIESGOS = ["Sin riesgo","Bajo","Medio","Alto","Critico"];
+var RIESGOS_LABEL = {"Sin riesgo":"Sin riesgo","Bajo":"Bajo","Medio":"Medio","Alto":"Alto","Critico":"Crítico"};
+var CIERRA_ITEM_ESTADOS = ["No cumple","En proceso","Pendiente"]; // estados que despliegan campos extra
+
+/* ============ CONTEXTO NORMATIVO ============
+   Guía por capítulo basada en el Anexo Técnico de la Res. 000929 de 2026.
+   Los capítulos marcados con ⚠ referencian numerales cuyo texto completo
+   no fue provisto en el extracto de la resolución cargado en esta sesión —
+   valida el criterio contra el numeral completo antes de cerrar el hallazgo. */
+var CHAPTER_GUIDE = {
+"1. Documentación técnica y legal":{marco:"Numeral 1 y Cap. I",texto:"Deben existir planos informativos visibles en el área de bañistas (rutas de evacuación, profundidades, accesos, alarmas, botón de emergencia) y planos técnicos constructivos con memorias estructurales. Estanques anteriores a la resolución sin memorias deben tener estudios que suplan ese vacío."},
+"2. Señalización general":{marco:"Numerales 1.1a y 4",texto:"La señalización de profundidad debe usar letras/números de mínimo 10 cm, color contrastante, material resistente al agua, químicos y UV. Incluye rutas de evacuación, reglamento de uso visible, señalización de riesgos (piso húmedo, cambios de nivel) y aforo visible."},
+"3. Vaso de piscina":{marco:"Numerales 2 y 3",texto:"No debe haber obstrucciones subacuáticas ni zonas muertas. Superficies uniformes, sin resaltos ni filos. Pendientes de piso: ≤6% si la lámina es <0.6m, ≤8.3% (1:12) entre 0.6-1.5m, ≤34% si ≥1.5m. Vértices redondeados (media caña) o con chaflán."},
+"4. Profundidad y cambios de nivel":{marco:"Numeral 4",texto:"Profundidad máxima 0.60m para menores de 6 años. Corredor sumergido ≤10cm. Profundidades señalizadas en 4 puntos (paredes, corredor al borde, cambio de inclinación) con altura de letra mínima 10cm."},
+"5. Corredores, andenes y zonas de tránsito":{marco:"Numeral 9.1",texto:"Ancho mínimo 1.20m medido desde el borde. Material atérmico, antideslizante, impermeable, sin resaltos. Pendiente 3%-5% hacia drenajes perimetrales. Libres de obstáculos."},
+"6. Canaletas, cárcamos y rejillas":{marco:"Numeral 8 (revestimientos)",texto:"Aplica también a canaletas perimetrales y tanques de equilibrio: material impermeable, atérmico, fácil limpieza y desinfección, resistente a productos químicos del tratamiento."},
+"7. Drenajes sumergidos y seguridad contra atrapamiento":{marco:"Numeral 7",texto:"Mínimo 2 desagües hidráulicamente balanceados, separación ≥0.90m, cubiertas antientrampamiento de al menos 4x el área de la tubería. Sistema de Liberación de Vacío y botón de apagado de emergencia homologados."},
+"8. Sistema de recirculación":{marco:"Numerales 10 y 10.1",texto:"Tiempos de recirculación según uso (4-6h colectivo abierto al público, 1-2h piscinas infantiles, 0.5h estructuras similares). Velocidad máxima 2.4 m/s en presión / 1.8 m/s en succión. Prueba de estanqueidad ≤21 PSI (1.5 bar)."},
+"9. Filtros y tratamiento físico del agua":{marco:"Numeral 10.2",texto:"Velocidad de filtración 20-40 m³/h/m² en uso colectivo (≤50 en restringido). Turbidez máxima permanente de 3 NTU. Cada filtro debe tener manómetro de control de obstrucción."},
+"10. Boquillas de inyección y retornos":{marco:"Numeral 10.3",texto:"Un inyector cada 6m de perímetro, a 1.5m de los desnatadores, ubicación alterna a 30cm del fondo y 30-50cm de la superficie. Prueba de colorante: la mezcla debe lograrse en máximo 20 minutos."},
+"11. Desnatadores, sobreflujo y tanque de compensación":{marco:"Numerales 10.4 y 10.5",texto:"Un desnatador cada 46.5 m² de espejo de agua, ubicados en lados opuestos. Sobreflujo perimetral obligatorio si el espejo de agua supera 312 m² (mínimo 50% del perímetro). Borde infinito requiere tanque de compensación ≥10% del volumen o 60 L/m²."},
+"12. Cuarto de equipos":{marco:"Numeral 10.7",texto:"Uso exclusivo y acceso restringido. Señalización de válvulas y tuberías por sentido/tipo de fluido, diagrama hidráulico visible, pendiente de piso hacia drenajes, mecanismo de extinción de incendios."},
+"13. Instalaciones eléctricas":{marco:"Numeral 1.2",texto:"Diseño, construcción, instalación, mantenimiento, operación y señalización deben cumplir el RETIE vigente."},
+"14. Instalaciones de gas y calentamiento":{marco:"Numeral 1.3",texto:"Instalaciones de gas para climatización deben cumplir la Resolución 90902 de 2013 del Ministerio de Minas y Energía (o la que la sustituya)."},
+"15. Iluminación":{marco:"Numeral 1.4",texto:"Mínimo 86 lumens/m² de lámina de agua. Estanques sin sistema previo: iluminancia horizontal ≥200 lux con uniformidad ≥0.5. Cumplimiento RETIE y RETILAP."},
+"16. Almacenamiento de sustancias químicas":{marco:"Numeral 10.8",texto:"Área exclusiva y físicamente separada, ventilada, iluminada, señalizada, de acceso restringido. Pisos/muros de fácil limpieza; puerta resistente a la corrosión."},
+"17. Calidad del agua y operación sanitaria":{marco:"Numerales 10.2 y 10.6",texto:"Turbidez máxima 3 NTU en todo momento. Para piscinas cubiertas: CO2 400-600 ppm, humedad relativa 50-70%, temperatura del agua ≤40°C — parámetros que deben medirse y registrarse a diario antes de operar."},
+"18. Accesos y escaleras":{marco:"Numerales 6 y 6.1",texto:"Mínimo 1 acceso + 1 adicional cada 25m de perímetro. Escaleras fijas: contrahuella ≤23cm, huella ≥25cm, ancho 60cm, pasamanos anclados. Escaleras de sobreponer: pasamanos sobresale ≥70cm sobre el borde, separación con la pared 8-10cm. Entrada de profundidad cero: pendiente ≤8.3%, inmersión <25cm."},
+"19. Accesibilidad para personas con movilidad reducida":{marco:"Numeral 6.2",texto:"Debe existir mínimo un medio accesible de entrada/salida (elevador, rampa, entrada de profundidad cero), con mantenimiento según fabricante y acreditación del mecanismo por el ente certificador."},
+"20. Primeros auxilios":{marco:"Numeral 1.5",texto:"Área demarcada y señalizada, con punto de agua para consumo humano y lavamanos, lista actualizada de centros de asistencia médica/emergencia con teléfonos, y fácil evacuación."},
+"21. Salvavidas y rescate":{marco:"⚠ Numeral 12.3-12.4 del Anexo (texto no incluido en el extracto cargado)",texto:"Verificar número de salvavidas según aforo, certificación vigente, y elementos de apoyo y rescate disponibles y en buen estado. Confirma contra el numeral 12.3-12.4 completo de la resolución."},
+"22. Medio de comunicación de emergencia":{marco:"⚠ Numeral 12.5 (texto no incluido en el extracto cargado)",texto:"Verificar que exista un medio de comunicación operativo (teléfono, radio, alarma) accesible desde el área de bañistas. Confirma contra el numeral 12.5 completo."},
+"23. Unidades sanitarias, duchas y áreas anexas":{marco:"⚠ Numeral 12.1 (texto no incluido en el extracto cargado)",texto:"Verificar estado, limpieza y dotación de vestuarios, sanitarios, lavamanos y duchas. Confirma contra el numeral 12.1 completo."},
+"24. Aforo y control de ingreso":{marco:"Numeral 10.9 y definición de Factor de uso (Cap. I)",texto:"El número máximo de bañistas está vinculado a la capacidad del sistema de tratamiento y al factor de uso (m² de espejo de agua por bañista). Verificar aforo visible y mecanismo de control de ingreso."},
+"25. Operario de mantenimiento de piscinas":{marco:"⚠ Numeral 10.10 (texto no incluido en el extracto cargado)",texto:"Verificar certificación vigente del operario en mantenimiento de piscinas. Confirma contra el numeral 10.10 completo."},
+"26. Toboganes, rodaderos o zonas de salto, si aplica":{marco:"⚠ Numeral 11 (texto no incluido en el extracto cargado)",texto:"Verificar señalización, profundidad mínima en zona de caída y distancias de seguridad. Confirma contra el numeral 11 completo."},
+"27. Gestión preventiva y cierre de hallazgos":{marco:"Transversal (relacionado con Numeral 1)",texto:"Verificar bitácoras de mantenimiento preventivo/correctivo, registros de inspección diaria/semanal/mensual, y trazabilidad de cierre de hallazgos con responsable y fecha."},
+"Adicional":{marco:"Gestión interna",texto:"Ítems complementarios de control operativo definidos internamente por la organización, sin numeral específico de la Res. 000929. Usa criterio técnico interno."}
+};
+
+/* Pistas específicas por palabra clave dentro del texto del ítem — se muestran
+   además de la guía de capítulo cuando el ítem toca un criterio con valor numérico
+   puntual de la resolución. */
+var ITEM_HINTS = [
+  {re:/profundidad/i, hint:"Confirma la lámina de agua real con flexómetro/sonda y compárala contra el límite normativo del capítulo (0.60m para menores de 6 años; pendientes según rango de profundidad)."},
+  {re:/pasamanos/i, hint:"Verifica anclaje firme, resistencia a la corrosión y que sobresalga ≥70cm sobre el borde (escaleras de sobreponer) o esté dentro de 30cm del borde (escaleras fijas)."},
+  {re:/antidesliz/i, hint:"Prueba táctil/visual de la superficie; el coeficiente dinámico de fricción exigido es ≥0.42 o ángulo de adherencia ≥24°."},
+  {re:/desnatador/i, hint:"Cuenta las unidades y verifica proporción de 1 cada 46.5 m² de espejo de agua, canastilla en buen estado y mecanismo de bloqueo funcional."},
+  {re:/boquilla|inyector/i, hint:"Verifica espaciamiento (1 cada 6m de perímetro) y que no haya zonas muertas sin recirculación visible."},
+  {re:/turbidez/i, hint:"El límite normativo es 3 NTU máximo en todo momento — solicita el último registro del turbidímetro o mide en sitio si tienes el equipo."},
+  {re:/filtro/i, hint:"Revisa manómetro de presión diferencial (control de obstrucción) y que la velocidad de filtración esté dentro de 20-40 m³/h/m²."},
+  {re:/dren|succi[oó]n|atrapamiento/i, hint:"Verifica cubiertas antientrampamiento homologadas, Sistema de Liberación de Vacío operativo y botón de apagado de emergencia accesible."},
+  {re:/v[eé]rtice|chafl[aá]n/i, hint:"Inspecciona visualmente el ángulo entre muros y piso: debe ser redondeado (media caña) o con chaflán, sin esquinas de 90° que acumulen suciedad."},
+  {re:/corredor|and[eé]n/i, hint:"Mide el ancho con cinta métrica: mínimo 1.20m desde el borde de la piscina, superficie sin resaltos ni filos."},
+  {re:/tuber[ií]a|velocidad del agua|caudal/i, hint:"Si hay manómetros o caudalímetro, confirma que la velocidad no exceda 2.4 m/s en presión ni 1.8 m/s en succión."},
+  {re:/el[eé]ctric|retie/i, hint:"Solicita certificado RETIE vigente del establecimiento; inspecciona visualmente tomacorrientes, tableros y puesta a tierra cerca del agua."},
+  {re:/gas|calentamiento/i, hint:"Solicita certificación de la instalación de gas conforme a la Resolución 90902 de 2013 (Min. Minas y Energía)."},
+  {re:/iluminaci[oó]n|lumen|lux|retilap/i, hint:"Si hay luxómetro, confirma ≥86 lumens/m² (interior) o ≥200 lux con uniformidad ≥0.5 (exterior sin sistema previo)."},
+  {re:/qu[ií]mic/i, hint:"Verifica separación física del área de químicos, ventilación, señalización de riesgo y que la puerta resista corrosión."},
+  {re:/co2|di[oó]xido de carbono|humedad relativa/i, hint:"Para piscinas cubiertas: CO2 debe estar entre 400-600 ppm y humedad relativa entre 50-70% — pide el registro diario previo a apertura."},
+  {re:/aforo|n[uú]mero m[aá]ximo de ba[ñn]istas/i, hint:"Contrasta el aforo señalizado contra el factor de uso (m² de espejo de agua por bañista) y la capacidad del sistema de tratamiento."},
+  {re:/salvavidas/i, hint:"Verifica número de salvavidas activos frente al aforo del turno y vigencia de su certificación."},
+  {re:/primeros auxilios/i, hint:"Confirma botiquín dotado, lista de contactos de emergencia actualizada y accesibilidad del área para evacuación."},
+  {re:/evacuaci[oó]n|emergencia/i, hint:"Verifica que la ruta esté despejada, señalizada y que el medio de comunicación de emergencia funcione en el momento de la visita."},
+  {re:/movilidad reducida|accesib/i, hint:"Confirma que el mecanismo de acceso (rampa/elevador) esté operativo y con mantenimiento vigente según el fabricante."},
+  {re:/tobog[aá]n|rodadera|salto/i, hint:"Verifica señalización de profundidad mínima en la zona de caída y distancias de seguridad respecto a otros elementos."},
+  {re:/extintor|incendio/i, hint:"Confirma vigencia de la recarga y accesibilidad del extintor en el cuarto de equipos."},
+  {re:/planos/i, hint:"Verifica que estén disponibles físicamente o digitalmente y que reflejen el estado actual de la instalación, no una versión desactualizada."},
+  {re:/bit[aá]cora|registro/i, hint:"Solicita el registro físico o digital y confirma periodicidad real (diaria/semanal/mensual según corresponda)."},
+  {re:/certificad|certificaci[oó]n/i, hint:"Pide el soporte documental vigente (fecha de emisión y vencimiento) del certificado o certificación mencionada."}
+];
+function getItemHints(itemText){
+  var out = [];
+  for(var i=0;i<ITEM_HINTS.length && out.length<2;i++){
+    if(ITEM_HINTS[i].re.test(itemText)) out.push(ITEM_HINTS[i].hint);
+  }
+  return out;
+}
+
+var ITEMS = JSON.parse(document.getElementById('items-data').textContent);
+var CHAPTERS = [];
+(function buildChapters(){
+  var seen = {};
+  ITEMS.forEach(function(it){
+    if(!seen[it.cap]){ seen[it.cap] = true; CHAPTERS.push(it.cap); }
+  });
+})();
+
+var LS_SESSIONS = 'sessions_index';
+var LS_SESSION_PREFIX = 'session_';
+var LS_PREFS = 'prefs';
+
+/* ============ SINCRONIZACIÓN CON GOOGLE SHEETS (por sección) ============ */
+var SHEETS_WEBHOOK_URL = ''; // Se carga desde config.json
+var LAST_SYNC_TIME = 0;
+var PENDING_CHAPTER_SYNCS = {}; // cap -> true, secciones con envío pendiente/fallido para reintentar
+var SYNCING_CHAPTERS = {}; // cap -> true, sección con un envío EN CURSO ahora mismo
+var DIRTY_DURING_SYNC = {}; // cap -> true, hubo ediciones nuevas mientras el envío estaba en curso
+var RETRY_COUNT = {}; // cap -> número de reintentos fallidos consecutivos
+var MAX_AUTO_RETRIES = 3; // tras esto, deja de reintentar solo (evita reenvíos infinitos)
+var CHAPTER_SYNC_RETRY_INTERVAL = 20000;
+
+function chapterRows(sess, cap){
+  return ITEMS.filter(function(it){ return it.cap===cap; })
+    .map(function(it){
+      var r = sess.responses[it.id] || {};
+      return [
+        it.id, '', it.cap, it.item, it.enfoque||'', it.prioridad||'',
+        sess.meta.sede, sess.meta.piscina, sess.meta.fecha, sess.meta.responsable,
+        r.estado||'', r.riesgo||'', r.hallazgo||'', r.accion||'', r.respCierre||'',
+        r.fechaCompromiso||'', r.fechaCierre||'', daysRemainingStr(r.fechaCompromiso,r.fechaCierre),
+        (r.avance!=null? r.avance : ''), r.evidenciaActual||'', r.evidenciaCierre||'',
+        r.linkCarpeta||'', r.observaciones||''
+      ];
+    })
+    .filter(function(row){ return row[10] !== ''; }); // solo respondidos
+}
+
+function isChapterComplete(sess, cap){
+  var items = ITEMS.filter(function(it){ return it.cap===cap; });
+  return items.every(function(it){ return sess.responses[it.id] && sess.responses[it.id].estado; });
+}
+
+async function syncChapterToSheets(sess, cap, opts){
+  opts = opts || {};
+  if(!STORAGE_OK || !SHEETS_WEBHOOK_URL) return false;
+
+  // Candado: si esta sección YA tiene un envío en curso, no dispares otro en
+  // paralelo (eso es lo que causaba que la misma celda "parpadeara" con
+  // valores viejos llegando después de los nuevos). En su lugar, marca que
+  // hay cambios pendientes y el envío en curso se encargará de reenviar al
+  // terminar.
+  if(SYNCING_CHAPTERS[cap]){
+    DIRTY_DURING_SYNC[cap] = true;
+    return false;
+  }
+  var rows = chapterRows(sess, cap);
+  if(rows.length===0) return false;
+
+  SYNCING_CHAPTERS[cap] = true;
+  delete DIRTY_DURING_SYNC[cap];
+  try{
+    await fetch(SHEETS_WEBHOOK_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: JSON.stringify({rows: rows}),
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      signal: AbortSignal.timeout(50000)
+    });
+    delete PENDING_CHAPTER_SYNCS[cap];
+    delete RETRY_COUNT[cap];
+    LAST_SYNC_TIME = Date.now();
+    setChapterSyncBadge(cap, 'ok');
+    if(!opts.silent) toast('↑ Sección sincronizada con Sheets ('+rows.length+' ítems)');
+    return true;
+  }catch(e){
+    RETRY_COUNT[cap] = (RETRY_COUNT[cap]||0) + 1;
+    console.warn('Sync error (cap: '+cap+'), intento '+RETRY_COUNT[cap]+':', e.message);
+    if(RETRY_COUNT[cap] >= MAX_AUTO_RETRIES){
+      // Dejamos de bombardear el servidor: probablemente SÍ llegó (no-cors
+      // no permite confirmarlo con certeza), simplemente el navegador tarda
+      // en darse por satisfecho. Esperamos a que el usuario sincronice esta
+      // sección manualmente si de verdad hace falta.
+      delete PENDING_CHAPTER_SYNCS[cap];
+      setChapterSyncBadge(cap, 'stalled');
+      if(!opts.silent) toast('⚠ Verifica en Sheets — probablemente sí se guardó, deja de reintentar solo');
+    } else {
+      PENDING_CHAPTER_SYNCS[cap] = true;
+      setChapterSyncBadge(cap, 'error');
+      if(!opts.silent) toast('⚠ Sin confirmación — reintentando ('+RETRY_COUNT[cap]+'/'+MAX_AUTO_RETRIES+')');
+    }
+    return false;
+  }finally{
+    delete SYNCING_CHAPTERS[cap];
+    // Si llegaron ediciones nuevas mientras este envío estaba en curso,
+    // dispara un reenvío inmediato con los datos más recientes (una sola
+    // vez, ya sin solaparse porque el candado anterior ya se liberó).
+    if(DIRTY_DURING_SYNC[cap]){
+      delete DIRTY_DURING_SYNC[cap];
+      syncChapterToSheets(sess, cap, {silent:true});
+    }
+  }
+}
+
+function setChapterSyncBadge(cap, status){
+  var ci = CHAPTERS.indexOf(cap);
+  var badge = document.querySelector('.chapter[data-cap="'+ci+'"] .chSyncBadge');
+  if(!badge) return;
+  if(status==='ok'){ badge.textContent = '✓ Sincronizado'; badge.style.color = 'var(--c-cumple)'; }
+  else if(status==='error'){ badge.textContent = '⚠ Reintentando…'; badge.style.color = 'var(--c-nocumple)'; }
+  else if(status==='sending'){ badge.textContent = '↑ Enviando…'; badge.style.color = 'var(--text-faint)'; }
+  else if(status==='stalled'){ badge.textContent = '⚠ Verificar en Sheets'; badge.style.color = 'var(--c-nocumple)'; }
+  clearTimeout(badge._t);
+  if(status==='ok'){ badge._t = setTimeout(function(){ badge.textContent=''; }, 4000); }
+}
+
+// Modo automático: cuando una sección queda 100% diligenciada (o se edita
+// después de estarlo), se sincroniza sola en un solo lote — no ítem por ítem.
+function maybeAutoSyncChapter(cap){
+  if(state.prefs.syncMode !== 'auto') return;
+  if(!isChapterComplete(state.session, cap)) return;
+  setChapterSyncBadge(cap, 'sending');
+  syncChapterToSheets(state.session, cap, {silent:true});
+}
+
+// Reintento periódico solo para secciones que fallaron (offline, etc.)
+setInterval(function(){
+  if(state.view!=='checklist' || !state.session) return;
+  Object.keys(PENDING_CHAPTER_SYNCS).forEach(function(cap){
+    syncChapterToSheets(state.session, cap, {silent:true});
+  });
+}, CHAPTER_SYNC_RETRY_INTERVAL);
+
+function formatSyncTime(ms){
+  var now = Date.now();
+  var diff = Math.floor((now - LAST_SYNC_TIME) / 1000);
+  if(diff < 60) return 'hace '+diff+'s';
+  if(diff < 3600) return 'hace '+Math.floor(diff/60)+'m';
+  return 'hace '+Math.floor(diff/3600)+'h';
+}
+
+
+/* ============ STORAGE HELPERS (memoria local del dispositivo) ============
+   Usa IndexedDB (más resistente a purgas del navegador, mayor cuota) con
+   respaldo automático a localStorage si IndexedDB no está disponible.
+   Los datos quedan anclados a ESTE dispositivo/navegador — no viajan entre
+   dispositivos ni dependen de ninguna cuenta. Para consolidar datos de
+   varios dispositivos usa Exportar/Importar backup. */
+var DB_NAME = 'pi_inspector_db', DB_VERSION = 1, DB_STORE = 'kv';
+var _dbPromise = null;
+function openDB(){
+  if(_dbPromise) return _dbPromise;
+  _dbPromise = new Promise(function(resolve, reject){
+    if(!window.indexedDB){ reject(new Error('no indexedDB')); return; }
+    var req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = function(){ req.result.createObjectStore(DB_STORE); };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error); };
+  });
+  return _dbPromise;
+}
+async function kvGet(key){
+  try{
+    var db = await openDB();
+    return await new Promise(function(resolve, reject){
+      var tx = db.transaction(DB_STORE,'readonly');
+      var r = tx.objectStore(DB_STORE).get(key);
+      r.onsuccess = function(){ resolve(r.result===undefined? null : r.result); };
+      r.onerror = function(){ reject(r.error); };
+    });
+  }catch(e){
+    try{ var v = localStorage.getItem('idbfallback_'+key); return v===null? null : v; }catch(e2){ return null; }
+  }
+}
+async function kvSet(key, value){
+  try{
+    var db = await openDB();
+    await new Promise(function(resolve, reject){
+      var tx = db.transaction(DB_STORE,'readwrite');
+      tx.objectStore(DB_STORE).put(value, key);
+      tx.oncomplete = function(){ resolve(true); };
+      tx.onerror = function(){ reject(tx.error); };
+    });
+    return true;
+  }catch(e){
+    try{ localStorage.setItem('idbfallback_'+key, value); return true; }catch(e2){ return false; }
+  }
+}
+async function kvDelete(key){
+  try{
+    var db = await openDB();
+    await new Promise(function(resolve, reject){
+      var tx = db.transaction(DB_STORE,'readwrite');
+      tx.objectStore(DB_STORE).delete(key);
+      tx.oncomplete = function(){ resolve(true); };
+      tx.onerror = function(){ reject(tx.error); };
+    });
+  }catch(e){
+    try{ localStorage.removeItem('idbfallback_'+key); }catch(e2){}
+  }
+}
+
+async function loadSessions(){
+  try{
+    var v = await kvGet(LS_SESSIONS);
+    return v ? JSON.parse(v) : [];
+  }catch(e){ return []; }
+}
+async function saveSessionsIndex(list){
+  await kvSet(LS_SESSIONS, JSON.stringify(list));
+}
+async function loadSession(id){
+  try{
+    var v = await kvGet(LS_SESSION_PREFIX+id);
+    return v ? JSON.parse(v) : null;
+  }catch(e){ return null; }
+}
+async function saveSession(sess){
+  sess.updatedAt = Date.now();
+  hasUnexportedChanges = true;
+  var ok = await kvSet(LS_SESSION_PREFIX+sess.id, JSON.stringify(sess));
+  if(!ok){ toast('⚠ Error guardando — exporta un backup por seguridad'); return; }
+  var list = await loadSessions();
+  var idx = list.findIndex(function(s){return s.id===sess.id;});
+  var summary = summarize(sess);
+  if(idx>=0) list[idx] = summary; else list.unshift(summary);
+  await saveSessionsIndex(list);
+  hasUnexportedChanges = false;
+  updateSavedLabel();
+}
+async function deleteSession(id){
+  await kvDelete(LS_SESSION_PREFIX+id);
+  var list = await loadSessions();
+  await saveSessionsIndex(list.filter(function(s){return s.id!==id;}));
+}
+async function loadPrefs(){
+  try{
+    var v = await kvGet(LS_PREFS);
+    return v ? JSON.parse(v) : {onlyPending:true};
+  }catch(e){ return {onlyPending:true}; }
+}
+async function savePrefs(p){
+  await kvSet(LS_PREFS, JSON.stringify(p));
+}
+
+function summarize(sess){
+  var total = ITEMS.length, answered = 0;
+  ITEMS.forEach(function(it){ if(sess.responses[it.id] && sess.responses[it.id].estado) answered++; });
+  return {
+    id: sess.id, sede: sess.meta.sede, piscina: sess.meta.piscina, fecha: sess.meta.fecha,
+    responsable: sess.meta.responsable, updatedAt: sess.updatedAt, createdAt: sess.createdAt,
+    total: total, answered: answered
+  };
+}
+
+function uid(){ return 'insp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
+
+/* ============ STORAGE RELIABILITY ============ */
+var STORAGE_OK = null;
+async function testStorage(){
+  try{
+    await kvSet('__pi_test__', '1');
+    var v = await kvGet('__pi_test__');
+    await kvDelete('__pi_test__');
+    return v==='1';
+  }catch(e){ return false; }
+}
+async function requestPersistence(){
+  try{
+    if(navigator.storage && navigator.storage.persist){
+      return await navigator.storage.persist();
+    }
+  }catch(e){}
+  return false;
+}
+
+function renderStorageBanner(persisted){
+  var el = document.getElementById('storageBanner');
+  if(el) el.remove();
+  var banner = document.createElement('div');
+  banner.id='storageBanner';
+  if(!STORAGE_OK){
+    banner.style.cssText='background:#2b1414;border-bottom:1px solid #4a1c1c;color:#f38a8a;font-size:11.5px;padding:8px 14px;line-height:1.4;';
+    banner.textContent = '⚠ Este navegador no permite guardar datos localmente. Tu progreso NO persistirá al cerrar. Exporta un backup JSON con frecuencia.';
+  } else {
+    banner.style.cssText='background:#0e1826;border-bottom:1px solid #1c3350;color:#7ab8e8;font-size:11px;padding:7px 14px;line-height:1.4;display:flex;justify-content:space-between;align-items:center;gap:10px;';
+    banner.innerHTML = '<span>📌 Para máxima seguridad: agrega esta página a tu pantalla de inicio (Compartir → Agregar a inicio en iPhone, ⋮ → Agregar a pantalla de inicio en Android). Así el navegador no borra tus datos.'+(persisted?' Almacenamiento persistente activo.':'')+'</span>'+
+      '<button id="dismissBanner" style="flex:none;background:none;border:none;color:#7ab8e8;font-size:16px;">✕</button>';
+  }
+  document.getElementById('topbar').insertAdjacentElement('afterend', banner);
+  var dismiss = document.getElementById('dismissBanner');
+  if(dismiss) dismiss.onclick = function(){ banner.remove(); };
+}
+
+var hasUnexportedChanges = false;
+window.addEventListener('beforeunload', function(e){
+  if(!STORAGE_OK && hasUnexportedChanges){
+    e.preventDefault(); e.returnValue = '';
+    return '';
+  }
+});
+
+/* ============ STATE ============ */
+
+var state = { view:'home', session:null, prefs: {onlyPending:true} };
+
+/* ============ TOAST ============ */
+var toastEl = document.getElementById('toast');
+var toastTimer;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 1800);
+}
+
+/* ============ RENDER: HOME ============ */
+var homeView = document.getElementById('homeView');
+var checklistView = document.getElementById('checklistView');
+var progressWrap = document.getElementById('progressWrap');
+var pendingSwitchRow = document.getElementById('pendingSwitchRow');
+var fabSaveBar = document.getElementById('fabSaveBar');
+var onlyPendingToggle = document.getElementById('onlyPendingToggle');
+onlyPendingToggle.checked = !!state.prefs.onlyPending;
+
+function fmtDate(ts){
+  if(!ts) return '—';
+  var d = new Date(ts);
+  return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}) + ' ' +
+         d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+}
+
+async function renderHome(){
+  state.view='home'; state.session=null;
+  checklistView.classList.add('hidden');
+  progressWrap.classList.add('hidden');
+  pendingSwitchRow.classList.add('hidden');
+  fabSaveBar.classList.add('hidden');
+  homeView.classList.remove('hidden');
+
+  var sessions = (await loadSessions()).sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0);});
+  var html = '';
+  html += '<button id="newInspectionBtn">+ Nueva inspección</button>';
+
+  if(sessions.length>0){
+    var totalAnswered=0, totalItems=0, criticos=0;
+    for(var si=0; si<sessions.length; si++){
+      var s = sessions[si];
+      totalAnswered += s.answered; totalItems += s.total;
+      var full = await loadSession(s.id);
+      if(full){
+        ITEMS.forEach(function(it){
+          var r = full.responses[it.id];
+          if(r && r.estado==='No cumple' && (r.riesgo==='Alto'||r.riesgo==='Critico')) criticos++;
+        });
+      }
+    }
+    var avgPct = totalItems? Math.round(100*totalAnswered/totalItems):0;
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;">'+
+      '<div style="background:var(--panel);border:1px solid var(--border-soft);border-radius:10px;padding:10px;text-align:center;">'+
+        '<div style="font-size:20px;font-weight:800;font-family:var(--mono);">'+sessions.length+'</div>'+
+        '<div style="font-size:9.5px;color:var(--text-faint);margin-top:2px;">PISCINAS EN PROCESO</div></div>'+
+      '<div style="background:var(--panel);border:1px solid var(--border-soft);border-radius:10px;padding:10px;text-align:center;">'+
+        '<div style="font-size:20px;font-weight:800;font-family:var(--mono);color:var(--accent);">'+avgPct+'%</div>'+
+        '<div style="font-size:9.5px;color:var(--text-faint);margin-top:2px;">AVANCE PROMEDIO</div></div>'+
+      '<div style="background:var(--panel);border:1px solid var(--border-soft);border-radius:10px;padding:10px;text-align:center;">'+
+        '<div style="font-size:20px;font-weight:800;font-family:var(--mono);color:'+(criticos>0?'var(--c-nocumple)':'var(--c-cumple)')+';">'+criticos+'</div>'+
+        '<div style="font-size:9.5px;color:var(--text-faint);margin-top:2px;">HALLAZGOS CRÍTICOS/ALTOS</div></div>'+
+    '</div>';
+  }
+
+  html += '<div class="section-title">Inspecciones guardadas ('+sessions.length+')</div>';
+  if(sessions.length===0){
+    html += '<div class="emptyState">Aún no tienes inspecciones. Crea una nueva para empezar a diligenciar los 227 ítems por piscina.</div>';
+  } else {
+    sessions.forEach(function(s){
+      var pct = s.total ? Math.round(100*s.answered/s.total) : 0;
+      html += '<div class="sessionCard" data-id="'+s.id+'">'+
+        '<div class="ring" style="--pct:'+pct+'"><span>'+pct+'%</span></div>'+
+        '<div class="info">'+
+          '<div class="t1">'+esc(s.sede||'(sin sede)')+' · '+esc(s.piscina||'(sin piscina)')+'</div>'+
+          '<div class="t2">'+esc(s.fecha||'')+' · '+esc(s.responsable||'—')+' · '+s.answered+'/'+s.total+'</div>'+
+        '</div>'+
+        '<button class="cardDeleteBtn" data-delete-id="'+s.id+'" title="Eliminar inspección" style="flex:none;background:none;border:none;color:var(--c-nocumple);font-size:16px;padding:6px;">🗑</button>'+
+        '<div class="chev">›</div>'+
+      '</div>';
+    });
+  }
+  html += '<div class="section-title">Respaldo</div>';
+  html += '<div class="exportRow">';
+  if(sessions.length>0){
+    html += '<button class="btn2" id="btnExportAllCsv">⤓ CSV consolidado</button>'+
+      '<button class="btn2" id="btnExportAllJson">⤓ Backup JSON</button>';
+  }
+  html += '<button class="btn2" id="btnImportJson">⤒ Importar backup</button>'+
+  '</div>'+
+  '<input type="file" id="fileImport" accept="application/json" class="hidden">';
+  homeView.innerHTML = html;
+
+  document.getElementById('newInspectionBtn').onclick = function(){ openSetupModal(null); };
+  homeView.querySelectorAll('.sessionCard').forEach(function(card){
+    card.onclick = function(){ openSession(card.getAttribute('data-id')); };
+  });
+  homeView.querySelectorAll('.cardDeleteBtn').forEach(function(btn){
+    btn.onclick = async function(e){
+      e.stopPropagation();
+      var id = btn.getAttribute('data-delete-id');
+      var card = btn.closest('.sessionCard');
+      var label = card.querySelector('.t1').textContent;
+      if(!confirm('¿Eliminar por completo la inspección "'+label+'"?\n\nSe borrarán TODAS las respuestas guardadas en este dispositivo. Esta acción no se puede deshacer.\n\nSi ya la sincronizaste con Sheets, esos datos quedan intactos allá — solo se borra la copia local.')) return;
+      await deleteSession(id);
+      toast('Inspección eliminada');
+      renderHome();
+    };
+  });
+  var b1 = document.getElementById('btnExportAllCsv');
+  if(b1) b1.onclick = exportAllCsv;
+  var b2 = document.getElementById('btnExportAllJson');
+  if(b2) b2.onclick = exportAllJson;
+  var b3 = document.getElementById('btnImportJson');
+  var fileInput = document.getElementById('fileImport');
+  if(b3) b3.onclick = function(){ fileInput.click(); };
+  if(fileInput) fileInput.onchange = function(){
+    var file = fileInput.files[0]; if(!file) return;
+    var reader = new FileReader();
+    reader.onload = async function(){
+      try{
+        var data = JSON.parse(reader.result);
+        var list = Array.isArray(data) ? data : [data];
+        var restored = 0;
+        for(var i=0;i<list.length;i++){
+          var sess = list[i];
+          if(sess && sess.id && sess.meta){ await saveSession(sess); restored++; }
+        }
+        hasUnexportedChanges = false;
+        toast(restored+' inspección(es) restaurada(s)');
+        await renderHome();
+      }catch(e){ toast('Archivo inválido'); }
+    };
+    reader.readAsText(file);
+  };
+  renderStorageBanner(STORAGE_PERSISTED);
+}
+
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+/* ============ SETUP MODAL ============ */
+function openSetupModal(existing){
+  if(!existing || typeof existing!=='object' || !('sede' in existing)){ existing = null; }
+  var overlay = document.createElement('div');
+  overlay.className='modalOverlay';
+  var today = new Date().toISOString().slice(0,10);
+  overlay.innerHTML =
+    '<div class="modalSheet">'+
+      '<h2>'+(existing?'Editar datos de inspección':'Nueva inspección')+'</h2>'+
+      '<div class="field"><label>Sede</label>'+
+        '<select id="fSedeSel">'+
+          '<option value="">Selecciona una sede…</option>'+
+          SEDES.map(function(s){return '<option value="'+esc(s)+'"'+(existing&&existing.sede===s?' selected':'')+'>'+esc(s)+'</option>';}).join('')+
+          '<option value="__otra__"'+(existing&&existing.sede&&SEDES.indexOf(existing.sede)<0?' selected':'')+'>Otra (escribir)…</option>'+
+        '</select>'+
+        '<input id="fSede" placeholder="Nombre de la sede" style="margin-top:6px;" class="'+(existing&&existing.sede&&SEDES.indexOf(existing.sede)<0?'':'hidden')+'" value="'+esc(existing&&SEDES.indexOf(existing.sede)<0?existing.sede:'')+'">'+
+      '</div>'+
+      '<div class="field"><label>Piscina / estanque</label>'+
+        '<select id="fPiscinaSel">'+
+          '<option value="">Selecciona una piscina…</option>'+
+          PISCINAS.map(function(s){return '<option value="'+esc(s)+'"'+(existing&&existing.piscina===s?' selected':'')+'>'+esc(s)+'</option>';}).join('')+
+          '<option value="__otra__"'+(existing&&existing.piscina&&PISCINAS.indexOf(existing.piscina)<0?' selected':'')+'>Otra (escribir)…</option>'+
+        '</select>'+
+        '<input id="fPiscina" placeholder="Nombre de la piscina" style="margin-top:6px;" class="'+(existing&&existing.piscina&&PISCINAS.indexOf(existing.piscina)<0?'':'hidden')+'" value="'+esc(existing&&PISCINAS.indexOf(existing.piscina)<0?existing.piscina:'')+'">'+
+      '</div>'+
+      '<div class="field"><label>Fecha de inspección</label><input type="date" id="fFecha" value="'+esc(existing?existing.fecha:today)+'"></div>'+
+      '<div class="field"><label>Responsable inspección</label><input id="fResp" placeholder="Nombre" value="'+esc(existing?existing.responsable:'')+'"></div>'+
+      '<div class="modalActions">'+
+        '<button class="btnGhost" id="mCancel">Cancelar</button>'+
+        '<button class="btnPrimary" id="mSave">'+(existing?'Guardar':'Crear e iniciar')+'</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  function wireSelOtra(selId, inpId){
+    var sel = document.getElementById(selId), inp = document.getElementById(inpId);
+    sel.onchange = function(){
+      if(sel.value==='__otra__'){ inp.classList.remove('hidden'); inp.focus(); }
+      else { inp.classList.add('hidden'); inp.value=''; }
+    };
+  }
+  wireSelOtra('fSedeSel','fSede');
+  wireSelOtra('fPiscinaSel','fPiscina');
+  document.getElementById('mCancel').onclick = function(){ overlay.remove(); };
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+  document.getElementById('mSave').onclick = async function(){
+    var sedeSel = document.getElementById('fSedeSel').value;
+    var sede = sedeSel==='__otra__' ? document.getElementById('fSede').value.trim() : sedeSel;
+    var piscinaSel = document.getElementById('fPiscinaSel').value;
+    var piscina = piscinaSel==='__otra__' ? document.getElementById('fPiscina').value.trim() : piscinaSel;
+    var fecha = document.getElementById('fFecha').value;
+    var resp = document.getElementById('fResp').value.trim();
+    if(!sede || !piscina){ toast('Sede y piscina son obligatorias'); return; }
+    if(existing){
+      state.session.meta.sede=sede; state.session.meta.piscina=piscina;
+      state.session.meta.fecha=fecha; state.session.meta.responsable=resp;
+      await saveSession(state.session);
+      overlay.remove();
+      renderChecklistHeader();
+      toast('Datos actualizados');
+    } else {
+      var sess = {
+        id: uid(),
+        meta:{sede:sede,piscina:piscina,fecha:fecha,responsable:resp},
+        responses:{},
+        createdAt: Date.now(), updatedAt: Date.now()
+      };
+      await saveSession(sess);
+      overlay.remove();
+      openSession(sess.id);
+    }
+  };
+}
+
+/* ============ CHECKLIST VIEW ============ */
+async function openSession(id){
+  var sess = await loadSession(id);
+  if(!sess){ toast('No se encontró la inspección'); return; }
+  state.session = sess;
+  state.view='checklist';
+  homeView.classList.add('hidden');
+  checklistView.classList.remove('hidden');
+  progressWrap.classList.remove('hidden');
+  pendingSwitchRow.classList.remove('hidden');
+  fabSaveBar.classList.remove('hidden');
+  renderChecklist();
+}
+
+function renderChecklistHeader(){
+  var sess = state.session;
+  var total = ITEMS.length, answered = 0;
+  ITEMS.forEach(function(it){ if(sess.responses[it.id] && sess.responses[it.id].estado) answered++; });
+  var pct = total? Math.round(100*answered/total):0;
+  document.getElementById('progressBarInner').style.width = pct+'%';
+  document.getElementById('progressPct').textContent = pct+'% ('+answered+'/'+total+')';
+  var hdr = document.getElementById('sessionHeaderInner');
+  if(hdr){
+    hdr.querySelector('.l1').textContent = sess.meta.sede+' · '+sess.meta.piscina;
+    hdr.querySelector('.l2').textContent = sess.meta.fecha+' · '+(sess.meta.responsable||'—');
+  }
+  document.getElementById('lastSavedAt').textContent = fmtDate(sess.updatedAt);
+}
+
+function renderChecklist(){
+  var sess = state.session;
+  var html = '';
+  html += '<div id="sessionHeader">'+
+    '<button class="shBack" id="btnBackHome">‹ Inicio</button>'+
+    '<div class="shInfo" id="sessionHeaderInner" style="text-align:right;">'+
+      '<div class="l1"></div><div class="l2"></div>'+
+      '<div id="syncStatus" style="font-size:10px;color:var(--text-faint);margin-top:3px;"></div>'+
+    '</div>'+
+    '<button class="shBack" id="btnEditMeta">✎</button>'+
+    '<button class="shBack" id="btnDangerMenu" title="Reiniciar o eliminar" style="color:var(--c-nocumple);">⋮</button>'+
+  '</div>'+
+  '<div id="dangerMenu" class="hidden" style="position:absolute;top:52px;right:14px;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:60;overflow:hidden;min-width:220px;">'+
+    '<div class="dangerOpt" data-action="reset" style="padding:12px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border-soft);">'+
+      '<div style="font-weight:700;">↺ Reiniciar progreso</div>'+
+      '<div style="font-size:11px;color:var(--text-faint);margin-top:2px;">Borra todas las respuestas, conserva sede/piscina/fecha</div>'+
+    '</div>'+
+    '<div class="dangerOpt" data-action="delete" style="padding:12px 14px;font-size:13px;cursor:pointer;color:var(--c-nocumple);">'+
+      '<div style="font-weight:700;">🗑 Eliminar inspección</div>'+
+      '<div style="font-size:11px;color:var(--text-faint);margin-top:2px;">Borra todo y vuelve al inicio</div>'+
+    '</div>'+
+  '</div>';
+  html += '<div id="searchWrap" style="position:relative;margin-bottom:12px;">'+
+    '<input id="searchInput" placeholder="🔍 Buscar ítem por texto o ID (ej. CHK-045, turbidez…)" style="width:100%;background:var(--panel);border:1px solid var(--border-soft);color:var(--text);border-radius:10px;padding:11px 12px;font-size:13px;">'+
+    '<div id="searchResults" class="hidden" style="position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel);border:1px solid var(--border);border-radius:10px;max-height:340px;overflow-y:auto;z-index:40;box-shadow:0 10px 30px rgba(0,0,0,.5);"></div>'+
+  '</div>';
+  html += '<button id="btnNextPending" style="width:100%;background:var(--panel);border:1px solid var(--border-soft);color:var(--accent);border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-bottom:12px;">⏭ Ir al siguiente ítem pendiente</button>';
+
+  CHAPTERS.forEach(function(cap, ci){
+    var items = ITEMS.filter(function(it){return it.cap===cap;});
+    var answered = items.filter(function(it){return sess.responses[it.id] && sess.responses[it.id].estado;}).length;
+    var complete = answered===items.length;
+    html += '<div class="chapter" data-cap="'+ci+'">'+
+      '<div class="chapterHead">'+
+        '<div>'+
+          '<div class="chTitle">'+esc(cap)+'</div>'+
+          '<div class="chMeta">'+items.length+' ítems</div>'+
+        '</div>'+
+        '<div class="chRight">'+
+          '<div class="chSyncBadge" style="font-size:10px;font-weight:600;"></div>'+
+          '<div class="chBadge '+(complete?'complete':(answered>0?'partial':'empty'))+'">'+answered+'/'+items.length+'</div>'+
+          '<div class="chArrow">›</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="chapterBody" id="chBody-'+ci+'"></div>'+
+    '</div>';
+  });
+
+  checklistView.innerHTML = html;
+  document.getElementById('btnBackHome').onclick = function(){ renderHome(); };
+  document.getElementById('btnEditMeta').onclick = function(){ openSetupModal(state.session.meta); };
+
+  document.getElementById('btnDangerMenu').onclick = function(e){
+    e.stopPropagation();
+    document.getElementById('dangerMenu').classList.toggle('hidden');
+  };
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('dangerMenu');
+    if(menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && e.target.id!=='btnDangerMenu'){
+      menu.classList.add('hidden');
+    }
+  });
+  document.querySelectorAll('.dangerOpt').forEach(function(opt){
+    opt.onclick = async function(){
+      document.getElementById('dangerMenu').classList.add('hidden');
+      var sess = state.session;
+      var label = sess.meta.sede+' · '+sess.meta.piscina;
+      var action = opt.getAttribute('data-action');
+
+      if(action==='reset'){
+        if(!confirm('¿Reiniciar el progreso de "'+label+'"?\n\nSe borrarán las '+Object.keys(sess.responses).length+' respuestas ya diligenciadas. Sede, piscina, fecha y responsable se conservan.\n\nEsta acción no se puede deshacer.')) return;
+        if(!confirm('Confirma una vez más: esto borra TODAS las respuestas de esta inspección. ¿Continuar?')) return;
+        sess.responses = {};
+        await saveSession(sess);
+        renderChecklist();
+        toast('Progreso reiniciado');
+      } else if(action==='delete'){
+        if(!confirm('¿Eliminar por completo la inspección "'+label+'"?\n\nEsto borra la inspección entera de este dispositivo. Esta acción no se puede deshacer.\n\nSi ya sincronizaste ítems con Sheets, esos datos quedan intactos allá.')) return;
+        if(!confirm('Confirma una vez más: esto elimina la inspección completa. ¿Continuar?')) return;
+        await deleteSession(sess.id);
+        toast('Inspección eliminada');
+        renderHome();
+      }
+    };
+  });
+  checklistView.querySelectorAll('.chapterHead').forEach(function(head){
+    head.onclick = function(){
+      var chapter = head.parentElement;
+      var isOpen = chapter.classList.contains('open');
+      checklistView.querySelectorAll('.chapter.open').forEach(function(c){
+        if(c!==chapter){ c.classList.remove('open'); }
+      });
+      chapter.classList.toggle('open', !isOpen);
+      if(!isOpen){
+        var ci = chapter.getAttribute('data-cap');
+        renderChapterBody(ci);
+      }
+    };
+  });
+  renderChecklistHeader();
+  wireSearch();
+  document.getElementById('btnNextPending').onclick = jumpToNextPending;
+}
+
+function jumpToItem(itemId, forceShowAll){
+  var it = ITEMS.find(function(x){return x.id===itemId;});
+  if(!it) return;
+  var ci = CHAPTERS.indexOf(it.cap);
+  var chapter = document.querySelector('.chapter[data-cap="'+ci+'"]');
+  if(!chapter) return;
+  checklistView.querySelectorAll('.chapter.open').forEach(function(c){ if(c!==chapter) c.classList.remove('open'); });
+  chapter.classList.add('open');
+  renderChapterBody(ci, forceShowAll);
+  setTimeout(function(){
+    var el = document.querySelector('#chBody-'+ci+' .item[data-id="'+itemId+'"]');
+    if(el){
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+      el.style.transition='background .3s';
+      el.style.background = 'var(--accent-dim)';
+      setTimeout(function(){ el.style.background=''; }, 900);
+    } else {
+      chapter.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  }, 60);
+}
+
+function jumpToNextPending(){
+  var sess = state.session;
+  var next = ITEMS.find(function(it){ var r = sess.responses[it.id]; return !(r && r.estado); });
+  if(!next){ toast('¡Todos los ítems están diligenciados!'); return; }
+  jumpToItem(next.id, true);
+}
+
+function wireSearch(){
+  var input = document.getElementById('searchInput');
+  var results = document.getElementById('searchResults');
+  input.oninput = function(){
+    var q = input.value.trim().toLowerCase();
+    if(q.length<2){ results.classList.add('hidden'); results.innerHTML=''; return; }
+    var matches = ITEMS.filter(function(it){
+      return it.id.toLowerCase().indexOf(q)>=0 || it.item.toLowerCase().indexOf(q)>=0;
+    }).slice(0,10);
+    if(matches.length===0){
+      results.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-faint);">Sin resultados</div>';
+    } else {
+      results.innerHTML = matches.map(function(it){
+        var r = state.session.responses[it.id];
+        var estado = r && r.estado ? r.estado : 'Sin responder';
+        return '<div class="searchResultRow" data-jump="'+it.id+'" style="padding:10px 12px;border-bottom:1px solid var(--border-soft);cursor:pointer;">'+
+          '<div style="font-size:11px;color:var(--text-faint);font-family:var(--mono);">'+it.id+' · '+esc(it.cap)+' · '+estado+'</div>'+
+          '<div style="font-size:12.5px;color:var(--text);margin-top:2px;">'+esc(it.item)+'</div>'+
+        '</div>';
+      }).join('');
+    }
+    results.classList.remove('hidden');
+    results.querySelectorAll('[data-jump]').forEach(function(row){
+      row.onclick = function(){
+        jumpToItem(row.getAttribute('data-jump'), true);
+        results.classList.add('hidden');
+        input.value=''; input.blur();
+      };
+    });
+  };
+  document.addEventListener('click', function(e){
+    if(!input.contains(e.target) && !results.contains(e.target)) results.classList.add('hidden');
+  });
+}
+
+function renderChapterBody(ci, forceShowAll){
+  var cap = CHAPTERS[ci];
+  var sess = state.session;
+  var items = ITEMS.filter(function(it){return it.cap===cap;});
+  var onlyPending = forceShowAll ? false : state.prefs.onlyPending;
+  var body = document.getElementById('chBody-'+ci);
+
+  var visibleItems = onlyPending ? items.filter(function(it){
+    var r = sess.responses[it.id];
+    return !(r && r.estado);
+  }) : items;
+
+  var html = '';
+  var guide = CHAPTER_GUIDE[cap];
+  if(guide){
+    html += '<div class="chGuideToggle" data-action="toggleGuide">📖 Ver criterio normativo del capítulo ('+esc(guide.marco)+') ▾</div>'+
+      '<div class="chapterGuide hidden" id="guideBody-'+ci+'"><div class="cgMarco">'+esc(guide.marco)+'</div>'+esc(guide.texto)+'</div>';
+  }
+  html += '<div class="chapterBulkRow">'+
+    '<button class="bulkBtn" data-bulk="Cumple" data-cap="'+ci+'">✓ Marcar todo Cumple</button>'+
+    '<button class="bulkBtn" data-bulk="No aplica" data-cap="'+ci+'">— Marcar todo No aplica</button>'+
+  '</div>';
+  var answeredInCap = items.filter(function(it){ return sess.responses[it.id] && sess.responses[it.id].estado; }).length;
+  if(state.prefs.syncMode==='manual' && answeredInCap>0){
+    html += '<div class="chapterBulkRow">'+
+      '<button class="bulkBtn" data-sync-chapter="'+ci+'" style="width:100%;color:var(--accent);border-color:var(--accent-dim);">↑ Sincronizar esta sección con Sheets ('+answeredInCap+' ítems)</button>'+
+    '</div>';
+  }
+
+  if(visibleItems.length===0){
+    html += '<div class="emptyState" style="padding:14px;">Todos los ítems de este capítulo ya fueron diligenciados. Desactiva "Solo pendientes" para revisarlos.</div>';
+  }
+
+  visibleItems.forEach(function(it){
+    html += renderItemCard(it, sess.responses[it.id]);
+  });
+  body.innerHTML = html;
+  wireItemCards(body);
+  var guideToggle = body.querySelector('[data-action="toggleGuide"]');
+  if(guideToggle){
+    guideToggle.onclick = function(){
+      var gb = document.getElementById('guideBody-'+ci);
+      var isHidden = gb.classList.contains('hidden');
+      gb.classList.toggle('hidden');
+      guideToggle.textContent = '📖 Ver criterio normativo del capítulo ('+CHAPTER_GUIDE[cap].marco+') ' + (isHidden?'▴':'▾');
+    };
+  }
+
+  body.querySelectorAll('.bulkBtn[data-bulk]').forEach(function(btn){
+    btn.onclick = function(e){
+      e.stopPropagation();
+      var estadoVal = btn.getAttribute('data-bulk');
+      if(!confirm('¿Marcar los '+items.length+' ítems de "'+cap+'" como "'+estadoVal+'"? Podrás ajustar cualquiera individualmente después.')) return;
+      items.forEach(function(it){
+        var r = sess.responses[it.id] || {};
+        r.estado = estadoVal;
+        r.riesgo = 'Sin riesgo';
+        sess.responses[it.id] = r;
+      });
+      saveSession(sess);
+      renderChapterBody(ci);
+      updateChapterBadge(ci);
+      renderChecklistHeader();
+      maybeAutoSyncChapter(cap);
+      toast('Capítulo actualizado');
+    };
+  });
+  var syncBtn = body.querySelector('[data-sync-chapter]');
+  if(syncBtn){
+    syncBtn.onclick = function(e){
+      e.stopPropagation();
+      delete RETRY_COUNT[cap]; // un reenvío manual siempre se intenta, sin límite previo
+      syncBtn.textContent = '↑ Enviando…';
+      syncBtn.disabled = true;
+      syncChapterToSheets(sess, cap).then(function(){
+        renderChapterBody(ci);
+      });
+    };
+  }
+}
+
+function riskSuggestion(prioridad){
+  if(prioridad==='Alta') return 'Alto';
+  if(prioridad==='Media') return 'Medio';
+  return 'Bajo';
+}
+
+function dueBadgeHtml(fechaCompromiso){
+  if(!fechaCompromiso) return '';
+  var today = new Date(); today.setHours(0,0,0,0);
+  var due = new Date(fechaCompromiso+'T00:00:00');
+  var diffDays = Math.round((due-today)/86400000);
+  if(diffDays<0) return '<span class="dueBadge late">Vencido '+Math.abs(diffDays)+'d</span>';
+  if(diffDays<=3) return '<span class="dueBadge soon">Vence en '+diffDays+'d</span>';
+  return '<span class="dueBadge ok">Vence en '+diffDays+'d</span>';
+}
+
+function renderItemCard(it, r){
+  r = r || {};
+  var isAnswered = !!r.estado;
+  var showExtra = CIERRA_ITEM_ESTADOS.indexOf(r.estado)>=0;
+
+  if(isAnswered){
+    var estColorVar = {
+      'Cumple':'var(--c-cumple)','No cumple':'var(--c-nocumple)','En proceso':'var(--c-proceso)',
+      'Pendiente':'var(--c-pendiente)','No aplica':'var(--c-noaplica)'
+    }[r.estado];
+    var estBg = {
+      'Cumple':'var(--c-cumple-bg)','No cumple':'var(--c-nocumple-bg)','En proceso':'var(--c-proceso-bg)',
+      'Pendiente':'var(--c-pendiente-bg)','No aplica':'var(--c-noaplica-bg)'
+    }[r.estado];
+    return '<div class="item answered collapsed" data-id="'+it.id+'">'+
+      '<div class="collapsedRow" data-action="expand">'+
+        '<div class="collapsedDot" style="background:'+estColorVar+'"></div>'+
+        '<div class="collapsedText"><span class="mono itemId">'+it.id+'</span> — '+esc(it.item)+'</div>'+
+        '<div class="collapsedBadge" style="background:'+estBg+';color:'+estColorVar+'">'+r.estado+'</div>'+
+        '<div class="collapsedEdit">✎</div>'+
+      '</div>'+
+      '<div class="fullCard hidden">'+renderItemFull(it,r,showExtra)+'</div>'+
+    '</div>';
+  }
+  return '<div class="item" data-id="'+it.id+'">'+renderItemFull(it,r,showExtra)+'</div>';
+}
+
+function renderItemFull(it,r,showExtra){
+  var html = '';
+  html += '<div class="itemTop">'+
+    '<span class="itemId mono">'+it.id+'</span>'+
+    (it.prioridad? '<span class="itemPrio '+it.prioridad+'">'+it.prioridad+'</span>' : '')+
+  '</div>';
+  html += '<div class="itemText">'+esc(it.item)+'</div>';
+  html += '<div class="itemMetaRow">'+esc(it.enfoque||'')+'</div>';
+
+  var hints = getItemHints(it.item);
+  if(hints.length){
+    html += '<div class="hintBox"><div class="hintLbl">Qué validar</div>'+
+      hints.map(function(h){return '<div class="hintTxt">'+esc(h)+'</div>';}).join('')+
+    '</div>';
+  }
+
+  html += '<div class="pillRow" data-group="estado">';
+  ESTADOS.forEach(function(e){
+    html += '<button class="pill" data-k="'+e+'" data-active="'+(r.estado===e?1:0)+'">'+e+'</button>';
+  });
+  html += '</div>';
+
+  html += '<div class="extraWrap '+(showExtra?'':'hidden')+'">';
+  html += '<div class="subLabel">Nivel de riesgo</div>';
+  html += '<div class="pillRow" data-group="riesgo">';
+  RIESGOS.forEach(function(rk){
+    html += '<button class="pill small" data-k="'+rk+'" data-active="'+(r.riesgo===rk?1:0)+'">'+RIESGOS_LABEL[rk]+'</button>';
+  });
+  html += '</div>';
+
+  html += '<div class="extraFields">'+
+    '<div class="fieldSm"><label>Hallazgo / condición observada</label><textarea data-f="hallazgo">'+esc(r.hallazgo)+'</textarea></div>'+
+    '<div class="fieldSm"><label>Acción correctiva / preventiva</label><textarea data-f="accion">'+esc(r.accion)+'</textarea></div>'+
+    '<div class="twoCol">'+
+      '<div class="fieldSm"><label>Responsable cierre</label><input data-f="respCierre" value="'+esc(r.respCierre)+'"></div>'+
+      '<div class="fieldSm"><label>Fecha compromiso '+dueBadgeHtml(r.fechaCompromiso)+'</label><input type="date" data-f="fechaCompromiso" value="'+esc(r.fechaCompromiso)+'"></div>'+
+    '</div>'+
+    '<div class="subLabel">% avance</div>'+
+    '<div class="pillRow" data-group="avance">'+
+      [0,25,50,75,100].map(function(v){
+        return '<button class="pill small" data-k="'+v+'" data-active="'+((r.avance||0)==v?1:0)+'">'+v+'%</button>';
+      }).join('')+
+    '</div>'+
+    '<div class="moreToggle" data-action="toggleMore">Más campos (evidencia, cierre, observaciones) ▾</div>'+
+    '<div class="moreFields hidden">'+
+      '<div class="fieldSm"><label>Fecha de cierre</label><input type="date" data-f="fechaCierre" value="'+esc(r.fechaCierre)+'"></div>'+
+      '<div class="fieldSm"><label>Evidencia fotográfica - estado actual</label><input data-f="evidenciaActual" placeholder="Nota o nombre de archivo" value="'+esc(r.evidenciaActual)+'"></div>'+
+      '<div class="fieldSm"><label>Evidencia fotográfica - cierre</label><input data-f="evidenciaCierre" placeholder="Nota o nombre de archivo" value="'+esc(r.evidenciaCierre)+'"></div>'+
+      '<div class="fieldSm"><label>Link carpeta / evidencia</label><input data-f="linkCarpeta" placeholder="https://drive..." value="'+esc(r.linkCarpeta)+'"></div>'+
+      '<div class="fieldSm"><label>Observaciones</label><textarea data-f="observaciones">'+esc(r.observaciones)+'</textarea></div>'+
+    '</div>'+
+  '</div>';
+  html += '</div>';
+  return html;
+}
+
+function wireItemCards(container){
+  container.querySelectorAll('.item').forEach(function(itemEl){
+    var id = itemEl.getAttribute('data-id');
+    var it = ITEMS.find(function(x){return x.id===id;});
+
+    var collapsedRow = itemEl.querySelector('[data-action="expand"]');
+    if(collapsedRow){
+      collapsedRow.onclick = function(){
+        itemEl.classList.remove('answered','collapsed');
+        itemEl.querySelector('.fullCard').classList.remove('hidden');
+        var full = itemEl.querySelector('.fullCard');
+        itemEl.innerHTML = full.innerHTML;
+        wireSingleItem(itemEl, it);
+      };
+      return;
+    }
+    wireSingleItem(itemEl, it);
+  });
+}
+
+function wireSingleItem(itemEl, it){
+  var sess = state.session;
+
+  function getResp(){
+    var r = sess.responses[it.id];
+    if(!r){ r = {}; sess.responses[it.id]=r; }
+    return r;
+  }
+
+  var estadoRow = itemEl.querySelector('[data-group="estado"]');
+  if(estadoRow){
+    estadoRow.querySelectorAll('.pill').forEach(function(p){
+      p.onclick = function(){
+        var r = getResp();
+        var val = p.getAttribute('data-k');
+        r.estado = val;
+        var showExtra = CIERRA_ITEM_ESTADOS.indexOf(val)>=0;
+        if(showExtra && !r.riesgo){ r.riesgo = riskSuggestion(it.prioridad); }
+        if(!showExtra){ r.riesgo = 'Sin riesgo'; }
+        saveSession(sess);
+        refreshAfterAnswer(itemEl, it, r);
+        maybeAutoSyncChapter(it.cap);
+      };
+    });
+  }
+  var riesgoRow = itemEl.querySelector('[data-group="riesgo"]');
+  if(riesgoRow){
+    riesgoRow.querySelectorAll('.pill').forEach(function(p){
+      p.onclick = function(){
+        var r = getResp();
+        r.riesgo = p.getAttribute('data-k');
+        saveSession(sess);
+        riesgoRow.querySelectorAll('.pill').forEach(function(x){x.setAttribute('data-active', x===p?1:0);});
+      };
+    });
+  }
+  var avanceRow = itemEl.querySelector('[data-group="avance"]');
+  if(avanceRow){
+    avanceRow.querySelectorAll('.pill').forEach(function(p){
+      p.onclick = function(){
+        var r = getResp();
+        r.avance = parseInt(p.getAttribute('data-k'),10);
+        saveSession(sess);
+        avanceRow.querySelectorAll('.pill').forEach(function(x){x.setAttribute('data-active', x===p?1:0);});
+      };
+    });
+  }
+  itemEl.querySelectorAll('[data-f]').forEach(function(f){
+    f.oninput = function(){
+      var r = getResp();
+      r[f.getAttribute('data-f')] = f.value;
+      saveSession(sess);
+      updateSavedLabel();
+    };
+  });
+  var moreToggle = itemEl.querySelector('[data-action="toggleMore"]');
+  if(moreToggle){
+    moreToggle.onclick = function(){
+      var mf = itemEl.querySelector('.moreFields');
+      var isHidden = mf.classList.contains('hidden');
+      mf.classList.toggle('hidden');
+      moreToggle.textContent = 'Más campos (evidencia, cierre, observaciones) ' + (isHidden?'▴':'▾');
+    };
+  }
+}
+
+function refreshAfterAnswer(itemEl, it, r){
+  var chapter = itemEl.closest('.chapter');
+  var ci = chapter.getAttribute('data-cap');
+  updateChapterBadge(ci);
+  renderChecklistHeader();
+  if(state.prefs.onlyPending){
+    itemEl.remove();
+    var body = document.getElementById('chBody-'+ci);
+    if(body && !body.querySelector('.item')){
+      var items = ITEMS.filter(function(x){return x.cap===CHAPTERS[ci];});
+      body.insertAdjacentHTML('beforeend','<div class="emptyState" style="padding:14px;">Todos los ítems de este capítulo ya fueron diligenciados. Desactiva "Solo pendientes" para revisarlos.</div>');
+    }
+  } else {
+    var showExtra = CIERRA_ITEM_ESTADOS.indexOf(r.estado)>=0;
+    itemEl.innerHTML = renderItemFull(it, r, showExtra);
+    wireSingleItem(itemEl, it);
+  }
+}
+
+function updateChapterBadge(ci){
+  var cap = CHAPTERS[ci];
+  var sess = state.session;
+  var items = ITEMS.filter(function(it){return it.cap===cap;});
+  var answered = items.filter(function(it){return sess.responses[it.id] && sess.responses[it.id].estado;}).length;
+  var complete = answered===items.length;
+  var chapter = document.querySelector('.chapter[data-cap="'+ci+'"]');
+  if(!chapter) return;
+  var badge = chapter.querySelector('.chBadge');
+  badge.textContent = answered+'/'+items.length;
+  badge.className = 'chBadge '+(complete?'complete':(answered>0?'partial':'empty'));
+}
+
+function updateSavedLabel(){
+  var el = document.getElementById('lastSavedAt');
+  if(el) el.textContent = fmtDate(Date.now());
+}
+
+/* ============ EXPORT ============ */
+var CSV_HEADERS = ['ID','norma aplicable','Capítulo / componente','Ítem de verificación','Enfoque técnico',
+  'Prioridad sugerida','Sede','Piscina / estanque','Fecha inspección','Responsable inspección','Estado',
+  'Nivel de riesgo','Hallazgo / condición observada','Acción correctiva / preventiva','Responsable cierre',
+  'Fecha compromiso','Fecha cierre','Días restantes / vencido','% avance','Evidencia fotográfica - estado actual',
+  'Evidencia fotográfica - cierre','Link carpeta / evidencia','Observaciones'];
+
+function daysRemainingStr(fechaCompromiso, fechaCierre){
+  if(fechaCierre) return 'Cerrado';
+  if(!fechaCompromiso) return '';
+  var today = new Date(); today.setHours(0,0,0,0);
+  var due = new Date(fechaCompromiso+'T00:00:00');
+  var diff = Math.round((due-today)/86400000);
+  return diff<0 ? ('Vencido '+Math.abs(diff)+'d') : (diff+'d');
+}
+
+function csvEscape(v){
+  v = v==null? '' : String(v);
+  if(/[",\n;]/.test(v)) return '"'+v.replace(/"/g,'""')+'"';
+  return v;
+}
+
+function sessionToRows(sess, onlyAnswered){
+  var rows = ITEMS.map(function(it){
+    var r = sess.responses[it.id] || {};
+    return [
+      it.id, '', it.cap, it.item, it.enfoque||'', it.prioridad||'',
+      sess.meta.sede, sess.meta.piscina, sess.meta.fecha, sess.meta.responsable,
+      r.estado||'', r.riesgo||'', r.hallazgo||'', r.accion||'', r.respCierre||'',
+      r.fechaCompromiso||'', r.fechaCierre||'', daysRemainingStr(r.fechaCompromiso,r.fechaCierre),
+      (r.avance!=null? r.avance : ''), r.evidenciaActual||'', r.evidenciaCierre||'',
+      r.linkCarpeta||'', r.observaciones||''
+    ];
+  });
+  if(onlyAnswered){
+    rows = rows.filter(function(row){ return row[10] !== ''; }); // columna 'Estado' (índice 10)
+  }
+  return rows;
+}
+
+function downloadFile(filename, content, mime){
+  var blob = new Blob([content], {type:mime});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){URL.revokeObjectURL(url);}, 2000);
+}
+
+function rowsToCsv(rows){
+  var lines = [CSV_HEADERS.map(csvEscape).join(',')];
+  rows.forEach(function(row){ lines.push(row.map(csvEscape).join(',')); });
+  return '\uFEFF' + lines.join('\r\n');
+}
+
+document.getElementById('btnExportCsv').onclick = function(){
+  var sess = state.session; if(!sess) return;
+  var csv = rowsToCsv(sessionToRows(sess));
+  downloadFile('inspeccion_'+sess.meta.sede+'_'+sess.meta.piscina+'_'+sess.meta.fecha+'.csv', csv, 'text/csv;charset=utf-8');
+  hasUnexportedChanges = false;
+  toast('CSV exportado');
+};
+document.getElementById('btnExportJson').onclick = function(){
+  var sess = state.session; if(!sess) return;
+  downloadFile('inspeccion_'+sess.meta.sede+'_'+sess.meta.piscina+'_'+sess.meta.fecha+'.json', JSON.stringify(sess,null,2), 'application/json');
+  hasUnexportedChanges = false;
+  toast('JSON exportado');
+};
+async function exportAllCsv(){
+  var sessions = await loadSessions();
+  var allRows = [];
+  for(var i=0;i<sessions.length;i++){
+    var full = await loadSession(sessions[i].id);
+    if(full) allRows = allRows.concat(sessionToRows(full));
+  }
+  if(allRows.length===0){ toast('No hay datos para exportar'); return; }
+  downloadFile('inspecciones_consolidado_'+(new Date().toISOString().slice(0,10))+'.csv', rowsToCsv(allRows), 'text/csv;charset=utf-8');
+  hasUnexportedChanges = false;
+  toast('CSV consolidado exportado ('+sessions.length+' piscinas)');
+}
+async function exportAllJson(){
+  var sessions = await loadSessions();
+  var all = [];
+  for(var i=0;i<sessions.length;i++){
+    var full = await loadSession(sessions[i].id);
+    if(full) all.push(full);
+  }
+  downloadFile('backup_inspecciones_'+(new Date().toISOString().slice(0,10))+'.json', JSON.stringify(all,null,2), 'application/json');
+  hasUnexportedChanges = false;
+  toast('Backup exportado');
+}
+
+/* ============ GLOBAL WIRING ============ */
+document.getElementById('btnHomeTop').onclick = function(){ renderHome(); };
+
+function updateSyncModeUI(){
+  var label = document.getElementById('syncModeLabel');
+  if(label) label.textContent = state.prefs.syncMode==='auto' ? 'Automático' : 'Manual';
+  document.querySelectorAll('.syncModeOpt').forEach(function(opt){
+    opt.style.background = opt.getAttribute('data-mode')===state.prefs.syncMode ? 'var(--panel-2)' : '';
+  });
+}
+document.getElementById('btnSyncMode').onclick = function(e){
+  e.stopPropagation();
+  document.getElementById('syncModeMenu').classList.toggle('hidden');
+};
+document.querySelectorAll('.syncModeOpt').forEach(function(opt){
+  opt.onclick = function(){
+    state.prefs.syncMode = opt.getAttribute('data-mode');
+    savePrefs(state.prefs);
+    updateSyncModeUI();
+    document.getElementById('syncModeMenu').classList.add('hidden');
+    if(state.view==='checklist'){
+      document.querySelectorAll('.chapter.open').forEach(function(c){
+        renderChapterBody(c.getAttribute('data-cap'));
+      });
+    }
+    toast(state.prefs.syncMode==='auto' ? 'Modo automático activado' : 'Modo manual activado');
+  };
+});
+document.addEventListener('click', function(e){
+  var menu = document.getElementById('syncModeMenu');
+  if(menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && e.target.id!=='btnSyncMode'){
+    menu.classList.add('hidden');
+  }
+});
+
+onlyPendingToggle.onchange = function(){
+  state.prefs.onlyPending = onlyPendingToggle.checked;
+  savePrefs(state.prefs);
+  if(state.view==='checklist'){
+    document.querySelectorAll('.chapter.open').forEach(function(c){
+      renderChapterBody(c.getAttribute('data-cap'));
+    });
+  }
+};
+
+var STORAGE_PERSISTED = false;
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js', {updateViaCache: 'none'}).then(function(reg){
+      reg.update(); // fuerza a revisar si hay una versión nueva del service worker de una vez
+    }).catch(function(){ /* no-op si se abre como file:// */ });
+  });
+}
+(async function init(){
+  try {
+    var configRes = await fetch('./config.json');
+    var config = await configRes.json();
+    SHEETS_WEBHOOK_URL = config.webhookUrl;
+    console.log('✓ Webhook URL cargada desde config.json');
+  } catch(e) {
+    console.warn('⚠ config.json no encontrado, sync deshabilitado');
+  }
+  
+  STORAGE_OK = await testStorage();
+  STORAGE_PERSISTED = await requestPersistence();
+  state.prefs = await loadPrefs();
+  if(!state.prefs.syncMode) state.prefs.syncMode = 'manual';
+  onlyPendingToggle.checked = !!state.prefs.onlyPending;
+  updateSyncModeUI();
+  renderHome();
+})();
+
+/* ============================================================================
+   MÓDULO EVIDENCIA FOTOGRÁFICA — PARCHE ADITIVO
+   ----------------------------------------------------------------------------
+   DÓNDE PEGARLO: dentro de index.html, INMEDIATAMENTE ANTES de la línea 1579
+   (el primer `})();` que cierra el IIFE principal, justo después del bloque
+   `(async function init(){ ... })();`).
+
+   NO modifica ninguna línea existente. Envuelve por reasignación tres funciones
+   ya declaradas (renderItemFull, wireSingleItem, chapterRows) conservando su
+   comportamiento original y añadiendo el bloque de fotos encima.
+
+   ARQUITECTURA:
+   - Los blobs viven en una base IndexedDB SEPARADA ('pi_inspector_media'), para
+     no tocar la versión ni el esquema de 'pi_inspector_db'. Si el módulo falla,
+     el inspector sigue funcionando idéntico.
+   - En sess.responses[itemId] solo se guardan METADATOS (array `fotos`), nunca
+     binarios: el JSON de sesión no crece y export/import siguen funcionando.
+   - La subida a Drive es por convención de rutas. El informe NO depende de que
+     la URL quede escrita en la hoja: el generador recorre la carpeta por
+     Sede/Piscina/Fecha/ITEM. Esto lo hace tolerante a fallos de red.
+   ============================================================================ */
+
+/* ---------- Parámetros (ajustables sin tocar lógica) ---------- */
+var FOTO_MAX_POR_ITEM = 2;      // límite duro pedido por negocio
+var FOTO_LADO_MAX     = 1600;   // px del lado mayor tras compresión
+var FOTO_CALIDAD      = 0.72;   // JPEG quality → ~150-250 KB por foto
+var FOTO_TIPOS        = [{k:'actual', lbl:'Estado actual'},{k:'cierre', lbl:'Cierre'}];
+
+/* ---------- Almacén de blobs (BD independiente) ---------- */
+var MDB_NAME='pi_inspector_media', MDB_VER=1, MDB_STORE='blobs';
+var _mdbPromise=null;
+function openMediaDB(){
+  if(_mdbPromise) return _mdbPromise;
+  _mdbPromise = new Promise(function(res,rej){
+    var req = indexedDB.open(MDB_NAME, MDB_VER);
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if(!db.objectStoreNames.contains(MDB_STORE)) db.createObjectStore(MDB_STORE);
+    };
+    req.onsuccess=function(){res(req.result);};
+    req.onerror=function(){rej(req.error);};
+  });
+  return _mdbPromise;
+}
+async function mediaPut(key, blob){
+  try{
+    var db = await openMediaDB();
+    return new Promise(function(res,rej){
+      var tx = db.transaction(MDB_STORE,'readwrite');
+      tx.objectStore(MDB_STORE).put(blob, key);
+      tx.oncomplete=function(){res(true);}; tx.onerror=function(){rej(tx.error);};
+    });
+  }catch(e){ console.warn('mediaPut',e); return false; }
+}
+async function mediaGet(key){
+  try{
+    var db = await openMediaDB();
+    return new Promise(function(res){
+      var tx = db.transaction(MDB_STORE,'readonly');
+      var r = tx.objectStore(MDB_STORE).get(key);
+      r.onsuccess=function(){res(r.result||null);}; r.onerror=function(){res(null);};
+    });
+  }catch(e){ return null; }
+}
+async function mediaDel(key){
+  try{
+    var db = await openMediaDB();
+    return new Promise(function(res){
+      var tx = db.transaction(MDB_STORE,'readwrite');
+      tx.objectStore(MDB_STORE).delete(key);
+      tx.oncomplete=function(){res(true);}; tx.onerror=function(){res(false);};
+    });
+  }catch(e){ return false; }
+}
+
+/* ---------- Compresión en canvas (evita subir 6 MB por foto) ---------- */
+function comprimirImagen(file){
+  return new Promise(function(res, rej){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      var w=img.naturalWidth, h=img.naturalHeight;
+      var esc = Math.min(1, FOTO_LADO_MAX/Math.max(w,h));
+      var cw = Math.round(w*esc), ch = Math.round(h*esc);
+      var c = document.createElement('canvas'); c.width=cw; c.height=ch;
+      c.getContext('2d').drawImage(img,0,0,cw,ch);
+      c.toBlob(function(blob){
+        URL.revokeObjectURL(url);
+        if(!blob) return rej(new Error('No se pudo comprimir'));
+        res({blob:blob, w:cw, h:ch});
+      }, 'image/jpeg', FOTO_CALIDAD);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('Archivo no es una imagen válida')); };
+    img.src = url;
+  });
+}
+function blobABase64(blob){
+  return new Promise(function(res,rej){
+    var fr = new FileReader();
+    fr.onload=function(){ res(String(fr.result).split(',')[1]); };
+    fr.onerror=function(){ rej(fr.error); };
+    fr.readAsDataURL(blob);
+  });
+}
+
+/* ---------- Estructura del metadato ----------
+   r.fotos = [{ key, tipo, ts, w, h, bytes, sync:'pend'|'ok'|'error', driveId }]
+   El campo `key` es también el nombre del archivo en Drive:
+     <ITEMID>__<tipo>__<n>.jpg
+---------------------------------------------------------------- */
+function fotosDe(r, tipo){
+  var arr = (r && r.fotos) || [];
+  return tipo ? arr.filter(function(f){return f.tipo===tipo;}) : arr;
+}
+function fotoKey(sess, itemId, tipo, n){
+  return itemId+'__'+tipo+'__'+n+'.jpg';
+}
+
+/* ---------- Cola de subida (offline-first) ---------- */
+var FOTOS_PEND = [];   // {sess, itemId, key}
+var SUBIENDO = false;
+
+async function encolarSubida(sess, itemId, key){
+  FOTOS_PEND.push({sessId:sess.id, itemId:itemId, key:key});
+  procesarColaFotos();
+}
+async function procesarColaFotos(){
+  if(SUBIENDO || !SHEETS_WEBHOOK_URL || !navigator.onLine) return;
+  var job = FOTOS_PEND.shift();
+  if(!job) return;
+  SUBIENDO = true;
+  try{
+    var sess = state.session && state.session.id===job.sessId ? state.session : await loadSession(job.sessId);
+    if(!sess) throw new Error('sesión no encontrada');
+    var blob = await mediaGet(job.key);
+    if(!blob) throw new Error('blob no encontrado');
+    var b64 = await blobABase64(blob);
+    var payload = {
+      accion: 'foto',
+      sede: sess.meta.sede,
+      piscina: sess.meta.piscina,
+      fecha: sess.meta.fecha,
+      responsable: sess.meta.responsable,
+      itemId: job.itemId,
+      nombre: job.key,
+      mime: 'image/jpeg',
+      data: b64
+    };
+    var resp = await fetch(SHEETS_WEBHOOK_URL, {
+      method:'POST',
+      body: JSON.stringify(payload),
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      redirect:'follow',
+      signal: AbortSignal.timeout(60000)
+    });
+    var out = {};
+    try{ out = await resp.json(); }catch(e){ out = {ok:true}; } // si CORS bloquea el body, asumimos entregado
+    marcarFoto(sess, job.itemId, job.key, out.ok===false?'error':'ok', out.fileId||'');
+    if(out.ok===false) FOTOS_PEND.push(job);
+  }catch(e){
+    console.warn('Subida de foto pendiente:', e.message);
+    FOTOS_PEND.push(job);                 // reintento en el siguiente ciclo
+  }finally{
+    SUBIENDO = false;
+    if(FOTOS_PEND.length) setTimeout(procesarColaFotos, 3000);
+  }
+}
+function marcarFoto(sess, itemId, key, estado, driveId){
+  var r = sess.responses[itemId]; if(!r || !r.fotos) return;
+  r.fotos.forEach(function(f){ if(f.key===key){ f.sync=estado; if(driveId) f.driveId=driveId; } });
+  saveSession(sess);
+  var chip = document.querySelector('[data-foto-key="'+key+'"] .fotoSync');
+  if(chip){ chip.textContent = estado==='ok'?'✓':'↻'; chip.title = estado==='ok'?'Sincronizada con Drive':'Pendiente de subir'; }
+}
+window.addEventListener('online', function(){ procesarColaFotos(); });
+setInterval(procesarColaFotos, 30000);
+
+/* ---------- Reencolar pendientes al abrir una sesión ---------- */
+function reencolarPendientes(sess){
+  FOTOS_PEND = [];
+  Object.keys(sess.responses||{}).forEach(function(itemId){
+    var r = sess.responses[itemId];
+    (r.fotos||[]).forEach(function(f){
+      if(f.sync!=='ok') FOTOS_PEND.push({sessId:sess.id, itemId:itemId, key:f.key});
+    });
+  });
+  procesarColaFotos();
+}
+
+/* ---------- UI: bloque de fotos dentro de la tarjeta del ítem ---------- */
+function fotoBloqueHtml(it, r){
+  var html = '<div class="fotoWrap" data-foto-item="'+it.id+'">';
+  FOTO_TIPOS.forEach(function(t){
+    var lista = fotosDe(r, t.k);
+    html += '<div class="fotoTipo">'+
+      '<div class="subLabel">Fotos · '+t.lbl+' <span class="fotoCount">'+lista.length+'/'+FOTO_MAX_POR_ITEM+'</span></div>'+
+      '<div class="fotoGrid" data-foto-grid="'+t.k+'">';
+    lista.forEach(function(f){
+      html += '<figure class="fotoThumb" data-foto-key="'+f.key+'">'+
+                '<img alt="evidencia" data-foto-src="'+f.key+'">'+
+                '<span class="fotoSync">'+(f.sync==='ok'?'✓':'↻')+'</span>'+
+                '<button class="fotoDel" data-foto-del="'+f.key+'" title="Eliminar">✕</button>'+
+              '</figure>';
+    });
+    if(lista.length < FOTO_MAX_POR_ITEM){
+      html += '<label class="fotoAdd">+ Foto'+
+        '<input type="file" accept="image/*" capture="environment" hidden data-foto-in="'+t.k+'">'+
+      '</label>';
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/* Pinta las miniaturas desde IndexedDB (async, tras insertar el HTML) */
+async function pintarMiniaturas(scope){
+  var imgs = (scope||document).querySelectorAll('img[data-foto-src]');
+  for(var i=0;i<imgs.length;i++){
+    var el = imgs[i];
+    if(el.dataset.painted) continue;
+    var blob = await mediaGet(el.getAttribute('data-foto-src'));
+    if(blob){ el.src = URL.createObjectURL(blob); el.dataset.painted='1'; }
+  }
+}
+
+/* ---------- Envoltura 1: renderItemFull → añade el bloque de fotos ---------- */
+var _origRenderItemFull = renderItemFull;
+renderItemFull = function(it, r, showExtra){
+  var html = _origRenderItemFull(it, r, showExtra);
+  // Insertar el bloque de fotos justo antes del cierre del contenedor extraWrap.
+  var marca = '<div class="moreToggle"';
+  var idx = html.indexOf(marca);
+  if(idx === -1) return html + fotoBloqueHtml(it, r);
+  return html.slice(0, idx) + fotoBloqueHtml(it, r) + html.slice(idx);
+};
+
+/* ---------- Envoltura 2: wireSingleItem → cablea captura y borrado ---------- */
+var _origWireSingleItem = wireSingleItem;
+wireSingleItem = function(itemEl, it){
+  _origWireSingleItem(itemEl, it);
+  var sess = state.session;
+  function getResp(){
+    var r = sess.responses[it.id];
+    if(!r){ r = sess.responses[it.id] = {}; }
+    if(!r.fotos) r.fotos = [];
+    return r;
+  }
+
+  itemEl.querySelectorAll('input[data-foto-in]').forEach(function(inp){
+    inp.addEventListener('change', async function(){
+      var file = inp.files && inp.files[0]; if(!file) return;
+      var tipo = inp.getAttribute('data-foto-in');
+      var r = getResp();
+      if(fotosDe(r, tipo).length >= FOTO_MAX_POR_ITEM){
+        toast('Máximo '+FOTO_MAX_POR_ITEM+' fotos por ítem'); inp.value=''; return;
+      }
+      try{
+        toast('Procesando foto…');
+        var out = await comprimirImagen(file);
+        var n = fotosDe(r, tipo).length + 1;
+        var key = fotoKey(sess, it.id, tipo, n);
+        await mediaPut(key, out.blob);
+        r.fotos.push({key:key, tipo:tipo, ts:Date.now(), w:out.w, h:out.h,
+                      bytes:out.blob.size, sync:'pend', driveId:''});
+        await saveSession(sess);
+        encolarSubida(sess, it.id, key);
+        // Repintar solo esta tarjeta (no toca el resto del render)
+        var full = itemEl.querySelector('.fullCard');
+        if(full){
+          full.innerHTML = renderItemFull(it, r, CIERRA_ITEM_ESTADOS.indexOf(r.estado)>=0);
+          wireSingleItem(itemEl, it);
+          pintarMiniaturas(itemEl);
+        }
+        toast('Foto agregada ('+Math.round(out.blob.size/1024)+' KB)');
+      }catch(e){
+        toast('⚠ No se pudo procesar la foto');
+        console.warn(e);
+      }finally{ inp.value=''; }
+    });
+  });
+
+  itemEl.querySelectorAll('[data-foto-del]').forEach(function(btn){
+    btn.addEventListener('click', async function(){
+      var key = btn.getAttribute('data-foto-del');
+      if(!confirm('¿Eliminar esta foto? La copia en Drive, si ya se subió, no se borra automáticamente.')) return;
+      var r = getResp();
+      r.fotos = r.fotos.filter(function(f){ return f.key!==key; });
+      await mediaDel(key);
+      await saveSession(sess);
+      var full = itemEl.querySelector('.fullCard');
+      if(full){
+        full.innerHTML = renderItemFull(it, r, CIERRA_ITEM_ESTADOS.indexOf(r.estado)>=0);
+        wireSingleItem(itemEl, it);
+        pintarMiniaturas(itemEl);
+      }
+    });
+  });
+
+  pintarMiniaturas(itemEl);
+};
+
+/* ---------- Envoltura 3: chapterRows → adjunta conteo y carpeta ----------
+   NO agrega columnas nuevas: escribe en las columnas 20 y 21 que ya existen
+   ("Evidencia fotográfica - estado actual" / "- cierre") el texto del usuario
+   seguido del marcador [Nf] con el número de fotos, y en la columna 22
+   ("Link carpeta / evidencia") la ruta de Drive si el usuario no puso una.
+   Si prefieres columnas dedicadas, ver punto D del documento de decisiones. */
+var _origChapterRows = chapterRows;
+chapterRows = function(sess, cap){
+  var rows = _origChapterRows(sess, cap);
+  var items = ITEMS.filter(function(it){ return it.cap===cap; });
+  var byId = {}; items.forEach(function(it,i){ byId[it.id]=it; });
+  return rows.map(function(row){
+    var r = sess.responses[row[0]] || {};
+    var nA = fotosDe(r,'actual').length, nC = fotosDe(r,'cierre').length;
+    if(nA) row[19] = (row[19]? row[19]+' ' : '') + '['+nA+' foto'+(nA>1?'s':'')+']';
+    if(nC) row[20] = (row[20]? row[20]+' ' : '') + '['+nC+' foto'+(nC>1?'s':'')+']';
+    if((nA||nC) && !row[21]){
+      row[21] = 'INSPECCIONES/'+sess.meta.sede+'/'+sess.meta.piscina+'/'+sess.meta.fecha+'/';
+    }
+    return row;
+  });
+};
+
+/* ---------- Envoltura 4: openSession → reencola pendientes ---------- */
+var _origOpenSession = openSession;
+openSession = async function(id){
+  await _origOpenSession(id);
+  if(state.session) reencolarPendientes(state.session);
+};
+
+/* ---------- Estilos del módulo (inyectados, no tocan el <style> existente) ---------- */
+(function inyectarEstilosFoto(){
+  var css = ''+
+  '.fotoWrap{margin:10px 0 4px;}'+
+  '.fotoTipo{margin-bottom:8px;}'+
+  '.fotoCount{color:var(--text-faint);font-size:11px;margin-left:6px;}'+
+  '.fotoGrid{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}'+
+  '.fotoThumb{position:relative;margin:0;width:84px;height:84px;border-radius:8px;overflow:hidden;background:#111;border:1px solid rgba(255,255,255,.12);}'+
+  '.fotoThumb img{width:100%;height:100%;object-fit:cover;display:block;}'+
+  '.fotoSync{position:absolute;left:4px;bottom:4px;font-size:11px;background:rgba(0,0,0,.65);color:#fff;border-radius:4px;padding:0 4px;}'+
+  '.fotoDel{position:absolute;top:2px;right:2px;width:20px;height:20px;line-height:18px;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:12px;cursor:pointer;}'+
+  '.fotoAdd{width:84px;height:84px;border:1px dashed rgba(255,255,255,.28);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-faint);cursor:pointer;}'+
+  '.fotoAdd:active{background:rgba(255,255,255,.06);}';
+  var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+})();
+
+})();
+</script>
+</body>
+</html>
