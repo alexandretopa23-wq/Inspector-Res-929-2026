@@ -1576,6 +1576,355 @@ if('serviceWorker' in navigator){
   updateSyncModeUI();
   renderHome();
 })();
+
+/* ============================================================================
+   MÓDULO EVIDENCIA FOTOGRÁFICA — PARCHE ADITIVO
+   ----------------------------------------------------------------------------
+   DÓNDE PEGARLO: dentro de index.html, INMEDIATAMENTE ANTES de la línea 1579
+   (el primer `})();` que cierra el IIFE principal, justo después del bloque
+   `(async function init(){ ... })();`).
+
+   NO modifica ninguna línea existente. Envuelve por reasignación tres funciones
+   ya declaradas (renderItemFull, wireSingleItem, chapterRows) conservando su
+   comportamiento original y añadiendo el bloque de fotos encima.
+
+   ARQUITECTURA:
+   - Los blobs viven en una base IndexedDB SEPARADA ('pi_inspector_media'), para
+     no tocar la versión ni el esquema de 'pi_inspector_db'. Si el módulo falla,
+     el inspector sigue funcionando idéntico.
+   - En sess.responses[itemId] solo se guardan METADATOS (array `fotos`), nunca
+     binarios: el JSON de sesión no crece y export/import siguen funcionando.
+   - La subida a Drive es por convención de rutas. El informe NO depende de que
+     la URL quede escrita en la hoja: el generador recorre la carpeta por
+     Sede/Piscina/Fecha/ITEM. Esto lo hace tolerante a fallos de red.
+   ============================================================================ */
+
+/* ---------- Parámetros (ajustables sin tocar lógica) ---------- */
+var FOTO_MAX_POR_ITEM = 2;      // límite duro pedido por negocio
+var FOTO_LADO_MAX     = 1600;   // px del lado mayor tras compresión
+var FOTO_CALIDAD      = 0.72;   // JPEG quality → ~150-250 KB por foto
+var FOTO_TIPOS        = [{k:'actual', lbl:'Estado actual'},{k:'cierre', lbl:'Cierre'}];
+
+/* ---------- Almacén de blobs (BD independiente) ---------- */
+var MDB_NAME='pi_inspector_media', MDB_VER=1, MDB_STORE='blobs';
+var _mdbPromise=null;
+function openMediaDB(){
+  if(_mdbPromise) return _mdbPromise;
+  _mdbPromise = new Promise(function(res,rej){
+    var req = indexedDB.open(MDB_NAME, MDB_VER);
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if(!db.objectStoreNames.contains(MDB_STORE)) db.createObjectStore(MDB_STORE);
+    };
+    req.onsuccess=function(){res(req.result);};
+    req.onerror=function(){rej(req.error);};
+  });
+  return _mdbPromise;
+}
+async function mediaPut(key, blob){
+  try{
+    var db = await openMediaDB();
+    return new Promise(function(res,rej){
+      var tx = db.transaction(MDB_STORE,'readwrite');
+      tx.objectStore(MDB_STORE).put(blob, key);
+      tx.oncomplete=function(){res(true);}; tx.onerror=function(){rej(tx.error);};
+    });
+  }catch(e){ console.warn('mediaPut',e); return false; }
+}
+async function mediaGet(key){
+  try{
+    var db = await openMediaDB();
+    return new Promise(function(res){
+      var tx = db.transaction(MDB_STORE,'readonly');
+      var r = tx.objectStore(MDB_STORE).get(key);
+      r.onsuccess=function(){res(r.result||null);}; r.onerror=function(){res(null);};
+    });
+  }catch(e){ return null; }
+}
+async function mediaDel(key){
+  try{
+    var db = await openMediaDB();
+    return new Promise(function(res){
+      var tx = db.transaction(MDB_STORE,'readwrite');
+      tx.objectStore(MDB_STORE).delete(key);
+      tx.oncomplete=function(){res(true);}; tx.onerror=function(){res(false);};
+    });
+  }catch(e){ return false; }
+}
+
+/* ---------- Compresión en canvas (evita subir 6 MB por foto) ---------- */
+function comprimirImagen(file){
+  return new Promise(function(res, rej){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      var w=img.naturalWidth, h=img.naturalHeight;
+      var esc = Math.min(1, FOTO_LADO_MAX/Math.max(w,h));
+      var cw = Math.round(w*esc), ch = Math.round(h*esc);
+      var c = document.createElement('canvas'); c.width=cw; c.height=ch;
+      c.getContext('2d').drawImage(img,0,0,cw,ch);
+      c.toBlob(function(blob){
+        URL.revokeObjectURL(url);
+        if(!blob) return rej(new Error('No se pudo comprimir'));
+        res({blob:blob, w:cw, h:ch});
+      }, 'image/jpeg', FOTO_CALIDAD);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('Archivo no es una imagen válida')); };
+    img.src = url;
+  });
+}
+function blobABase64(blob){
+  return new Promise(function(res,rej){
+    var fr = new FileReader();
+    fr.onload=function(){ res(String(fr.result).split(',')[1]); };
+    fr.onerror=function(){ rej(fr.error); };
+    fr.readAsDataURL(blob);
+  });
+}
+
+/* ---------- Estructura del metadato ----------
+   r.fotos = [{ key, tipo, ts, w, h, bytes, sync:'pend'|'ok'|'error', driveId }]
+   El campo `key` es también el nombre del archivo en Drive:
+     <ITEMID>__<tipo>__<n>.jpg
+---------------------------------------------------------------- */
+function fotosDe(r, tipo){
+  var arr = (r && r.fotos) || [];
+  return tipo ? arr.filter(function(f){return f.tipo===tipo;}) : arr;
+}
+function fotoKey(sess, itemId, tipo, n){
+  return itemId+'__'+tipo+'__'+n+'.jpg';
+}
+
+/* ---------- Cola de subida (offline-first) ---------- */
+var FOTOS_PEND = [];   // {sess, itemId, key}
+var SUBIENDO = false;
+
+async function encolarSubida(sess, itemId, key){
+  FOTOS_PEND.push({sessId:sess.id, itemId:itemId, key:key});
+  procesarColaFotos();
+}
+async function procesarColaFotos(){
+  if(SUBIENDO || !SHEETS_WEBHOOK_URL || !navigator.onLine) return;
+  var job = FOTOS_PEND.shift();
+  if(!job) return;
+  SUBIENDO = true;
+  try{
+    var sess = state.session && state.session.id===job.sessId ? state.session : await loadSession(job.sessId);
+    if(!sess) throw new Error('sesión no encontrada');
+    var blob = await mediaGet(job.key);
+    if(!blob) throw new Error('blob no encontrado');
+    var b64 = await blobABase64(blob);
+    var payload = {
+      accion: 'foto',
+      sede: sess.meta.sede,
+      piscina: sess.meta.piscina,
+      fecha: sess.meta.fecha,
+      responsable: sess.meta.responsable,
+      itemId: job.itemId,
+      nombre: job.key,
+      mime: 'image/jpeg',
+      data: b64
+    };
+    var resp = await fetch(SHEETS_WEBHOOK_URL, {
+      method:'POST',
+      body: JSON.stringify(payload),
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      redirect:'follow',
+      signal: AbortSignal.timeout(60000)
+    });
+    var out = {};
+    try{ out = await resp.json(); }catch(e){ out = {ok:true}; } // si CORS bloquea el body, asumimos entregado
+    marcarFoto(sess, job.itemId, job.key, out.ok===false?'error':'ok', out.fileId||'');
+    if(out.ok===false) FOTOS_PEND.push(job);
+  }catch(e){
+    console.warn('Subida de foto pendiente:', e.message);
+    FOTOS_PEND.push(job);                 // reintento en el siguiente ciclo
+  }finally{
+    SUBIENDO = false;
+    if(FOTOS_PEND.length) setTimeout(procesarColaFotos, 3000);
+  }
+}
+function marcarFoto(sess, itemId, key, estado, driveId){
+  var r = sess.responses[itemId]; if(!r || !r.fotos) return;
+  r.fotos.forEach(function(f){ if(f.key===key){ f.sync=estado; if(driveId) f.driveId=driveId; } });
+  saveSession(sess);
+  var chip = document.querySelector('[data-foto-key="'+key+'"] .fotoSync');
+  if(chip){ chip.textContent = estado==='ok'?'✓':'↻'; chip.title = estado==='ok'?'Sincronizada con Drive':'Pendiente de subir'; }
+}
+window.addEventListener('online', function(){ procesarColaFotos(); });
+setInterval(procesarColaFotos, 30000);
+
+/* ---------- Reencolar pendientes al abrir una sesión ---------- */
+function reencolarPendientes(sess){
+  FOTOS_PEND = [];
+  Object.keys(sess.responses||{}).forEach(function(itemId){
+    var r = sess.responses[itemId];
+    (r.fotos||[]).forEach(function(f){
+      if(f.sync!=='ok') FOTOS_PEND.push({sessId:sess.id, itemId:itemId, key:f.key});
+    });
+  });
+  procesarColaFotos();
+}
+
+/* ---------- UI: bloque de fotos dentro de la tarjeta del ítem ---------- */
+function fotoBloqueHtml(it, r){
+  var html = '<div class="fotoWrap" data-foto-item="'+it.id+'">';
+  FOTO_TIPOS.forEach(function(t){
+    var lista = fotosDe(r, t.k);
+    html += '<div class="fotoTipo">'+
+      '<div class="subLabel">Fotos · '+t.lbl+' <span class="fotoCount">'+lista.length+'/'+FOTO_MAX_POR_ITEM+'</span></div>'+
+      '<div class="fotoGrid" data-foto-grid="'+t.k+'">';
+    lista.forEach(function(f){
+      html += '<figure class="fotoThumb" data-foto-key="'+f.key+'">'+
+                '<img alt="evidencia" data-foto-src="'+f.key+'">'+
+                '<span class="fotoSync">'+(f.sync==='ok'?'✓':'↻')+'</span>'+
+                '<button class="fotoDel" data-foto-del="'+f.key+'" title="Eliminar">✕</button>'+
+              '</figure>';
+    });
+    if(lista.length < FOTO_MAX_POR_ITEM){
+      html += '<label class="fotoAdd">+ Foto'+
+        '<input type="file" accept="image/*" capture="environment" hidden data-foto-in="'+t.k+'">'+
+      '</label>';
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/* Pinta las miniaturas desde IndexedDB (async, tras insertar el HTML) */
+async function pintarMiniaturas(scope){
+  var imgs = (scope||document).querySelectorAll('img[data-foto-src]');
+  for(var i=0;i<imgs.length;i++){
+    var el = imgs[i];
+    if(el.dataset.painted) continue;
+    var blob = await mediaGet(el.getAttribute('data-foto-src'));
+    if(blob){ el.src = URL.createObjectURL(blob); el.dataset.painted='1'; }
+  }
+}
+
+/* ---------- Envoltura 1: renderItemFull → añade el bloque de fotos ---------- */
+var _origRenderItemFull = renderItemFull;
+renderItemFull = function(it, r, showExtra){
+  var html = _origRenderItemFull(it, r, showExtra);
+  // Insertar el bloque de fotos justo antes del cierre del contenedor extraWrap.
+  var marca = '<div class="moreToggle"';
+  var idx = html.indexOf(marca);
+  if(idx === -1) return html + fotoBloqueHtml(it, r);
+  return html.slice(0, idx) + fotoBloqueHtml(it, r) + html.slice(idx);
+};
+
+/* ---------- Envoltura 2: wireSingleItem → cablea captura y borrado ---------- */
+var _origWireSingleItem = wireSingleItem;
+wireSingleItem = function(itemEl, it){
+  _origWireSingleItem(itemEl, it);
+  var sess = state.session;
+  function getResp(){
+    var r = sess.responses[it.id];
+    if(!r){ r = sess.responses[it.id] = {}; }
+    if(!r.fotos) r.fotos = [];
+    return r;
+  }
+
+  itemEl.querySelectorAll('input[data-foto-in]').forEach(function(inp){
+    inp.addEventListener('change', async function(){
+      var file = inp.files && inp.files[0]; if(!file) return;
+      var tipo = inp.getAttribute('data-foto-in');
+      var r = getResp();
+      if(fotosDe(r, tipo).length >= FOTO_MAX_POR_ITEM){
+        toast('Máximo '+FOTO_MAX_POR_ITEM+' fotos por ítem'); inp.value=''; return;
+      }
+      try{
+        toast('Procesando foto…');
+        var out = await comprimirImagen(file);
+        var n = fotosDe(r, tipo).length + 1;
+        var key = fotoKey(sess, it.id, tipo, n);
+        await mediaPut(key, out.blob);
+        r.fotos.push({key:key, tipo:tipo, ts:Date.now(), w:out.w, h:out.h,
+                      bytes:out.blob.size, sync:'pend', driveId:''});
+        await saveSession(sess);
+        encolarSubida(sess, it.id, key);
+        // Repintar solo esta tarjeta (no toca el resto del render)
+        var full = itemEl.querySelector('.fullCard');
+        if(full){
+          full.innerHTML = renderItemFull(it, r, CIERRA_ITEM_ESTADOS.indexOf(r.estado)>=0);
+          wireSingleItem(itemEl, it);
+          pintarMiniaturas(itemEl);
+        }
+        toast('Foto agregada ('+Math.round(out.blob.size/1024)+' KB)');
+      }catch(e){
+        toast('⚠ No se pudo procesar la foto');
+        console.warn(e);
+      }finally{ inp.value=''; }
+    });
+  });
+
+  itemEl.querySelectorAll('[data-foto-del]').forEach(function(btn){
+    btn.addEventListener('click', async function(){
+      var key = btn.getAttribute('data-foto-del');
+      if(!confirm('¿Eliminar esta foto? La copia en Drive, si ya se subió, no se borra automáticamente.')) return;
+      var r = getResp();
+      r.fotos = r.fotos.filter(function(f){ return f.key!==key; });
+      await mediaDel(key);
+      await saveSession(sess);
+      var full = itemEl.querySelector('.fullCard');
+      if(full){
+        full.innerHTML = renderItemFull(it, r, CIERRA_ITEM_ESTADOS.indexOf(r.estado)>=0);
+        wireSingleItem(itemEl, it);
+        pintarMiniaturas(itemEl);
+      }
+    });
+  });
+
+  pintarMiniaturas(itemEl);
+};
+
+/* ---------- Envoltura 3: chapterRows → adjunta conteo y carpeta ----------
+   NO agrega columnas nuevas: escribe en las columnas 20 y 21 que ya existen
+   ("Evidencia fotográfica - estado actual" / "- cierre") el texto del usuario
+   seguido del marcador [Nf] con el número de fotos, y en la columna 22
+   ("Link carpeta / evidencia") la ruta de Drive si el usuario no puso una.
+   Si prefieres columnas dedicadas, ver punto D del documento de decisiones. */
+var _origChapterRows = chapterRows;
+chapterRows = function(sess, cap){
+  var rows = _origChapterRows(sess, cap);
+  var items = ITEMS.filter(function(it){ return it.cap===cap; });
+  var byId = {}; items.forEach(function(it,i){ byId[it.id]=it; });
+  return rows.map(function(row){
+    var r = sess.responses[row[0]] || {};
+    var nA = fotosDe(r,'actual').length, nC = fotosDe(r,'cierre').length;
+    if(nA) row[19] = (row[19]? row[19]+' ' : '') + '['+nA+' foto'+(nA>1?'s':'')+']';
+    if(nC) row[20] = (row[20]? row[20]+' ' : '') + '['+nC+' foto'+(nC>1?'s':'')+']';
+    if((nA||nC) && !row[21]){
+      row[21] = 'INSPECCIONES/'+sess.meta.sede+'/'+sess.meta.piscina+'/'+sess.meta.fecha+'/';
+    }
+    return row;
+  });
+};
+
+/* ---------- Envoltura 4: openSession → reencola pendientes ---------- */
+var _origOpenSession = openSession;
+openSession = async function(id){
+  await _origOpenSession(id);
+  if(state.session) reencolarPendientes(state.session);
+};
+
+/* ---------- Estilos del módulo (inyectados, no tocan el <style> existente) ---------- */
+(function inyectarEstilosFoto(){
+  var css = ''+
+  '.fotoWrap{margin:10px 0 4px;}'+
+  '.fotoTipo{margin-bottom:8px;}'+
+  '.fotoCount{color:var(--text-faint);font-size:11px;margin-left:6px;}'+
+  '.fotoGrid{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}'+
+  '.fotoThumb{position:relative;margin:0;width:84px;height:84px;border-radius:8px;overflow:hidden;background:#111;border:1px solid rgba(255,255,255,.12);}'+
+  '.fotoThumb img{width:100%;height:100%;object-fit:cover;display:block;}'+
+  '.fotoSync{position:absolute;left:4px;bottom:4px;font-size:11px;background:rgba(0,0,0,.65);color:#fff;border-radius:4px;padding:0 4px;}'+
+  '.fotoDel{position:absolute;top:2px;right:2px;width:20px;height:20px;line-height:18px;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:12px;cursor:pointer;}'+
+  '.fotoAdd{width:84px;height:84px;border:1px dashed rgba(255,255,255,.28);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-faint);cursor:pointer;}'+
+  '.fotoAdd:active{background:rgba(255,255,255,.06);}';
+  var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+})();
+
 })();
 </script>
 </body>
