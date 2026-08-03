@@ -417,7 +417,7 @@ function chapterRows(sess, cap){
     .map(function(it){
       var r = sess.responses[it.id] || {};
       return [
-        it.id, '', it.cap, it.item, it.enfoque||'', it.prioridad||'',
+        it.id, it.cap, it.item, it.enfoque||'', it.prioridad||'',
         sess.meta.sede, sess.meta.piscina, sess.meta.fecha, sess.meta.responsable,
         r.estado||'', r.riesgo||'', r.hallazgo||'', r.accion||'', r.respCierre||'',
         r.fechaCompromiso||'', r.fechaCierre||'', daysRemainingStr(r.fechaCompromiso,r.fechaCierre),
@@ -425,7 +425,7 @@ function chapterRows(sess, cap){
         r.linkCarpeta||'', r.observaciones||''
       ];
     })
-    .filter(function(row){ return row[10] !== ''; }); // solo respondidos
+    .filter(function(row){ return row[9] !== ''; }); // solo respondidos (índice de 'estado' sin la columna norma)
 }
 
 function isChapterComplete(sess, cap){
@@ -1414,7 +1414,7 @@ function updateSavedLabel(){
 }
 
 /* ============ EXPORT ============ */
-var CSV_HEADERS = ['ID','norma aplicable','Capítulo / componente','Ítem de verificación','Enfoque técnico',
+var CSV_HEADERS = ['ID','Capítulo / componente','Ítem de verificación','Enfoque técnico',
   'Prioridad sugerida','Sede','Piscina / estanque','Fecha inspección','Responsable inspección','Estado',
   'Nivel de riesgo','Hallazgo / condición observada','Acción correctiva / preventiva','Responsable cierre',
   'Fecha compromiso','Fecha cierre','Días restantes / vencido','% avance','Evidencia fotográfica - estado actual',
@@ -1439,7 +1439,7 @@ function sessionToRows(sess, onlyAnswered){
   var rows = ITEMS.map(function(it){
     var r = sess.responses[it.id] || {};
     return [
-      it.id, '', it.cap, it.item, it.enfoque||'', it.prioridad||'',
+      it.id, it.cap, it.item, it.enfoque||'', it.prioridad||'',
       sess.meta.sede, sess.meta.piscina, sess.meta.fecha, sess.meta.responsable,
       r.estado||'', r.riesgo||'', r.hallazgo||'', r.accion||'', r.respCierre||'',
       r.fechaCompromiso||'', r.fechaCierre||'', daysRemainingStr(r.fechaCompromiso,r.fechaCierre),
@@ -1448,7 +1448,7 @@ function sessionToRows(sess, onlyAnswered){
     ];
   });
   if(onlyAnswered){
-    rows = rows.filter(function(row){ return row[10] !== ''; }); // columna 'Estado' (índice 10)
+    rows = rows.filter(function(row){ return row[9] !== ''; }); // columna 'Estado' (índice 9, sin norma)
   }
   return rows;
 }
@@ -1880,10 +1880,11 @@ wireSingleItem = function(itemEl, it){
 };
 
 /* ---------- Envoltura 3: chapterRows → adjunta conteo y carpeta ----------
-   NO agrega columnas nuevas: escribe en las columnas 20 y 21 que ya existen
+   NO agrega columnas nuevas: escribe en las columnas 19 y 20 que ya existen
    ("Evidencia fotográfica - estado actual" / "- cierre") el texto del usuario
-   seguido del marcador [Nf] con el número de fotos, y en la columna 22
+   seguido del marcador [Nf] con el número de fotos, y en la columna 21
    ("Link carpeta / evidencia") la ruta de Drive si el usuario no puso una.
+   (Índices en base 0 dentro del arreglo de 22 columnas, sin "norma aplicable".)
    Si prefieres columnas dedicadas, ver punto D del documento de decisiones. */
 var _origChapterRows = chapterRows;
 chapterRows = function(sess, cap){
@@ -1893,10 +1894,10 @@ chapterRows = function(sess, cap){
   return rows.map(function(row){
     var r = sess.responses[row[0]] || {};
     var nA = fotosDe(r,'actual').length, nC = fotosDe(r,'cierre').length;
-    if(nA) row[19] = (row[19]? row[19]+' ' : '') + '['+nA+' foto'+(nA>1?'s':'')+']';
-    if(nC) row[20] = (row[20]? row[20]+' ' : '') + '['+nC+' foto'+(nC>1?'s':'')+']';
-    if((nA||nC) && !row[21]){
-      row[21] = 'INSPECCIONES/'+sess.meta.sede+'/'+sess.meta.piscina+'/'+sess.meta.fecha+'/';
+    if(nA) row[18] = (row[18]? row[18]+' ' : '') + '['+nA+' foto'+(nA>1?'s':'')+']';
+    if(nC) row[19] = (row[19]? row[19]+' ' : '') + '['+nC+' foto'+(nC>1?'s':'')+']';
+    if((nA||nC) && !row[20]){
+      row[20] = 'INSPECCIONES/'+sess.meta.sede+'/'+sess.meta.piscina+'/'+sess.meta.fecha+'/';
     }
     return row;
   });
