@@ -523,15 +523,24 @@ var FICHA_CAMPOS = {
   bombaHP:{label:"Potencia de la bomba",unit:"HP",type:"number",step:"0.25"},
   bombaHz:{label:"Frecuencia de operación",unit:"Hz",type:"number",step:"1",placeholder:"60"},
   bombaFamilia:{label:"Origen de la curva de la bomba",type:"select",options:[
-    {v:"superflo",l:"Pentair SuperFlo (velocidad única) — curva de referencia"},
-    {v:"superflo_vs",l:"Pentair SuperFlo VS (velocidad variable) — curva de referencia"},
-    {v:"eq",l:"Pentair EQ Series (comercial) — curva de referencia"},
+    {v:"superflo",l:"Pentair SuperFlo (velocidad única)"},
+    {v:"superflo_vs",l:"Pentair SuperFlo VS 2.2 HP (velocidad seleccionable — dato de fábrica)"},
+    {v:"eq",l:"Pentair EQ Series (comercial)"},
     {v:"manual",l:"Cargar curva real de la bomba (mínimo 4 puntos Q-H)"}
+  ]},
+  curvaManualHz:{label:"Frecuencia (Hz) a la que se midió la curva manual",unit:"Hz",type:"number",step:"1",placeholder:"60"},
+  bombaVelocidadVS:{label:"Velocidad en la que se encontró configurada la bomba SuperFlo VS",type:"select",options:[
+    {v:"1",l:"Velocidad 1 — 3000 RPM"},
+    {v:"2",l:"Velocidad 2 — 2200 RPM"},
+    {v:"3",l:"Velocidad 3 — 1400 RPM"},
+    {v:"4",l:"Velocidad 4 / máxima — 3450 RPM"}
   ]},
   tuberiaSuccionDiam:{label:"Diámetro tubería de succión",unit:"pulg",type:"number",step:"0.5"},
   tuberiaDescargaDiam:{label:"Diámetro tubería de descarga / retorno",unit:"pulg",type:"number",step:"0.5"},
   tuberiaLongitud:{label:"Longitud total de tubería (succión + descarga)",unit:"m",type:"number",step:"1"},
   tuberiaAccesorios:{label:"Número de accesorios (codos, válvulas, tees)",unit:"u",type:"number",step:"1"},
+  tuberiaPctSuccion:{label:"% de la longitud y accesorios totales que corresponde al tramo de succión (el resto se asigna a descarga)",unit:"%",type:"number",step:"5",placeholder:"50"},
+  desnivelSuccionDescarga:{label:"Desnivel entre el nivel de succión (espejo de agua) y el punto de descarga/retorno a la piscina",unit:"m",type:"number",step:"0.1"},
   filtroTipo:{label:"Tipo de filtro",type:"select",options:[
     {v:"arena",l:"Arena / medio granular"},{v:"cartucho",l:"Cartucho"},{v:"de",l:"Tierra de diatomeas (D.E.)"}
   ]},
@@ -548,8 +557,8 @@ var ITEM_FICHA_CAMPOS = {
   "CHK-044":["profMax","profMin","profIntermedia"],
   "CHK-204":["largo","ancho","areaManual"],
   "CHK-079":["tipoUso","cubierta"],
-  "CHK-074":["bombaHP","bombaHz","bombaFamilia"],
-  "CHK-078":["tuberiaSuccionDiam","tuberiaDescargaDiam","tuberiaLongitud","tuberiaAccesorios"],
+  "CHK-074":["bombaHP","bombaHz","bombaFamilia","bombaVelocidadVS"],
+  "CHK-078":["tuberiaSuccionDiam","tuberiaDescargaDiam","tuberiaLongitud","tuberiaAccesorios","tuberiaPctSuccion","desnivelSuccionDescarga"],
   "CHK-083":["filtroTipo","filtroArea"],
   "CHK-084":["presionManometro"],
   "CHK-197":["inodoroHEncontrados","inodoroMEncontrados","orinalesEncontrados","vestieresEncontrados"],
@@ -600,22 +609,40 @@ function estadoCampoFicha(key, ficha){
    el inspector tenga el dato real (manómetro + caudalímetro en 4+ puntos de
    operación), usar SIEMPRE la curva manual: es dato de campo, no referencia. */
 var CURVAS_PENTAIR = {
+  superflo_05:{label:"SuperFlo 1/2 HP (dato de fábrica)",hp:0.5,curva:[
+    {q:0,h:21.95},{q:4.54,h:19.81},{q:9.09,h:12.80},{q:11.36,h:7.92},{q:11.81,h:0}
+  ]},
   superflo_075:{label:"SuperFlo 0.75 HP (referencia)",hp:0.75,curva:[{q:0,h:13},{q:8,h:11.5},{q:14,h:9},{q:18,h:6},{q:21,h:3}]},
-  superflo_1:{label:"SuperFlo 1 HP (referencia)",hp:1,curva:[{q:0,h:16},{q:10,h:14},{q:17,h:11},{q:22,h:7.5},{q:25,h:4}]},
+  superflo_1:{label:"SuperFlo 1 HP (dato de fábrica)",hp:1,curva:[
+    {q:0,h:27.13},{q:4.54,h:25.91},{q:9.09,h:20.12},{q:11.36,h:16.46},{q:13.63,h:11.58},{q:15.44,h:0}
+  ]},
   superflo_15:{label:"SuperFlo 1.5 HP (referencia)",hp:1.5,curva:[{q:0,h:20},{q:12,h:18},{q:20,h:14.5},{q:26,h:10},{q:30,h:5}]},
   superflo_2:{label:"SuperFlo 2 HP (referencia)",hp:2,curva:[{q:0,h:24},{q:14,h:21.5},{q:23,h:17.5},{q:29,h:12},{q:33,h:6}]},
-  superflo_vs:{label:"SuperFlo VS, tope a 3450 RPM (referencia)",hp:2.7,curva:[{q:0,h:24},{q:15,h:21},{q:24,h:16.5},{q:30,h:11},{q:34,h:5}]},
   eq_1:{label:"EQ Series 1 HP comercial (referencia)",hp:1,curva:[{q:0,h:18},{q:12,h:16},{q:20,h:12.5},{q:26,h:8},{q:30,h:3.5}]},
   eq_15:{label:"EQ Series 1.5 HP comercial (referencia)",hp:1.5,curva:[{q:0,h:22},{q:15,h:19.5},{q:24,h:15.5},{q:30,h:10.5},{q:35,h:4.5}]},
   eq_2:{label:"EQ Series 2 HP comercial (referencia)",hp:2,curva:[{q:0,h:27},{q:17,h:24},{q:27,h:19},{q:34,h:13},{q:39,h:6}]},
-  eq_3:{label:"EQ Series 3 HP comercial (referencia)",hp:3,curva:[{q:0,h:34},{q:20,h:30.5},{q:32,h:24.5},{q:41,h:17},{q:47,h:8}]}
+  eq_3:{label:"EQ Series 3 HP comercial (referencia)",hp:3,curva:[{q:0,h:34},{q:20,h:30.5},{q:32,h:24.5},{q:41,h:17},{q:47,h:8}]},
+  // Curvas de fábrica reales (Q en GPM, H en pies a 60Hz/3450rpm según ficha
+  // del fabricante) convertidas a m³/h (×0.227125) y m c.a. (×0.3048) — NO
+  // son inferidas de un gráfico como las anteriores, son la tabla numérica
+  // dada por el fabricante para cada modelo.
+  eq_500:{label:"Pentair EQ500 5 HP (dato de fábrica)",hp:5,curva:[
+    {q:0,h:24.38},{q:22.71,h:22.86},{q:56.78,h:18.29},{q:71.54,h:12.19},{q:84.04,h:6.10},{q:90.85,h:0}
+  ]},
+  eq_750:{label:"Pentair EQ750 7.5 HP (dato de fábrica)",hp:7.5,curva:[
+    {q:0,h:24.38},{q:68.14,h:21.34},{q:85.17,h:18.29},{q:106.75,h:12.19},{q:115.83,h:6.10},{q:124.92,h:0}
+  ]},
+  eq_1000:{label:"Pentair EQK1000 10 HP (dato de fábrica)",hp:10,curva:[
+    {q:0,h:32.00},{q:45.43,h:30.48},{q:89.71,h:24.38},{q:102.21,h:21.34},{q:111.30,h:18.29},{q:120.38,h:12.19},{q:134.00,h:6.10},{q:136.27,h:0}
+  ]},
+  eq_1500:{label:"Pentair EQK1500 15 HP (dato de fábrica)",hp:15,curva:[
+    {q:0,h:34.14},{q:62.46,h:30.48},{q:134.00,h:24.38},{q:147.63,h:21.34},{q:157.85,h:18.29},{q:170.34,h:12.19},{q:181.70,h:6.10},{q:186.25,h:0}
+  ]}
 };
 function seleccionarCurvaPentair(familia, hp){
-  var prefijo = familia==='superflo_vs' ? 'superflo_vs' : (familia==='eq' ? 'eq_' : 'superflo_');
   var candidatas = Object.keys(CURVAS_PENTAIR).filter(function(k){
-    if(familia==='superflo_vs') return k==='superflo_vs';
     if(familia==='eq') return k.indexOf('eq_')===0;
-    return k.indexOf('superflo_')===0 && k!=='superflo_vs';
+    return k.indexOf('superflo_')===0;
   });
   if(!candidatas.length) return null;
   if(hp==null || isNaN(hp)) return CURVAS_PENTAIR[candidatas[0]];
@@ -625,6 +652,27 @@ function seleccionarCurvaPentair(familia, hp){
   return CURVAS_PENTAIR[candidatas[0]];
 }
 
+/* SuperFlo VS 2.2 HP: a diferencia de las demás familias (velocidad fija,
+   se escalan por Hz con la ley de afinidad), esta bomba se opera a una de
+   4 velocidades fijas seleccionables desde su controlador — cada una tiene
+   su propia curva de fábrica, no es un múltiplo de 60Hz. Por eso NO pasa
+   por afinidadPorHz: el inspector declara en qué velocidad la encontró
+   (ficha.bombaVelocidadVS) y se usa esa curva directamente. */
+var CURVAS_PENTAIR_VS = {
+  1:{label:"SuperFlo VS 2.2 HP — Velocidad 1, 3000 RPM (dato de fábrica)",hp:2.2,curva:[
+    {q:0,h:30.48},{q:4.54,h:30.48},{q:9.09,h:22.56},{q:11.36,h:14.63},{q:12.72,h:0}
+  ]},
+  2:{label:"SuperFlo VS 2.2 HP — Velocidad 2, 2200 RPM (dato de fábrica)",hp:2.2,curva:[
+    {q:0,h:21.34},{q:2.27,h:21.34},{q:4.54,h:16.46},{q:6.36,h:6.10},{q:6.81,h:0}
+  ]},
+  3:{label:"SuperFlo VS 2.2 HP — Velocidad 3, 1400 RPM (dato de fábrica)",hp:2.2,curva:[
+    {q:0,h:12.19},{q:1.14,h:12.19},{q:2.27,h:7.62},{q:2.73,h:0}
+  ]},
+  4:{label:"SuperFlo VS 2.2 HP — Velocidad 4 / máxima, 3450 RPM (dato de fábrica)",hp:2.2,curva:[
+    {q:0,h:33.53},{q:6.81,h:33.53},{q:9.09,h:29.57},{q:11.36,h:25.60},{q:16.81,h:0}
+  ]}
+};
+
 /* Ley de afinidad de bombas centrífugas, aplicada a TODA la curva (no al
    punto de operación): las curvas de catálogo están caracterizadas a 60Hz.
    Q₂=Q₁·(Hz₂/60)  H₂=H₁·(Hz₂/60)²   — la potencia (∝ (Hz₂/60)³) no se usa
@@ -632,6 +680,17 @@ function seleccionarCurvaPentair(familia, hp){
    calcula para no sumar campos sin uso. */
 function afinidadPorHz(curva, hzOperacion){
   var k = (hzOperacion && hzOperacion>0 ? hzOperacion : 60) / 60;
+  return curva.map(function(p){ return {q:p.q*k, h:p.h*k*k}; });
+}
+
+/* Misma ley de afinidad, pero entre dos frecuencias arbitrarias (no solo
+   desde 60Hz) — la necesita la curva manual: el inspector la mide con el
+   caudalímetro a la Hz que tenga el variador puesto ese día, que no
+   siempre es 60Hz, y hay que proyectarla a la Hz de operación evaluada. */
+function afinidadEntreHz(curva, hzOrigen, hzDestino){
+  var o = (hzOrigen && hzOrigen>0) ? hzOrigen : 60;
+  var d = (hzDestino && hzDestino>0) ? hzDestino : 60;
+  var k = d/o;
   return curva.map(function(p){ return {q:p.q*k, h:p.h*k*k}; });
 }
 
@@ -704,24 +763,38 @@ function hazenWilliamsHf(qM3s, diamPulg, longitudM, nAccesorios, C){
   return 10.67 * Ltotal * Math.pow(qM3s,1.852) / (Math.pow(C,1.852) * Math.pow(D,4.8704));
 }
 
-/* Curva del sistema: se asume recirculación en circuito cerrado (succión y
-   retorno vuelven al mismo estanque), por lo que la carga estática/de
-   elevación se considera despreciable — es la simplificación estándar en
-   hidráulica de piscinas (no hay que levantar agua a un tanque elevado).
-   H_sistema(Q) = hf_succión(Q) + hf_descarga(Q) + ΔP_filtro.
-   La longitud y accesorios totales de tubería se reparten 50/50 entre
-   succión y descarga a falta de un dato más fino (supuesto declarado). */
+/* Curva del sistema: en un circuito cerrado ideal (succión y retorno al
+   mismo espejo de agua, misma cota, presión atmosférica en ambos extremos)
+   la carga estática se cancela y no hace falta contarla. Pero acá no hay
+   forma de verificar eso en campo — no hay manómetro de descarga junto a
+   la piscina, solo el de ingreso al filtro — y en la práctica el cuarto de
+   máquinas casi nunca queda exactamente a la cota del espejo de agua. Por
+   eso el desnivel entre el nivel de succión y el punto de descarga/retorno
+   (ficha.desnivelSuccionDescarga, en m) se declara aparte y se suma como
+   carga estática (Hgeo) en vez de asumirla en 0.
+   H_sistema(Q) = hf_succión(Q) + hf_descarga(Q) + ΔP_filtro + Hgeo.
+   La longitud y accesorios totales de tubería NO siempre se reparten 50/50
+   entre succión y descarga — depende del trazado real de cada sede (cuarto
+   de máquinas pegado a la piscina vs. alejado, succión corta con descarga
+   larga, etc.), así que el reparto lo elige el inspector en campo
+   (ficha.tuberiaPctSuccion, % del total que es succión; el resto se asigna
+   a descarga). Si no se diligencia, se usa 50/50 como valor por defecto
+   declarado — no asumido en silencio. */
 function construirCurvaSistema(ficha){
   var dS = ficha.tuberiaSuccionDiam, dD = ficha.tuberiaDescargaDiam;
   if(!(dS>0) || !(dD>0)) return null;
   var L = ficha.tuberiaLongitud||0, nAcc = ficha.tuberiaAccesorios||0;
-  var Lseg = L/2, nAccSeg = nAcc/2;
+  var pctSuccion = (ficha.tuberiaPctSuccion!=null && ficha.tuberiaPctSuccion>=0 && ficha.tuberiaPctSuccion<=100)
+    ? ficha.tuberiaPctSuccion/100 : 0.5;
+  var LsegS = L*pctSuccion, LsegD = L*(1-pctSuccion);
+  var nAccSegS = nAcc*pctSuccion, nAccSegD = nAcc*(1-pctSuccion);
   var dpFiltroM = (ficha.presionManometro||0) * 0.703; // 1 PSI ≈ 0.703 m c.a.
+  var Hgeo = ficha.desnivelSuccionDescarga||0; // m c.a., desnivel succión↔descarga
   return function(qM3h){
     var qM3s = qM3h/3600;
-    var hfS = hazenWilliamsHf(qM3s, dS, Lseg, nAccSeg);
-    var hfD = hazenWilliamsHf(qM3s, dD, Lseg, nAccSeg);
-    return hfS + hfD + dpFiltroM;
+    var hfS = hazenWilliamsHf(qM3s, dS, LsegS, nAccSegS);
+    var hfD = hazenWilliamsHf(qM3s, dD, LsegD, nAccSegD);
+    return hfS + hfD + dpFiltroM + Hgeo;
   };
 }
 
@@ -749,13 +822,23 @@ function encontrarPuntoOperacion(curvaBomba, funcSistema, qMax){
 function calcularHidraulica(ficha){
   var origenCurva;
   if(ficha.bombaFamilia==='manual'){
-    var ajuste = ajustarCurvaCuadratica(ficha.curvaManual);
+    var hzMedicion = ficha.curvaManualHz, hzOperacion = ficha.bombaHz;
+    var seEscala = hzMedicion>0 && hzOperacion>0 && hzMedicion!==hzOperacion;
+    var curvaBase = seEscala ? afinidadEntreHz(ficha.curvaManual, hzMedicion, hzOperacion) : ficha.curvaManual;
+    var ajuste = ajustarCurvaCuadratica(curvaBase);
     if(!ajuste) return {error:'Carga al menos 4 puntos (Q,H) válidos en la curva manual de la bomba.'};
+    var notaHz = seEscala ? ' — medida a '+hzMedicion+'Hz, proyectada por afinidad a '+hzOperacion+'Hz' : (hzMedicion>0 ? ' — medida a '+hzMedicion+'Hz' : ' — Hz de medición sin declarar, se asume igual a la de operación');
     if(ajuste.r2 < 0.95){
-      origenCurva = {evalH:ajuste.evalH, qMax:ajuste.qMax, label:'Curva manual (R²='+ajuste.r2.toFixed(3)+' — ajuste débil, revisa los puntos)', r2:ajuste.r2};
+      origenCurva = {evalH:ajuste.evalH, qMax:ajuste.qMax, label:'Curva manual (R²='+ajuste.r2.toFixed(3)+' — ajuste débil, revisa los puntos)'+notaHz, r2:ajuste.r2};
     } else {
-      origenCurva = {evalH:ajuste.evalH, qMax:ajuste.qMax, label:'Curva manual (R²='+ajuste.r2.toFixed(3)+')', r2:ajuste.r2};
+      origenCurva = {evalH:ajuste.evalH, qMax:ajuste.qMax, label:'Curva manual (R²='+ajuste.r2.toFixed(3)+')'+notaHz, r2:ajuste.r2};
     }
+  } else if(ficha.bombaFamilia==='superflo_vs'){
+    var refVS = CURVAS_PENTAIR_VS[ficha.bombaVelocidadVS];
+    if(!refVS) return {error:'Selecciona la velocidad en la que se encontró la bomba SuperFlo VS (ítem CHK-074).'};
+    var ajusteVS = ajustarCurvaCuadratica(refVS.curva);
+    if(!ajusteVS) return {error:'No se pudo ajustar la curva de referencia.'};
+    origenCurva = {evalH:ajusteVS.evalH, qMax:ajusteVS.qMax, label:refVS.label};
   } else if(ficha.bombaFamilia){
     var ref = seleccionarCurvaPentair(ficha.bombaFamilia, ficha.bombaHP);
     if(!ref) return {error:'Selecciona la familia de la bomba en la ficha técnica.'};
@@ -789,7 +872,10 @@ function calcularHidraulica(ficha){
     caudal: op.q, cabezal: op.h,
     vSuccion: vSuccion, vDescarga: vDescarga, vFiltracion: vFiltracion,
     volumen: volumen, tiempoRecirc: tiempoRecirc, rotacionesDia: rotacionesDia,
-    supuestos: {C:150, LeqPorAccesorio:'30·D por accesorio', Hgeo:'0 (circuito cerrado)', repartoLongitud:'50/50 succión-descarga', conversionPsi:'1 PSI = 0.703 m c.a.'}
+    supuestos: {C:150, LeqPorAccesorio:'30·D por accesorio',
+      Hgeo:(ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m c.a. (desnivel succión-descarga declarado en campo, sin manómetro de descarga junto a la piscina)' : '0 (sin desnivel declarado — verificar en campo, no asumir circuito cerrado sin dato)'),
+      repartoLongitud:(ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'/'+(100-ficha.tuberiaPctSuccion)+' succión-descarga (elegido en campo, ítem CHK-078)' : '50/50 succión-descarga (por defecto — no se eligió reparto en campo)'),
+      conversionPsi:'1 PSI = 0.703 m c.a.'}
   };
 }
 
@@ -1538,8 +1624,12 @@ function fichaBloqueHtml(it){
    puntos de campo (manómetro + caudalímetro a distintas válvulas/Hz). */
 function curvaManualHtml(ficha){
   var puntos = (ficha.curvaManual && ficha.curvaManual.length>=4) ? ficha.curvaManual : [{},{},{},{}];
+  var hzVal = ficha.curvaManualHz;
   var html = '<div class="curvaManualWrap">'+
     '<div class="subLabel" style="margin-top:10px;">Curva de la bomba — mínimo 4 puntos medidos (caudalímetro + manómetro)</div>'+
+    '<div class="fieldSm"><label>Frecuencia (Hz) a la que se midió esta curva en campo</label>'+
+      '<input type="number" step="1" data-ficha="curvaManualHz" placeholder="60" value="'+(hzVal!=null?hzVal:'')+'">'+
+    '</div>'+
     '<div class="curvaManualHead"><span>Caudal Q (m³/h)</span><span>Cabezal H (m c.a.)</span></div>';
   puntos.forEach(function(p,i){
     html += '<div class="curvaManualRow">'+

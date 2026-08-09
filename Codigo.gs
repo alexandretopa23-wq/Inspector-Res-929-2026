@@ -27,10 +27,14 @@ var TIPO_USO_LABEL = {
   similar:'Estructura similar'
 };
 var BOMBA_FAMILIA_LABEL = {
-  superflo:'Pentair SuperFlo, velocidad única (curva de referencia)',
-  superflo_vs:'Pentair SuperFlo VS, velocidad variable (curva de referencia)',
-  eq:'Pentair EQ Series comercial (curva de referencia)',
+  superflo:'Pentair SuperFlo, velocidad única',
+  superflo_vs:'Pentair SuperFlo VS 2.2 HP, velocidad seleccionable (dato de fábrica)',
+  eq:'Pentair EQ Series comercial',
   manual:'Curva real medida en campo (mínimo 4 puntos Q-H)'
+};
+var BOMBA_VELOCIDAD_VS_LABEL = {
+  '1':'Velocidad 1 — 3000 RPM', '2':'Velocidad 2 — 2200 RPM',
+  '3':'Velocidad 3 — 1400 RPM', '4':'Velocidad 4 / máxima — 3450 RPM'
 };
 var FILTRO_TIPO_LABEL = {
   arena:'Arena / medio granular', cartucho:'Cartucho', de:'Tierra de diatomeas (D.E.)'
@@ -759,6 +763,12 @@ function _anexoMemoriaCalculo(body, ficha){
     ['Frecuencia de operación', ficha.bombaHz!=null ? ficha.bombaHz+' Hz' : '60 Hz (valor por defecto)'],
     ['Origen de la curva', BOMBA_FAMILIA_LABEL[ficha.bombaFamilia] || '— sin dato —']
   ];
+  if(ficha.bombaFamilia==='superflo_vs'){
+    filasBomba.push(['Velocidad configurada', BOMBA_VELOCIDAD_VS_LABEL[ficha.bombaVelocidadVS] || '— sin dato —']);
+  }
+  if(ficha.bombaFamilia==='manual'){
+    filasBomba.push(['Frecuencia de medición de la curva manual', ficha.curvaManualHz!=null ? ficha.curvaManualHz+' Hz' : '— sin dato — se asume igual a la de operación']);
+  }
   if(ficha.bombaFamilia==='manual' && ficha.curvaManual && ficha.curvaManual.length){
     var puntos = ficha.curvaManual
       .filter(function(p){ return p && p.q!=null && p.h!=null; })
@@ -775,6 +785,8 @@ function _anexoMemoriaCalculo(body, ficha){
     ['Diámetro de descarga/retorno', ficha.tuberiaDescargaDiam!=null ? ficha.tuberiaDescargaDiam+' pulg' : '—'],
     ['Longitud total de tubería', ficha.tuberiaLongitud!=null ? ficha.tuberiaLongitud+' m' : '—'],
     ['Número de accesorios', ficha.tuberiaAccesorios!=null ? String(ficha.tuberiaAccesorios) : '—'],
+    ['Reparto succión/descarga', ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'% / '+(100-ficha.tuberiaPctSuccion)+'%' : '50% / 50% (por defecto)'],
+    ['Desnivel succión-descarga', ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m' : '—'],
     ['Tipo de filtro', FILTRO_TIPO_LABEL[ficha.filtroTipo] || '—'],
     ['Área filtrante', ficha.filtroArea!=null ? ficha.filtroArea+' m²' : '—'],
     ['Presión de manómetro del filtro', ficha.presionManometro!=null ? ficha.presionManometro+' PSI' : '—']
@@ -1035,6 +1047,7 @@ function TEST_generarInformeConFicha(){
     tipoUso:'colectivo', cubierta:'no',
     bombaHP:1.5, bombaHz:60, bombaFamilia:'superflo',
     tuberiaSuccionDiam:4, tuberiaDescargaDiam:4, tuberiaLongitud:15, tuberiaAccesorios:6,
+    tuberiaPctSuccion:40, desnivelSuccionDescarga:0.6,
     filtroTipo:'arena', filtroArea:0.8, presionManometro:8,
     duchasEncontradas:2, inodoroHEncontrados:3, inodoroMEncontrados:4,
     orinalesEncontrados:2, lavamanosEncontrados:3, vestieresEncontrados:3,
@@ -1043,8 +1056,9 @@ function TEST_generarInformeConFicha(){
       vSuccion:1.17, vDescarga:1.17, vFiltracion:42.8, volumen:405.0,
       tiempoRecirc:11.82, rotacionesDia:2.03,
       supuestos:{
-        C:150, LeqPorAccesorio:'30·D por accesorio', Hgeo:'0 (circuito cerrado)',
-        repartoLongitud:'50/50 succión-descarga', conversionPsi:'1 PSI = 0.703 m c.a.'
+        C:150, LeqPorAccesorio:'30·D por accesorio',
+        Hgeo:'0.6 m c.a. (desnivel succión-descarga declarado en campo, sin manómetro de descarga junto a la piscina)',
+        repartoLongitud:'40/60 succión-descarga (elegido en campo, ítem CHK-078)', conversionPsi:'1 PSI = 0.703 m c.a.'
       },
       ts: Date.now()
     },
