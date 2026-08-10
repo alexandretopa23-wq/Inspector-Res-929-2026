@@ -230,6 +230,14 @@ input,textarea,select{font-family:inherit;}
 .curvaManualRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;}
 .curvaManualRow input{width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 10px;font-size:13px;}
 
+.tramosWrap{margin-top:4px;}
+.tramoRow{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:8px;margin-bottom:8px;}
+.tramoRow.fichaAlerta{border-color:var(--r-alto);}
+.tramoRow>input[data-tramo-campo="nombre"]{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 9px;font-size:12.5px;margin-bottom:6px;}
+.tramoRowGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;}
+.tramoRowGrid input,.tramoRowGrid select{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 6px;font-size:11.5px;}
+.tramosResultado{margin-top:6px;}
+
 .motorWrap{margin-bottom:10px;}
 .motorResultado{background:var(--panel-inset);border:1px solid var(--border-soft);border-radius:9px;padding:10px 12px;margin-top:8px;}
 .motorOrigen{font-size:10.5px;color:var(--accent);font-weight:700;margin-bottom:8px;}
@@ -553,11 +561,11 @@ var FICHA_CAMPOS = {
     {v:"3",l:"Velocidad 3 — 1400 RPM"},
     {v:"4",l:"Velocidad 4 / máxima — 3450 RPM"}
   ]},
-  tuberiaSuccionDiam:{label:"Diámetro tubería de succión",unit:"pulg",type:"number",step:"0.5"},
-  tuberiaDescargaDiam:{label:"Diámetro tubería de descarga / retorno",unit:"pulg",type:"number",step:"0.5"},
-  tuberiaLongitud:{label:"Longitud total de tubería (succión + descarga)",unit:"m",type:"number",step:"1"},
-  tuberiaAccesorios:{label:"Número de accesorios (codos, válvulas, tees)",unit:"u",type:"number",step:"1"},
-  tuberiaPctSuccion:{label:"% de la longitud y accesorios totales que corresponde al tramo de succión (el resto se asigna a descarga)",unit:"%",type:"number",step:"5",placeholder:"50"},
+  tuberiaSuccionDiam:{label:"Diámetro tubería de succión (legado, solo si no hay tramos cargados)",unit:"pulg",type:"number",step:"0.5"},
+  tuberiaDescargaDiam:{label:"Diámetro tubería de descarga / retorno (legado, solo si no hay tramos cargados)",unit:"pulg",type:"number",step:"0.5"},
+  tuberiaLongitud:{label:"Longitud total de tubería (legado, solo si no hay tramos cargados)",unit:"m",type:"number",step:"1"},
+  tuberiaAccesorios:{label:"Número de accesorios (legado, solo si no hay tramos cargados)",unit:"u",type:"number",step:"1"},
+  tuberiaPctSuccion:{label:"% succión del total (legado, solo si no hay tramos cargados)",unit:"%",type:"number",step:"5",placeholder:"50"},
   desnivelSuccionDescarga:{label:"Desnivel entre el nivel de succión (espejo de agua) y el punto de descarga/retorno a la piscina",unit:"m",type:"number",step:"0.1"},
   filtroTipo:{label:"Tipo de filtro",type:"select",options:[
     {v:"arena",l:"Arena / medio granular"},{v:"cartucho",l:"Cartucho"},{v:"de",l:"Tierra de diatomeas (D.E.)"}
@@ -576,7 +584,7 @@ var ITEM_FICHA_CAMPOS = {
   "CHK-204":["largo","ancho","areaManual"],
   "CHK-079":["tipoUso","cubierta"],
   "CHK-074":["bombaHP","bombaHz","bombaFamilia","bombaVelocidadVS"],
-  "CHK-078":["tuberiaSuccionDiam","tuberiaDescargaDiam","tuberiaLongitud","tuberiaAccesorios","tuberiaPctSuccion","desnivelSuccionDescarga"],
+  "CHK-078":["desnivelSuccionDescarga"],
   "CHK-083":["filtroTipo","filtroArea"],
   "CHK-084":["presionManometro"],
   "CHK-197":["inodoroHEncontrados","inodoroMEncontrados","orinalesEncontrados","vestieresEncontrados"],
@@ -798,7 +806,38 @@ function hazenWilliamsHf(qM3s, diamPulg, longitudM, nAccesorios, C){
    (ficha.tuberiaPctSuccion, % del total que es succión; el resto se asigna
    a descarga). Si no se diligencia, se usa 50/50 como valor por defecto
    declarado — no asumido en silencio. */
+/* Un tramo válido tiene diámetro>0; nLineas (líneas en paralelo de igual
+   diámetro dentro del tramo, p.ej. 3 filtros de 4" en paralelo) por defecto
+   es 1 si no se declara. El caudal de la ficha (Q total del circuito, el
+   mismo en toda la serie por continuidad) se reparte entre nLineas dentro
+   del tramo antes de calcular hf y v — así cada tramo lleva su propia
+   pérdida y su propia velocidad real, sin repartos de longitud a ciegas. */
+function tramosValidos(ficha){
+  return (ficha.tuberiaTramos||[]).filter(function(t){ return t && t.diametro>0; });
+}
+function hfTramo(qM3h, t){
+  var n = (t.nLineas>0) ? t.nLineas : 1;
+  var qM3s = (qM3h/n)/3600;
+  return hazenWilliamsHf(qM3s, t.diametro, t.longitud||0, t.accesorios||0);
+}
+function vTramo(qM3h, t){
+  var n = (t.nLineas>0) ? t.nLineas : 1;
+  var qM3s = (qM3h/n)/3600;
+  return qM3s/(Math.PI/4*Math.pow(t.diametro*0.0254,2));
+}
 function construirCurvaSistema(ficha){
+  var tramos = tramosValidos(ficha);
+  var dpFiltroM = (ficha.presionManometro||0) * 0.703; // 1 PSI ≈ 0.703 m c.a.
+  var Hgeo = ficha.desnivelSuccionDescarga||0; // m c.a., desnivel succión↔descarga
+
+  if(tramos.length){
+    return function(qM3h){
+      var hfTotal = tramos.reduce(function(acc,t){ return acc + hfTramo(qM3h, t); }, 0);
+      return hfTotal + dpFiltroM + Hgeo;
+    };
+  }
+
+  // Modelo legado (dos diámetros + reparto porcentual) — solo si no hay tramos cargados.
   var dS = ficha.tuberiaSuccionDiam, dD = ficha.tuberiaDescargaDiam;
   if(!(dS>0) || !(dD>0)) return null;
   var L = ficha.tuberiaLongitud||0, nAcc = ficha.tuberiaAccesorios||0;
@@ -806,8 +845,6 @@ function construirCurvaSistema(ficha){
     ? ficha.tuberiaPctSuccion/100 : 0.5;
   var LsegS = L*pctSuccion, LsegD = L*(1-pctSuccion);
   var nAccSegS = nAcc*pctSuccion, nAccSegD = nAcc*(1-pctSuccion);
-  var dpFiltroM = (ficha.presionManometro||0) * 0.703; // 1 PSI ≈ 0.703 m c.a.
-  var Hgeo = ficha.desnivelSuccionDescarga||0; // m c.a., desnivel succión↔descarga
   return function(qM3h){
     var qM3s = qM3h/3600;
     var hfS = hazenWilliamsHf(qM3s, dS, LsegS, nAccSegS);
@@ -875,8 +912,20 @@ function calcularHidraulica(ficha){
   if(!op) return {error:'No se encontró punto de operación — revisa si la bomba alcanza a vencer la pérdida de carga calculada.'};
 
   var qM3s = op.q/3600;
-  var vSuccion = ficha.tuberiaSuccionDiam>0 ? qM3s/(Math.PI/4*Math.pow(ficha.tuberiaSuccionDiam*0.0254,2)) : null;
-  var vDescarga = ficha.tuberiaDescargaDiam>0 ? qM3s/(Math.PI/4*Math.pow(ficha.tuberiaDescargaDiam*0.0254,2)) : null;
+  var tramos = tramosValidos(ficha);
+  var detalleTramos = null, vSuccion, vDescarga;
+  if(tramos.length){
+    detalleTramos = tramos.map(function(t){
+      return {nombre:t.nombre||'', diametro:t.diametro, lado:t.lado||'presion', nLineas:(t.nLineas>0?t.nLineas:1), v:vTramo(op.q, t)};
+    });
+    var vS = detalleTramos.filter(function(t){return t.lado==='succion';}).map(function(t){return t.v;});
+    var vD = detalleTramos.filter(function(t){return t.lado!=='succion';}).map(function(t){return t.v;});
+    vSuccion = vS.length ? Math.max.apply(null, vS) : null;
+    vDescarga = vD.length ? Math.max.apply(null, vD) : null;
+  } else {
+    vSuccion = ficha.tuberiaSuccionDiam>0 ? qM3s/(Math.PI/4*Math.pow(ficha.tuberiaSuccionDiam*0.0254,2)) : null;
+    vDescarga = ficha.tuberiaDescargaDiam>0 ? qM3s/(Math.PI/4*Math.pow(ficha.tuberiaDescargaDiam*0.0254,2)) : null;
+  }
   var vFiltracion = ficha.filtroArea>0 ? op.q/ficha.filtroArea : null;
 
   var area = ficha.areaManual || ((ficha.largo>0 && ficha.ancho>0) ? ficha.largo*ficha.ancho : null);
@@ -890,9 +939,12 @@ function calcularHidraulica(ficha){
     caudal: op.q, cabezal: op.h,
     vSuccion: vSuccion, vDescarga: vDescarga, vFiltracion: vFiltracion,
     volumen: volumen, tiempoRecirc: tiempoRecirc, rotacionesDia: rotacionesDia,
+    tramos: detalleTramos,
     supuestos: {C:150, LeqPorAccesorio:'30·D por accesorio',
       Hgeo:(ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m c.a. (desnivel succión-descarga declarado en campo, sin manómetro de descarga junto a la piscina)' : '0 (sin desnivel declarado — verificar en campo, no asumir circuito cerrado sin dato)'),
-      repartoLongitud:(ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'/'+(100-ficha.tuberiaPctSuccion)+' succión-descarga (elegido en campo, ítem CHK-078)' : '50/50 succión-descarga (por defecto — no se eligió reparto en campo)'),
+      repartoLongitud: tramos.length
+        ? (tramos.length+' tramo(s) cargados individualmente (ítem CHK-078) — sin reparto por porcentaje')
+        : (ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'/'+(100-ficha.tuberiaPctSuccion)+' succión-descarga (modelo legado, elegido en campo)' : '50/50 succión-descarga (modelo legado, por defecto)'),
       conversionPsi:'1 PSI = 0.703 m c.a.'}
   };
 }
@@ -1632,6 +1684,9 @@ function fichaBloqueHtml(it){
   if(campos.indexOf('bombaFamilia')>=0 && ficha.bombaFamilia==='manual'){
     html += curvaManualHtml(ficha);
   }
+  if(it.id==='CHK-078'){
+    html += tramosHtml(ficha);
+  }
   html += '</div>';
   return html;
 }
@@ -1656,6 +1711,41 @@ function curvaManualHtml(ficha){
     '</div>';
   });
   html += '<button type="button" class="btn2" data-action="agregarPuntoCurva" style="margin-top:6px;">+ Agregar punto</button>';
+  html += '</div>';
+  return html;
+}
+
+/* Widget de tramos de tubería: un cuarto de máquinas real casi nunca tiene
+   un solo diámetro de succión y uno de descarga — cambia de sección en
+   sección (tanque→bomba, bomba→filtros, entrada/salida filtro, post-filtro,
+   retorno a piscina...). Cada fila es UN tramo con su propio diámetro,
+   longitud, accesorios y lado hidráulico (succión = antes de la bomba,
+   presión = después). nLineas es el número de líneas IGUALES en paralelo
+   dentro de ese tramo (p.ej. 3 filtros de 4" en paralelo reciben Q/3 cada
+   uno) — por defecto 1 si no se declara. Se guarda en
+   ficha.tuberiaTramos = [{nombre,diametro,longitud,accesorios,lado,nLineas}]. */
+function tramosHtml(ficha){
+  var tramos = (ficha.tuberiaTramos && ficha.tuberiaTramos.length) ? ficha.tuberiaTramos : [{},{}];
+  var html = '<div class="tramosWrap">'+
+    '<div class="subLabel" style="margin-top:10px;">Tramos de tubería del cuarto de máquinas (uno por sección — diámetro, longitud y lado hidráulico)</div>';
+  tramos.forEach(function(t,i){
+    var alerta = (t && t.diametro>8);
+    html += '<div class="tramoRow'+(alerta?' fichaAlerta':'')+'">'+
+      '<input type="text" data-tramo-idx="'+i+'" data-tramo-campo="nombre" placeholder="Nombre del tramo (ej. Bomba-filtros)" value="'+esc(t&&t.nombre!=null?t.nombre:'')+'">'+
+      '<div class="tramoRowGrid">'+
+        '<input type="number" step="0.5" data-tramo-idx="'+i+'" data-tramo-campo="diametro" placeholder="Ø pulg" value="'+(t&&t.diametro!=null?t.diametro:'')+'">'+
+        '<select data-tramo-idx="'+i+'" data-tramo-campo="lado">'+
+          '<option value="presion"'+(!t||t.lado!=='succion'?' selected':'')+'>Presión</option>'+
+          '<option value="succion"'+(t&&t.lado==='succion'?' selected':'')+'>Succión</option>'+
+        '</select>'+
+        '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="longitud" placeholder="Long. m" value="'+(t&&t.longitud!=null?t.longitud:'')+'">'+
+        '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="accesorios" placeholder="Accesorios" value="'+(t&&t.accesorios!=null?t.accesorios:'')+'">'+
+        '<input type="number" step="1" min="1" data-tramo-idx="'+i+'" data-tramo-campo="nLineas" placeholder="Líneas paralelas" value="'+(t&&t.nLineas!=null?t.nLineas:'')+'">'+
+      '</div>'+
+      (alerta ? '<div class="fichaAlertaMsg">⚠ Supera el máximo de 8 pulgadas de diámetro permitido (Numeral 10.1).</div>' : '')+
+    '</div>';
+  });
+  html += '<button type="button" class="btn2" data-action="agregarTramo" style="margin-top:6px;">+ Agregar tramo</button>';
   html += '</div>';
   return html;
 }
@@ -1692,8 +1782,19 @@ function renderResultadoHidraulico(res, ficha){
     (res.ts ? ' · calculado '+fmtDate(res.ts) : '')+'</div>';
   html += filaResultado('Caudal en el punto de operación','caudal' in res?res.caudal:null,'m³/h',2,'caudal');
   html += filaResultado('Cabezal en el punto de operación',res.cabezal,'m c.a.',2,'cabezal');
-  html += filaResultado('Velocidad en succión',res.vSuccion,'m/s',2,'vSuccion');
-  html += filaResultado('Velocidad en descarga/retorno',res.vDescarga,'m/s',2,'vDescarga');
+  html += filaResultado('Velocidad en succión (peor tramo)',res.vSuccion,'m/s',2,'vSuccion');
+  html += filaResultado('Velocidad en descarga/retorno (peor tramo)',res.vDescarga,'m/s',2,'vDescarga');
+  if(res.tramos && res.tramos.length){
+    html += '<div class="tramosResultado"><div class="subLabel" style="margin:8px 0 4px;">Detalle por tramo</div>';
+    res.tramos.forEach(function(t){
+      var limite = t.lado==='succion' ? 1.8 : 2.4;
+      var alerta = t.v > limite;
+      html += '<div class="motorFila"><span>'+esc(t.nombre||'(sin nombre)')+' — Ø'+t.diametro+'" · '+(t.lado==='succion'?'succión':'presión')+(t.nLineas>1?' · '+t.nLineas+' líneas':'')+'</span>'+
+        '<span class="'+(alerta?'motorValor alerta':'motorValor')+'">'+t.v.toFixed(2)+' m/s</span></div>';
+      if(alerta) html += '<div class="fichaAlertaMsg">⚠ Supera '+limite+' m/s ('+(t.lado==='succion'?'succión':'presión')+', Numeral 10.1).</div>';
+    });
+    html += '</div>';
+  }
   html += filaResultado('Velocidad de filtración',res.vFiltracion,'m³/h/m²',1,'vFiltracion');
   html += filaResultado('Volumen estimado del vaso',res.volumen,'m³',1,null);
   html += filaResultado('Tiempo de recirculación',res.tiempoRecirc,'h',2,'tiempoRecirc');
@@ -2352,6 +2453,43 @@ function wireSingleItem(itemEl, it){
       var ficha = getFicha(sess);
       if(!ficha.curvaManual) ficha.curvaManual = [{},{},{},{}];
       ficha.curvaManual.push({});
+      saveSession(sess);
+      itemEl.innerHTML = renderItemFull(it, getResp(), CIERRA_ITEM_ESTADOS.indexOf(getResp().estado)>=0);
+      wireSingleItem(itemEl, it);
+      pintarMiniaturas(itemEl);
+    };
+  }
+
+  itemEl.querySelectorAll('[data-tramo-idx]').forEach(function(inp){
+    var evt = inp.tagName==='SELECT' ? 'change' : 'input';
+    inp.addEventListener(evt, function(){
+      var idx = parseInt(inp.getAttribute('data-tramo-idx'),10);
+      var campo = inp.getAttribute('data-tramo-campo');
+      var ficha = getFicha(sess);
+      if(!ficha.tuberiaTramos) ficha.tuberiaTramos = [];
+      while(ficha.tuberiaTramos.length <= idx) ficha.tuberiaTramos.push({});
+      if(campo==='nombre' || campo==='lado'){
+        ficha.tuberiaTramos[idx][campo] = inp.value || null;
+      } else {
+        ficha.tuberiaTramos[idx][campo] = inp.value===''? null : parseFloat(inp.value);
+      }
+      saveSession(sess);
+      updateSavedLabel();
+      if(campo==='diametro'){
+        itemEl.innerHTML = renderItemFull(it, getResp(), CIERRA_ITEM_ESTADOS.indexOf(getResp().estado)>=0);
+        wireSingleItem(itemEl, it);
+        pintarMiniaturas(itemEl);
+      }
+      maybeAutoSyncFicha();
+    });
+  });
+  var btnAgregarTramo = itemEl.querySelector('[data-action="agregarTramo"]');
+  if(btnAgregarTramo){
+    btnAgregarTramo.onclick = function(e){
+      e.stopPropagation();
+      var ficha = getFicha(sess);
+      if(!ficha.tuberiaTramos) ficha.tuberiaTramos = [{},{}];
+      ficha.tuberiaTramos.push({});
       saveSession(sess);
       itemEl.innerHTML = renderItemFull(it, getResp(), CIERRA_ITEM_ESTADOS.indexOf(getResp().estado)>=0);
       wireSingleItem(itemEl, it);

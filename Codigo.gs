@@ -983,6 +983,23 @@ function _anexoFichaHidraulica(body, ficha){
     ['Rotaciones estimadas por día', r.rotacionesDia!=null ? r.rotacionesDia.toFixed(1) : '— sin dato —']
   ]);
   _estiloTabla(t, false);
+  if(r.tramos && r.tramos.length){
+    body.appendParagraph('Detalle de velocidad por tramo').setFontSize(10).setBold(true);
+    var filasTramoV = [['Tramo','Ø (pulg)','Lado','Líneas','Velocidad (m/s)','Estado']];
+    r.tramos.forEach(function(t){
+      var limite = t.lado==='succion' ? 1.8 : 2.4;
+      filasTramoV.push([
+        t.nombre || '(sin nombre)',
+        String(t.diametro),
+        t.lado==='succion' ? 'Succión' : 'Presión',
+        String(t.nLineas>0 ? t.nLineas : 1),
+        t.v.toFixed(2),
+        t.v > limite ? 'Supera '+limite+' m/s' : 'Cumple'
+      ]);
+    });
+    var tTramoV = body.appendTable(filasTramoV);
+    _estiloTabla(tTramoV, true);
+  }
   body.appendParagraph(
     'Límites normativos de referencia: succión ≤ 1.8 m/s, descarga ≤ 2.4 m/s (Numeral 10.1); ' +
     'filtración 20-40 m³/h/m² (50 en uso restringido, Numeral 10.2); tiempo de recirculación ' +
@@ -1054,18 +1071,38 @@ function _anexoMemoriaCalculo(body, ficha){
   _estiloTabla(tBomba, false);
 
   _h2(body, 'D.2 Datos de tubería y filtro');
-  var tTub = body.appendTable([
-    ['Diámetro de succión', ficha.tuberiaSuccionDiam!=null ? ficha.tuberiaSuccionDiam+' pulg' : '—'],
-    ['Diámetro de descarga/retorno', ficha.tuberiaDescargaDiam!=null ? ficha.tuberiaDescargaDiam+' pulg' : '—'],
-    ['Longitud total de tubería', ficha.tuberiaLongitud!=null ? ficha.tuberiaLongitud+' m' : '—'],
-    ['Número de accesorios', ficha.tuberiaAccesorios!=null ? String(ficha.tuberiaAccesorios) : '—'],
-    ['Reparto succión/descarga', ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'% / '+(100-ficha.tuberiaPctSuccion)+'%' : '50% / 50% (por defecto)'],
+  var tramosValidos = (ficha.tuberiaTramos||[]).filter(function(t){ return t && t.diametro>0; });
+  if(tramosValidos.length){
+    var filasTramos = [['Tramo','Ø (pulg)','Lado','Longitud (m)','Accesorios','Líneas paralelas']];
+    tramosValidos.forEach(function(t){
+      filasTramos.push([
+        t.nombre || '(sin nombre)',
+        String(t.diametro),
+        t.lado==='succion' ? 'Succión' : 'Presión',
+        t.longitud!=null ? String(t.longitud) : '—',
+        t.accesorios!=null ? String(t.accesorios) : '—',
+        String(t.nLineas>0 ? t.nLineas : 1)
+      ]);
+    });
+    var tTramos = body.appendTable(filasTramos);
+    _estiloTabla(tTramos, true);
+  } else {
+    var tTub = body.appendTable([
+      ['Diámetro de succión', ficha.tuberiaSuccionDiam!=null ? ficha.tuberiaSuccionDiam+' pulg' : '—'],
+      ['Diámetro de descarga/retorno', ficha.tuberiaDescargaDiam!=null ? ficha.tuberiaDescargaDiam+' pulg' : '—'],
+      ['Longitud total de tubería', ficha.tuberiaLongitud!=null ? ficha.tuberiaLongitud+' m' : '—'],
+      ['Número de accesorios', ficha.tuberiaAccesorios!=null ? String(ficha.tuberiaAccesorios) : '—'],
+      ['Reparto succión/descarga', ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'% / '+(100-ficha.tuberiaPctSuccion)+'%' : '50% / 50% (por defecto)']
+    ]);
+    _estiloTabla(tTub, false);
+  }
+  var tFiltro = body.appendTable([
     ['Desnivel succión-descarga', ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m' : '—'],
     ['Tipo de filtro', FILTRO_TIPO_LABEL[ficha.filtroTipo] || '—'],
     ['Área filtrante', ficha.filtroArea!=null ? ficha.filtroArea+' m²' : '—'],
     ['Presión de manómetro del filtro', ficha.presionManometro!=null ? ficha.presionManometro+' PSI' : '—']
   ]);
-  _estiloTabla(tTub, false);
+  _estiloTabla(tFiltro, false);
 
   var sup = (ficha.motorResultado && ficha.motorResultado.supuestos) || null;
   if(sup){
