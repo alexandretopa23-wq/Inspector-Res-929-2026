@@ -263,16 +263,24 @@ footer{
   <button class="cfgToggle" id="btnCfgToggle" type="button">⚙ Configuración de datos / diagnóstico</button>
   <div class="cfgPanel hidden" id="cfgPanel">
     <h3>Hoja de Google Sheets conectada</h3>
-    <p class="hint">Por defecto el dashboard lee siempre la misma hoja. Si cambiaste de hoja (otra sede, otro año), pega aquí su ID o el link completo — se guarda solo en este navegador, no cambia nada para los demás inspectores.</p>
+    <p class="hint">La hoja <b style="color:var(--text-dim)">anclada</b> es la que usa TODA la app — checklist, ficha técnica, informes y dashboard — en cualquier dispositivo, desde el momento en que la ancles. Pega aquí el ID o el link completo, verifica que la estructura coincida, y ánclala.</p>
     <div class="cfgRow">
-      <input type="text" id="cfgSpreadsheetId" placeholder="ID o URL de la hoja de Google Sheets (opcional)">
+      <input type="text" id="cfgSpreadsheetId" placeholder="ID o URL de la hoja de Google Sheets">
     </div>
     <div class="cfgBtns">
       <button class="btnGhost" id="btnCfgVerificar" type="button">Verificar estructura</button>
-      <button class="btnPrimary" id="btnCfgUsar" type="button">Usar esta hoja</button>
-      <button class="btnGhost" id="btnCfgReset" type="button">Volver a la hoja de siempre</button>
+      <button class="btnPrimary" id="btnCfgAnclar" type="button">📌 Anclar para todos</button>
+      <button class="btnGhost" id="btnCfgReset" type="button">Quitar ancla (volver a la de por defecto)</button>
     </div>
-    <div class="cfgActive" id="cfgActiveLabel"></div>
+    <div class="cfgActive" id="cfgAnchorLabel"></div>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;font-size:11.5px;color:var(--text-faint);">Probar una hoja solo en este navegador, sin anclarla para nadie más</summary>
+      <div class="cfgBtns" style="margin-top:10px;">
+        <button class="btnGhost" id="btnCfgProbarLocal" type="button">Probar en este navegador</button>
+        <button class="btnGhost" id="btnCfgQuitarLocal" type="button">Quitar prueba local</button>
+      </div>
+      <div class="cfgActive" id="cfgLocalLabel"></div>
+    </details>
     <div id="diagResult"></div>
   </div>
 
@@ -527,16 +535,48 @@ function render(d){
   document.getElementById('footScope').textContent = d.vasos.length+' vasos · '+d.sedes.length+' sedes';
 }
 
-/* ---------- Config: hoja alterna (opcional, guardada en este navegador) ---------- */
-var LS_KEY = 'dashSpreadsheetId';
-function getSpreadsheetIdGuardado(){ return localStorage.getItem(LS_KEY) || ''; }
+/* ---------- Config: ancla global (servidor) + prueba local (navegador) ----------
+   Dos capas independientes:
+   - Ancla (PropertiesService, del lado de Codigo.gs): cambia la hoja de
+     TODA la app, para todos los dispositivos. Es la respuesta real a
+     "quiero que quede anclada y se actualice sola cada vez que la abro".
+   - Prueba local (localStorage, solo este navegador): para verificar una
+     hoja antes de anclarla, sin afectar a nadie más. Si hay una prueba
+     local activa, gana sobre el ancla SOLO en este navegador. */
+var LS_KEY = 'dashSpreadsheetIdLocal';
+function getPruebaLocal(){ return localStorage.getItem(LS_KEY) || ''; }
+
 function actualizarEtiquetaOrigen(nombreHoja, nombrePestana){
-  var idGuardado = getSpreadsheetIdGuardado();
-  var el = document.getElementById('cfgActiveLabel');
-  if(idGuardado){
-    el.textContent = 'Usando hoja alterna' + (nombreHoja?' — "'+nombreHoja+'"'+(nombrePestana?' / pestaña "'+nombrePestana+'"':''):'') + '. ID guardado: '+idGuardado;
+  var local = getPruebaLocal();
+  var el = document.getElementById('cfgLocalLabel');
+  if(local){
+    el.textContent = 'Probando localmente (solo este navegador)' +
+      (nombreHoja?' — "'+nombreHoja+'"'+(nombrePestana?' / pestaña "'+nombrePestana+'"':''):'') + '. ID: '+local;
   } else {
-    el.textContent = 'Usando la hoja de siempre' + (nombreHoja?' — "'+nombreHoja+'"'+(nombrePestana?' / pestaña "'+nombrePestana+'"':''):'') + '.';
+    el.textContent = 'Sin prueba local activa — este navegador usa el ancla global.';
+  }
+}
+
+async function cargarEstadoAncla(){
+  var el = document.getElementById('cfgAnchorLabel');
+  try{
+    await asegurarWebhook();
+    var resp = await fetch(SHEETS_WEBHOOK_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({accion:'hojaAnclada'})
+    });
+    var data = await resp.json();
+    if(!data.ok){ el.textContent = 'No se pudo consultar el estado del ancla.'; return; }
+    if(!data.anclada){
+      el.innerHTML = '📌 Sin hoja anclada — toda la app usa la hoja de siempre (la fija en Codigo.gs).';
+    } else if(data.spreadsheetNombre){
+      el.innerHTML = '📌 Hoja anclada para todos: <b style="color:var(--text)">'+esc(data.spreadsheetNombre)+'</b>';
+    } else {
+      el.innerHTML = '📌 Hay una hoja anclada (ID '+esc(data.spreadsheetId)+') pero ya no es accesible'+
+        (data.aviso?': '+esc(data.aviso):'')+'. La app está cayendo a la hoja de respaldo mientras tanto.';
+    }
+  }catch(e){
+    el.textContent = 'Sin conexión — no se pudo consultar el estado del ancla.';
   }
 }
 
@@ -557,7 +597,7 @@ async function cargar(){
       renderState('<div class="state"><div class="big">⚠</div>No hay webhook de Sheets configurado (config.json).</div>');
       return;
     }
-    var spreadsheetId = getSpreadsheetIdGuardado();
+    var spreadsheetId = getPruebaLocal();
     var resp = await fetch(SHEETS_WEBHOOK_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -622,16 +662,17 @@ async function ejecutarDiagnostico(spreadsheetIdOverride){
   el.innerHTML = '<div class="diagBox"><div class="diagMeta">Verificando…</div></div>';
   try{
     await asegurarWebhook();
-    var spreadsheetId = spreadsheetIdOverride!=null ? spreadsheetIdOverride : getSpreadsheetIdGuardado();
     var resp = await fetch(SHEETS_WEBHOOK_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({accion:'diagnostico', spreadsheetId: spreadsheetId || undefined})
+      body: JSON.stringify({accion:'diagnostico', spreadsheetId: spreadsheetIdOverride || undefined})
     });
     var data = await resp.json();
     renderDiagnostico(data);
+    return data;
   }catch(e){
     el.innerHTML = '<div class="diagBox"><div class="diagLine err"><span class="ic">✕</span><span>No se pudo conectar para verificar — revisa tu señal.</span></div></div>';
+    return null;
   }
 }
 
@@ -639,22 +680,68 @@ document.getElementById('btnRefresh').onclick = cargar;
 document.getElementById('btnCfgToggle').onclick = function(){
   document.getElementById('cfgPanel').classList.toggle('hidden');
 };
-document.getElementById('cfgSpreadsheetId').value = getSpreadsheetIdGuardado();
 document.getElementById('btnCfgVerificar').onclick = function(){
   ejecutarDiagnostico(document.getElementById('cfgSpreadsheetId').value.trim());
 };
-document.getElementById('btnCfgUsar').onclick = function(){
+document.getElementById('btnCfgAnclar').onclick = async function(){
   var val = document.getElementById('cfgSpreadsheetId').value.trim();
-  if(val) localStorage.setItem(LS_KEY, val); else localStorage.removeItem(LS_KEY);
+  if(!val){ document.getElementById('cfgAnchorLabel').textContent = 'Pega primero el ID o URL de la hoja.'; return; }
+  var btn = this;
+  btn.disabled = true; btn.textContent = 'Anclando…';
+  try{
+    await asegurarWebhook();
+    var resp = await fetch(SHEETS_WEBHOOK_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({accion:'anclarHoja', spreadsheetId: val})
+    });
+    var data = await resp.json();
+    if(!data.ok){
+      document.getElementById('cfgAnchorLabel').innerHTML = '⚠ '+esc(data.error||'No se pudo anclar.');
+      if(data.diagnostico) renderDiagnostico(data.diagnostico);
+    } else {
+      // Al anclar globalmente, cualquier prueba local queda redundante — se limpia para no confundir cuál está mandando.
+      localStorage.removeItem(LS_KEY);
+      actualizarEtiquetaOrigen();
+      await cargarEstadoAncla();
+      cargar();
+    }
+  }catch(e){
+    document.getElementById('cfgAnchorLabel').textContent = 'Sin conexión — no se pudo anclar.';
+  }
+  btn.disabled = false; btn.textContent = '📌 Anclar para todos';
+};
+document.getElementById('btnCfgReset').onclick = async function(){
+  var btn = this;
+  btn.disabled = true;
+  try{
+    await asegurarWebhook();
+    await fetch(SHEETS_WEBHOOK_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({accion:'desanclarHoja'})
+    });
+    await cargarEstadoAncla();
+    cargar();
+  }catch(e){
+    document.getElementById('cfgAnchorLabel').textContent = 'Sin conexión — no se pudo quitar el ancla.';
+  }
+  btn.disabled = false;
+};
+document.getElementById('cfgSpreadsheetId').value = getPruebaLocal();
+document.getElementById('btnCfgProbarLocal').onclick = function(){
+  var val = document.getElementById('cfgSpreadsheetId').value.trim();
+  if(!val) return;
+  localStorage.setItem(LS_KEY, val);
+  actualizarEtiquetaOrigen();
   cargar();
 };
-document.getElementById('btnCfgReset').onclick = function(){
+document.getElementById('btnCfgQuitarLocal').onclick = function(){
   localStorage.removeItem(LS_KEY);
-  document.getElementById('cfgSpreadsheetId').value = '';
   document.getElementById('diagResult').innerHTML = '';
+  actualizarEtiquetaOrigen();
   cargar();
 };
 actualizarEtiquetaOrigen();
+cargarEstadoAncla();
 cargar();
 
 if('serviceWorker' in navigator){

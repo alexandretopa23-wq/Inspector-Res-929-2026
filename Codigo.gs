@@ -52,7 +52,21 @@ var FILTRO_TIPO_LABEL = {
 /* ============================================================================
    0. ACCESO A LA HOJA — por gid, no por nombre de pestaña
    ============================================================================ */
+var PROP_KEY_HOJA_ANCLADA = 'SPREADSHEET_ID_ANCLADA';
+
+/* El ancla (PropertiesService, a nivel de proyecto de Apps Script — la ve
+   CUALQUIER dispositivo que llame al webhook, no solo el navegador que la
+   fijó) tiene prioridad sobre el spreadsheet contenedor y sobre el ID fijo
+   de respaldo. Es la forma de cambiar "la hoja de siempre" de toda la app
+   —checklist, ficha técnica, dashboard, informes— sin tocar código ni
+   volver a publicar el script. Si la hoja anclada dejó de ser accesible
+   (se borró, se revocó el acceso), cae al ID fijo en vez de tronar. */
 function _ss(){
+  var anclada = PropertiesService.getScriptProperties().getProperty(PROP_KEY_HOJA_ANCLADA);
+  if(anclada){
+    try{ return SpreadsheetApp.openById(anclada); }
+    catch(e){ /* la hoja anclada ya no es accesible — sigue con el respaldo de abajo */ }
+  }
   try{
     var activa = SpreadsheetApp.getActiveSpreadsheet();
     if(activa) return activa;
@@ -166,6 +180,42 @@ function _diagnosticarHoja(spreadsheetId){
   return r;
 }
 
+/* ---------- Anclar / desanclar la hoja de siempre ----------
+   Guarda el ID en PropertiesService del proyecto de Apps Script — no en el
+   navegador — así que aplica para TODOS los dispositivos que usen este
+   webhook desde el momento en que se ancla, incluida la sincronización del
+   checklist y la generación de informes, no solo el dashboard. Nunca ancla
+   una hoja con estructura inválida: corre el diagnóstico primero y si no
+   pasa, no guarda nada. */
+function anclarHoja(spreadsheetId){
+  if(!spreadsheetId) return {ok:false, error:'Falta el ID o URL de la hoja a anclar.'};
+  var diag = _diagnosticarHoja(spreadsheetId);
+  if(!diag.ok){
+    return {ok:false, error:'No se ancló: la estructura de esa hoja no coincide con las 22 columnas esperadas (o hubo un error de acceso). Revisa el diagnóstico antes de anclar.', diagnostico:diag};
+  }
+  var id = _extraerIdHoja(spreadsheetId);
+  PropertiesService.getScriptProperties().setProperty(PROP_KEY_HOJA_ANCLADA, id);
+  return {ok:true, spreadsheetId:id, spreadsheetNombre:diag.spreadsheetNombre, hojaNombre:diag.hojaNombre};
+}
+function desanclarHoja(){
+  PropertiesService.getScriptProperties().deleteProperty(PROP_KEY_HOJA_ANCLADA);
+  return {ok:true};
+}
+/* Consulta de solo lectura: qué hoja está anclada ahora mismo (si alguna),
+   para que el dashboard lo muestre aunque el inspector no haya tocado nada
+   en este navegador — el ancla es del proyecto, no de la sesión. */
+function obtenerHojaAnclada(){
+  var id = PropertiesService.getScriptProperties().getProperty(PROP_KEY_HOJA_ANCLADA);
+  if(!id) return {ok:true, anclada:false};
+  try{
+    var ss = SpreadsheetApp.openById(id);
+    return {ok:true, anclada:true, spreadsheetId:id, spreadsheetNombre:ss.getName()};
+  }catch(err){
+    return {ok:true, anclada:true, spreadsheetId:id, spreadsheetNombre:null,
+      aviso:'La hoja anclada ('+id+') ya no es accesible para la cuenta del script — la app está cayendo al respaldo mientras tanto.'};
+  }
+}
+
 /* ============================================================================
    1. ROUTER doPost
    ============================================================================ */
@@ -176,9 +226,12 @@ function doPost(e){
   if (body.accion === 'foto')       return _json(guardarFoto(body));
   if (body.accion === 'ficha')      return _json(guardarFicha(body));
   if (body.accion === 'informe')    return _json(generarInformeVaso(body.sede, body.piscina, body.fecha));
-  if (body.accion === 'dashboard')  return _json(obtenerDashboard(body.spreadsheetId));
-  if (body.accion === 'diagnostico') return _json(_diagnosticarHoja(body.spreadsheetId));
-  if (body.rows)                    return _json(guardarFilas(body.rows));
+  if (body.accion === 'dashboard')    return _json(obtenerDashboard(body.spreadsheetId));
+  if (body.accion === 'diagnostico')  return _json(_diagnosticarHoja(body.spreadsheetId));
+  if (body.accion === 'anclarHoja')   return _json(anclarHoja(body.spreadsheetId));
+  if (body.accion === 'desanclarHoja') return _json(desanclarHoja());
+  if (body.accion === 'hojaAnclada')  return _json(obtenerHojaAnclada());
+  if (body.rows)                      return _json(guardarFilas(body.rows));
 
   return _json({ok:false, error:'payload no reconocido'});
 }
