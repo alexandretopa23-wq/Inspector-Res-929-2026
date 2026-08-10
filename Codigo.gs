@@ -13,6 +13,15 @@ var COL = {
   evidActual:19, evidCierre:20, linkCarpeta:21, observaciones:22
 };
 var TOTAL_COLS = 22;
+/* Encabezado real de la hoja, en el mismo orden que COL — usado por
+   _diagnosticarHoja() para detectar si alguien cambió/movió columnas. */
+var COLUMNAS_ESPERADAS = [
+  'ID','Capítulo / componente','Ítem de verificación','Enfoque técnico','Prioridad sugerida',
+  'Sede','Piscina / estanque','Fecha inspección','Responsable inspección','Estado','Nivel de riesgo',
+  'Hallazgo / condición observada','Acción correctiva / preventiva','Responsable cierre',
+  'Fecha compromiso','Fecha cierre','Días restantes / vencido','% avance',
+  'Evidencia fotográfica - estado actual','Evidencia fotográfica - cierre','Link carpeta / evidencia','Observaciones'
+];
 
 /* Paleta corporativa (coherente con plan-accion-piscinas) */
 var C_ENCABEZADO='#212121', C_TITULO='#424242', C_ACENTO='#E65100',
@@ -50,13 +59,111 @@ function _ss(){
   }catch(e){ /* script no vinculado, cae al ID fijo */ }
   return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
-function _hojaDatos(){
-  var ss = _ss();
+/* Variante de _ss() que acepta un ID de hoja distinto al de siempre — la
+   usan el dashboard y el diagnóstico cuando el inspector pega el ID/URL de
+   OTRA hoja (p.ej. si cambiaron de spreadsheet este año). Solo funciona si
+   la cuenta de Google que ejecuta el script tiene acceso a esa hoja; si no,
+   lanza un error legible en vez del genérico de Apps Script. */
+function _ssPara(spreadsheetId){
+  if(!spreadsheetId) return _ss();
+  var id = _extraerIdHoja(spreadsheetId);
+  try{
+    return SpreadsheetApp.openById(id);
+  }catch(err){
+    throw new Error('No se pudo abrir la hoja con ese ID/URL. Verifica que sea correcto y que la cuenta del script tenga acceso (compártela con esa cuenta si es de otra persona).');
+  }
+}
+/* Acepta tanto un ID pelado como una URL completa de Sheets pegada por el
+   usuario (.../spreadsheets/d/<ID>/edit#gid=...). */
+function _extraerIdHoja(valor){
+  var s = String(valor||'').trim();
+  var m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  return m ? m[1] : s;
+}
+function _hojaDatosDe(ss){
   var hojas = ss.getSheets();
   for(var i=0;i<hojas.length;i++){
     if(hojas[i].getSheetId() === GID_DATOS) return hojas[i];
   }
-  return ss.getSheets()[0]; // respaldo si el gid cambiara
+  return ss.getSheets()[0]; // respaldo si el gid cambiara o no existe en la hoja alternativa
+}
+function _hojaDatos(){
+  return _hojaDatosDe(_ss());
+}
+
+/* ---------- Diagnóstico de la hoja conectada ----------
+   Responde SIEMPRE con {ok, errores, avisos, ...datos}, nunca lanza — así
+   el dashboard puede mostrar el motivo exacto por el que algo no carga en
+   vez de un fetch fallido genérico. Se usa tanto para la hoja de siempre
+   como para una alterna que el inspector quiera probar antes de adoptarla
+   (accion:'diagnostico', body.spreadsheetId opcional). */
+function _diagnosticarHoja(spreadsheetId){
+  var r = {ok:true, errores:[], avisos:[]};
+  var ss;
+  try{ ss = _ssPara(spreadsheetId); }
+  catch(err){ r.ok=false; r.errores.push(String(err.message||err)); return r; }
+
+  r.spreadsheetNombre = ss.getName();
+  r.spreadsheetId = ss.getId();
+  r.spreadsheetUrl = ss.getUrl();
+
+  var sh;
+  try{ sh = _hojaDatosDe(ss); }
+  catch(err){ r.ok=false; r.errores.push('No se pudo acceder a ninguna pestaña de la hoja: '+(err.message||err)); return r; }
+
+  r.hojaNombre = sh.getName();
+  r.hojaGid = sh.getSheetId();
+  r.gidEsperado = GID_DATOS;
+  if(sh.getSheetId() !== GID_DATOS){
+    r.avisos.push('La pestaña usada no coincide con el GID configurado en el script (GID_DATOS='+GID_DATOS+') — se cayó a la primera pestaña como respaldo. Si esto es intencional (moviste/renombraste la pestaña), está bien; si no, revisa que la pestaña "'+sh.getName()+'" sea realmente la de datos.');
+  }
+
+  var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  r.filas = Math.max(0, lastRow-1);
+  r.columnas = lastCol;
+
+  if(lastRow < 1){
+    r.ok=false; r.errores.push('La pestaña está completamente vacía — ni siquiera tiene fila de encabezado.');
+    return r;
+  }
+  if(lastCol !== TOTAL_COLS){
+    r.avisos.push('La pestaña tiene '+lastCol+' columnas; la estructura esperada tiene '+TOTAL_COLS+'.');
+  }
+
+  var anchoLeer = Math.max(lastCol, COLUMNAS_ESPERADAS.length);
+  var encabezado = sh.getRange(1,1,1,anchoLeer).getValues()[0].map(function(v){ return String(v||'').trim(); });
+  var difs = [];
+  COLUMNAS_ESPERADAS.forEach(function(esp, i){
+    var real = encabezado[i]||'';
+    if(real !== esp) difs.push({col:i+1, esperado:esp, encontrado: real || '(vacío)'});
+  });
+  if(difs.length){
+    r.ok=false;
+    r.errores.push('El encabezado no coincide con la estructura de 22 columnas en '+difs.length+' columna(s) — por eso el dashboard puede leer datos en el campo equivocado o simplemente no cargar.');
+    r.diferenciasEncabezado = difs;
+  }
+
+  if(r.filas === 0){
+    r.avisos.push('El encabezado está correcto pero todavía no hay filas de datos — es normal si aún no se ha sincronizado ninguna inspección desde la app.');
+  } else if(!difs.length){
+    var datos = sh.getRange(2,1,Math.min(lastRow-1, 5000),TOTAL_COLS).getValues();
+    var sedesUnicas = {}, fechaMin=null, fechaMax=null, filasSinFecha=0, filasSinSede=0;
+    datos.forEach(function(f){
+      var sede = String(f[COL.sede-1]||'').trim();
+      if(sede) sedesUnicas[sede]=1; else filasSinSede++;
+      var fs = _fechaStr(f[COL.fecha-1]);
+      if(fs){ if(!fechaMin||fs<fechaMin) fechaMin=fs; if(!fechaMax||fs>fechaMax) fechaMax=fs; }
+      else filasSinFecha++;
+    });
+    r.sedesDetectadas = Object.keys(sedesUnicas).sort();
+    r.rangoFechas = {desde:fechaMin, hasta:fechaMax};
+    r.filasSinFecha = filasSinFecha;
+    r.filasSinSede = filasSinSede;
+    if(filasSinFecha>0) r.avisos.push(filasSinFecha+' fila(s) sin fecha de inspección válida.');
+    if(filasSinSede>0) r.avisos.push(filasSinSede+' fila(s) sin sede.');
+  }
+
+  return r;
 }
 
 /* ============================================================================
@@ -66,11 +173,12 @@ function doPost(e){
   var body = {};
   try { body = JSON.parse(e.postData.contents); } catch(err){ body = {}; }
 
-  if (body.accion === 'foto')      return _json(guardarFoto(body));
-  if (body.accion === 'ficha')     return _json(guardarFicha(body));
-  if (body.accion === 'informe')   return _json(generarInformeVaso(body.sede, body.piscina, body.fecha));
-  if (body.accion === 'dashboard') return _json(obtenerDashboard());
-  if (body.rows)                   return _json(guardarFilas(body.rows));
+  if (body.accion === 'foto')       return _json(guardarFoto(body));
+  if (body.accion === 'ficha')      return _json(guardarFicha(body));
+  if (body.accion === 'informe')    return _json(generarInformeVaso(body.sede, body.piscina, body.fecha));
+  if (body.accion === 'dashboard')  return _json(obtenerDashboard(body.spreadsheetId));
+  if (body.accion === 'diagnostico') return _json(_diagnosticarHoja(body.spreadsheetId));
+  if (body.rows)                    return _json(guardarFilas(body.rows));
 
   return _json({ok:false, error:'payload no reconocido'});
 }
@@ -448,11 +556,13 @@ function _metricas(filas){
    reimplementar el conteo. Sirve TODA la hoja de una sola pasada: no hay
    filtro de fecha porque "avance" es del estado actual acumulado, no de un
    corte puntual. */
-function obtenerDashboard(){
-  var sh = _hojaDatos();
+function obtenerDashboard(spreadsheetId){
+ try{
+  var ss = _ssPara(spreadsheetId);
+  var sh = _hojaDatosDe(ss);
   var last = sh.getLastRow();
   var todo = last>=2 ? sh.getRange(2,1,last-1,TOTAL_COLS).getValues() : [];
-  if(!todo.length) return {ok:true, vacio:true};
+  if(!todo.length) return {ok:true, vacio:true, spreadsheetNombre:ss.getName(), hojaNombre:sh.getName()};
 
   var global = _metricas(todo);
 
@@ -531,6 +641,8 @@ function obtenerDashboard(){
   return {
     ok:true,
     actualizadoEn: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'),
+    spreadsheetNombre: ss.getName(),
+    hojaNombre: sh.getName(),
     global: {
       total:global.total, pctCumplimiento:global.pctCumplimiento,
       cumple:global.cumple, noCumple:global.noCumple, enProceso:global.enProceso,
@@ -544,6 +656,9 @@ function obtenerDashboard(){
     capitulos: capitulos,
     tendencia: tendencia
   };
+ }catch(err){
+  return {ok:false, error:String(err.message||err)};
+ }
 }
 
 /* ---------- Índice de fotos por ítem (máx 2 por tipo) ---------- */

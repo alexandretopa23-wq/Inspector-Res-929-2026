@@ -58,6 +58,7 @@
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;}
 body{min-height:100vh;display:flex;flex-direction:column;}
 a{color:inherit;}
+.hidden{display:none !important;}
 
 /* ---------- Top nav ---------- */
 header{
@@ -195,6 +196,36 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 .state{padding:70px 20px;text-align:center;color:var(--text-dim);font-size:14px;}
 .state .big{font-size:34px;margin-bottom:12px;}
 
+/* ---------- Panel de configuración / diagnóstico ---------- */
+.cfgToggle{
+  background:transparent;border:1px solid var(--border);color:var(--text-faint);
+  border-radius:4px;padding:6px 10px;font-size:11px;font-family:var(--mono);
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin-bottom:14px;
+}
+.cfgToggle:hover{color:var(--text-dim);border-color:var(--text-faint);}
+.cfgPanel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:26px;}
+.cfgPanel h3{font-family:var(--display);font-size:15px;font-weight:600;margin:0 0 4px;}
+.cfgPanel .hint{font-size:12px;color:var(--text-faint);margin:0 0 12px;line-height:1.5;}
+.cfgRow{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+@media(min-width:600px){.cfgRow{flex-direction:row;align-items:center;}}
+.cfgRow input{
+  flex:1;background:var(--panel-lowest);border:1px solid var(--border);color:var(--text);
+  border-radius:4px;padding:9px 11px;font-size:12.5px;font-family:var(--mono);
+}
+.cfgRow input:focus{outline:none;border-color:var(--accent);}
+.cfgBtns{display:flex;gap:8px;flex-wrap:wrap;}
+.cfgActive{font-size:11.5px;color:var(--text-faint);margin-top:8px;font-family:var(--mono);word-break:break-all;}
+.diagBox{margin-top:14px;padding-top:14px;border-top:1px solid var(--border-soft);}
+.diagLine{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;margin-bottom:8px;line-height:1.5;}
+.diagLine .ic{flex:none;margin-top:1px;}
+.diagLine.ok{color:var(--c-cumple);}
+.diagLine.err{color:var(--c-nocumple);}
+.diagLine.warn{color:var(--c-pendiente);}
+.diagMeta{font-family:var(--mono);font-size:11.5px;color:var(--text-faint);margin-bottom:4px;}
+.diagTable{width:100%;border-collapse:collapse;margin-top:8px;font-size:11.5px;}
+.diagTable th,.diagTable td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--border-soft);font-family:var(--mono);}
+.diagTable th{color:var(--text-faint);font-weight:600;}
+
 footer{
   border-top:1px solid var(--border);background:var(--panel-lowest);
   padding:16px;display:flex;flex-direction:column;gap:8px;align-items:center;
@@ -228,6 +259,23 @@ footer{
     </div>
     <div class="updated" id="updatedLabel">—</div>
   </div>
+
+  <button class="cfgToggle" id="btnCfgToggle" type="button">⚙ Configuración de datos / diagnóstico</button>
+  <div class="cfgPanel hidden" id="cfgPanel">
+    <h3>Hoja de Google Sheets conectada</h3>
+    <p class="hint">Por defecto el dashboard lee siempre la misma hoja. Si cambiaste de hoja (otra sede, otro año), pega aquí su ID o el link completo — se guarda solo en este navegador, no cambia nada para los demás inspectores.</p>
+    <div class="cfgRow">
+      <input type="text" id="cfgSpreadsheetId" placeholder="ID o URL de la hoja de Google Sheets (opcional)">
+    </div>
+    <div class="cfgBtns">
+      <button class="btnGhost" id="btnCfgVerificar" type="button">Verificar estructura</button>
+      <button class="btnPrimary" id="btnCfgUsar" type="button">Usar esta hoja</button>
+      <button class="btnGhost" id="btnCfgReset" type="button">Volver a la hoja de siempre</button>
+    </div>
+    <div class="cfgActive" id="cfgActiveLabel"></div>
+    <div id="diagResult"></div>
+  </div>
+
   <div id="content"></div>
 </main>
 
@@ -479,37 +527,134 @@ function render(d){
   document.getElementById('footScope').textContent = d.vasos.length+' vasos · '+d.sedes.length+' sedes';
 }
 
+/* ---------- Config: hoja alterna (opcional, guardada en este navegador) ---------- */
+var LS_KEY = 'dashSpreadsheetId';
+function getSpreadsheetIdGuardado(){ return localStorage.getItem(LS_KEY) || ''; }
+function actualizarEtiquetaOrigen(nombreHoja, nombrePestana){
+  var idGuardado = getSpreadsheetIdGuardado();
+  var el = document.getElementById('cfgActiveLabel');
+  if(idGuardado){
+    el.textContent = 'Usando hoja alterna' + (nombreHoja?' — "'+nombreHoja+'"'+(nombrePestana?' / pestaña "'+nombrePestana+'"':''):'') + '. ID guardado: '+idGuardado;
+  } else {
+    el.textContent = 'Usando la hoja de siempre' + (nombreHoja?' — "'+nombreHoja+'"'+(nombrePestana?' / pestaña "'+nombrePestana+'"':''):'') + '.';
+  }
+}
+
+async function asegurarWebhook(){
+  if(!SHEETS_WEBHOOK_URL){
+    var configRes = await fetch('./config.json');
+    var config = await configRes.json();
+    SHEETS_WEBHOOK_URL = config.webhookUrl;
+  }
+  return SHEETS_WEBHOOK_URL;
+}
+
 async function cargar(){
   renderState('<div class="state"><div class="big">⏳</div>Cargando estadísticas…</div>');
   try{
-    if(!SHEETS_WEBHOOK_URL){
-      var configRes = await fetch('./config.json');
-      var config = await configRes.json();
-      SHEETS_WEBHOOK_URL = config.webhookUrl;
-    }
+    await asegurarWebhook();
     if(!SHEETS_WEBHOOK_URL){
       renderState('<div class="state"><div class="big">⚠</div>No hay webhook de Sheets configurado (config.json).</div>');
       return;
     }
+    var spreadsheetId = getSpreadsheetIdGuardado();
     var resp = await fetch(SHEETS_WEBHOOK_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({accion:'dashboard'})
+      body: JSON.stringify({accion:'dashboard', spreadsheetId: spreadsheetId || undefined})
     });
     var data = await resp.json();
     if(!data.ok){
       renderState('<div class="state"><div class="big">⚠</div>'+esc(data.error||'No se pudo cargar el dashboard.')+
+        '<div style="margin-top:6px;font-size:12px;">Abre "⚙ Configuración de datos" arriba y usa "Verificar estructura" para ver el detalle.</div>'+
         '<div><button class="btnPrimary" style="margin-top:16px;" onclick="cargar()">Reintentar</button></div></div>');
+      actualizarEtiquetaOrigen();
       return;
     }
     render(data);
+    actualizarEtiquetaOrigen(data.spreadsheetNombre, data.hojaNombre);
   }catch(e){
     renderState('<div class="state"><div class="big">📡</div>Sin conexión o error al cargar los datos.'+
       '<div><button class="btnPrimary" style="margin-top:16px;" onclick="cargar()">Reintentar</button></div></div>');
   }
 }
 
+/* ---------- Diagnóstico de estructura ---------- */
+function diagIcono(tipo){ return tipo==='ok' ? '✓' : (tipo==='err' ? '✕' : '⚠'); }
+
+function renderDiagnostico(r){
+  var el = document.getElementById('diagResult');
+  if(!r){ el.innerHTML=''; return; }
+  var html = '<div class="diagBox">';
+  if(r.spreadsheetNombre){
+    html += '<div class="diagMeta">Hoja: <b style="color:var(--text-dim)">'+esc(r.spreadsheetNombre)+'</b>'+
+      (r.hojaNombre?' · Pestaña: <b style="color:var(--text-dim)">'+esc(r.hojaNombre)+'</b>':'')+
+      (r.filas!=null?' · '+r.filas+' fila(s) de datos':'')+'</div>';
+  }
+  (r.errores||[]).forEach(function(msg){
+    html += '<div class="diagLine err"><span class="ic">'+diagIcono('err')+'</span><span>'+esc(msg)+'</span></div>';
+  });
+  (r.avisos||[]).forEach(function(msg){
+    html += '<div class="diagLine warn"><span class="ic">'+diagIcono('warn')+'</span><span>'+esc(msg)+'</span></div>';
+  });
+  if(r.ok && !(r.avisos&&r.avisos.length)){
+    html += '<div class="diagLine ok"><span class="ic">'+diagIcono('ok')+'</span><span>Estructura correcta, coincide con las 22 columnas esperadas.</span></div>';
+  }
+  if(r.diferenciasEncabezado && r.diferenciasEncabezado.length){
+    html += '<table class="diagTable"><tr><th>Col.</th><th>Esperado</th><th>Encontrado</th></tr>';
+    r.diferenciasEncabezado.forEach(function(d){
+      html += '<tr><td>'+d.col+'</td><td>'+esc(d.esperado)+'</td><td>'+esc(d.encontrado)+'</td></tr>';
+    });
+    html += '</table>';
+  }
+  if(r.sedesDetectadas){
+    html += '<div class="diagMeta" style="margin-top:8px;">Sedes detectadas ('+r.sedesDetectadas.length+'): '+esc(r.sedesDetectadas.join(', ')||'—')+'</div>';
+  }
+  if(r.rangoFechas && (r.rangoFechas.desde||r.rangoFechas.hasta)){
+    html += '<div class="diagMeta">Rango de fechas: '+esc(r.rangoFechas.desde||'—')+' a '+esc(r.rangoFechas.hasta||'—')+'</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function ejecutarDiagnostico(spreadsheetIdOverride){
+  var el = document.getElementById('diagResult');
+  el.innerHTML = '<div class="diagBox"><div class="diagMeta">Verificando…</div></div>';
+  try{
+    await asegurarWebhook();
+    var spreadsheetId = spreadsheetIdOverride!=null ? spreadsheetIdOverride : getSpreadsheetIdGuardado();
+    var resp = await fetch(SHEETS_WEBHOOK_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({accion:'diagnostico', spreadsheetId: spreadsheetId || undefined})
+    });
+    var data = await resp.json();
+    renderDiagnostico(data);
+  }catch(e){
+    el.innerHTML = '<div class="diagBox"><div class="diagLine err"><span class="ic">✕</span><span>No se pudo conectar para verificar — revisa tu señal.</span></div></div>';
+  }
+}
+
 document.getElementById('btnRefresh').onclick = cargar;
+document.getElementById('btnCfgToggle').onclick = function(){
+  document.getElementById('cfgPanel').classList.toggle('hidden');
+};
+document.getElementById('cfgSpreadsheetId').value = getSpreadsheetIdGuardado();
+document.getElementById('btnCfgVerificar').onclick = function(){
+  ejecutarDiagnostico(document.getElementById('cfgSpreadsheetId').value.trim());
+};
+document.getElementById('btnCfgUsar').onclick = function(){
+  var val = document.getElementById('cfgSpreadsheetId').value.trim();
+  if(val) localStorage.setItem(LS_KEY, val); else localStorage.removeItem(LS_KEY);
+  cargar();
+};
+document.getElementById('btnCfgReset').onclick = function(){
+  localStorage.removeItem(LS_KEY);
+  document.getElementById('cfgSpreadsheetId').value = '';
+  document.getElementById('diagResult').innerHTML = '';
+  cargar();
+};
+actualizarEtiquetaOrigen();
 cargar();
 
 if('serviceWorker' in navigator){
