@@ -10,10 +10,11 @@
    que las pestañas viejas no se queden sirviendo un shell desactualizado
    indefinidamente — junto con el `updateViaCache:'none'` del registro en
    index.html, esto hace que el navegador revise el sw.js nuevo pronto. */
-var CACHE_NAME = 'inspector-piscinas-v1';
+var CACHE_NAME = 'inspector-piscinas-v2';
 var APP_SHELL = [
   './',
   './index.html',
+  './dashboard.html',
   './config.json',
   './manifest.json',
   './icon-192.png',

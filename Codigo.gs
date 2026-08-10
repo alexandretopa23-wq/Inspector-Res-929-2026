@@ -66,10 +66,11 @@ function doPost(e){
   var body = {};
   try { body = JSON.parse(e.postData.contents); } catch(err){ body = {}; }
 
-  if (body.accion === 'foto')     return _json(guardarFoto(body));
-  if (body.accion === 'ficha')    return _json(guardarFicha(body));
-  if (body.accion === 'informe')  return _json(generarInformeVaso(body.sede, body.piscina, body.fecha));
-  if (body.rows)                  return _json(guardarFilas(body.rows));
+  if (body.accion === 'foto')      return _json(guardarFoto(body));
+  if (body.accion === 'ficha')     return _json(guardarFicha(body));
+  if (body.accion === 'informe')   return _json(generarInformeVaso(body.sede, body.piscina, body.fecha));
+  if (body.accion === 'dashboard') return _json(obtenerDashboard());
+  if (body.rows)                   return _json(guardarFilas(body.rows));
 
   return _json({ok:false, error:'payload no reconocido'});
 }
@@ -438,6 +439,111 @@ function _metricas(filas){
   m.pctCumplimiento = m.baseEnAlcance>0 ? Math.round(100*m.cumpleEnAlcance/m.baseEnAlcance) : 0;
   m.avanceProm = conAvance? Math.round(sumAvance/conAvance) : 0;
   return m;
+}
+
+/* ---------- Dashboard de avances (todas las sedes/piscinas/fechas) ----------
+   _metricas() ya es genérica sobre cualquier conjunto de filas (no asume una
+   sola sede+piscina+fecha, como en el informe individual) — así que el
+   dashboard la reutiliza tal cual sobre subconjuntos agrupados, en vez de
+   reimplementar el conteo. Sirve TODA la hoja de una sola pasada: no hay
+   filtro de fecha porque "avance" es del estado actual acumulado, no de un
+   corte puntual. */
+function obtenerDashboard(){
+  var sh = _hojaDatos();
+  var last = sh.getLastRow();
+  var todo = last>=2 ? sh.getRange(2,1,last-1,TOTAL_COLS).getValues() : [];
+  if(!todo.length) return {ok:true, vacio:true};
+
+  var global = _metricas(todo);
+
+  var porSede = {};
+  todo.forEach(function(f){
+    var sede = String(f[COL.sede-1]||'Sin sede');
+    if(!porSede[sede]) porSede[sede] = [];
+    porSede[sede].push(f);
+  });
+  var sedes = Object.keys(porSede).map(function(sede){
+    var m = _metricas(porSede[sede]);
+    return {sede:sede, total:m.total, pctCumplimiento:m.pctCumplimiento, noCumple:m.noCumple,
+             vencidos:m.vencidos, critico:m.critico, alto:m.alto};
+  }).sort(function(a,b){ return a.sede.localeCompare(b.sede); });
+
+  // Cada combinación Sede+Piscina es un vaso — se resume con su fecha de
+  // inspección más reciente vista en la hoja (upsert va actualizando la
+  // misma fila, así que la fecha más alta es la vigente).
+  var porVaso = {};
+  todo.forEach(function(f){
+    var key = String(f[COL.sede-1])+'␟'+String(f[COL.piscina-1]);
+    if(!porVaso[key]) porVaso[key] = {sede:String(f[COL.sede-1]), piscina:String(f[COL.piscina-1]), filas:[], fechas:{}};
+    porVaso[key].filas.push(f);
+    var fecha = _fechaStr(f[COL.fecha-1]);
+    if(fecha) porVaso[key].fechas[fecha] = 1;
+  });
+  var vasos = Object.keys(porVaso).map(function(key){
+    var v = porVaso[key];
+    var m = _metricas(v.filas);
+    var fechas = Object.keys(v.fechas).sort();
+    var ultima = fechas.length ? fechas[fechas.length-1] : null;
+    // Responsable de la inspección más reciente de este vaso.
+    var resp = '';
+    v.filas.forEach(function(f){
+      if(_fechaStr(f[COL.fecha-1])===ultima && !resp) resp = String(f[COL.responsable-1]||'');
+    });
+    return {
+      sede:v.sede, piscina:v.piscina, responsable:resp,
+      ultimaFecha: ultima,
+      total:m.total, pctCumplimiento:m.pctCumplimiento, noCumple:m.noCumple,
+      vencidos:m.vencidos, critico:m.critico, alto:m.alto
+    };
+  }).sort(function(a,b){ return String(b.ultimaFecha||'').localeCompare(String(a.ultimaFecha||'')); });
+
+  // Tendencia: cuántos vasos se inspeccionaron en cada fecha. Es el único
+  // eje temporal real que hay en la hoja — no hay timestamp por ítem.
+  var porFecha = {};
+  todo.forEach(function(f){
+    var fecha = _fechaStr(f[COL.fecha-1]);
+    if(!fecha) return;
+    if(!porFecha[fecha]) porFecha[fecha] = {};
+    porFecha[fecha][String(f[COL.sede-1])+'␟'+String(f[COL.piscina-1])] = 1;
+  });
+  var tendencia = Object.keys(porFecha).sort().map(function(fecha){
+    return {fecha:fecha, vasos:Object.keys(porFecha[fecha]).length};
+  });
+
+  // Evidencia faltante: hallazgos "No cumple" sin foto del estado actual —
+  // el dato que más le importa a un auditor externo.
+  var hallazgosNoCumple = 0, evidenciaFaltante = 0;
+  todo.forEach(function(f){
+    if(String(f[COL.estado-1]||'')==='No cumple'){
+      hallazgosNoCumple++;
+      if(!String(f[COL.evidActual-1]||'').trim()) evidenciaFaltante++;
+    }
+  });
+
+  var capitulos = Object.keys(global.porCapitulo).map(function(cap){
+    var c = global.porCapitulo[cap];
+    var base = c.total - c.noAplica - c.fueraAlcance;
+    var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
+    return {capitulo:cap, total:c.total, cumple:c.cumple, noCumple:c.noCumple,
+             fueraAlcance:c.fueraAlcance||0, pctCumplimiento:pct};
+  }).sort(function(a,b){ return a.pctCumplimiento - b.pctCumplimiento; });
+
+  return {
+    ok:true,
+    actualizadoEn: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'),
+    global: {
+      total:global.total, pctCumplimiento:global.pctCumplimiento,
+      cumple:global.cumple, noCumple:global.noCumple, enProceso:global.enProceso,
+      pendiente:global.pendiente, noAplica:global.noAplica, fueraAlcance:global.fueraAlcance,
+      critico:global.critico, alto:global.alto, medio:global.medio, bajo:global.bajo,
+      vencidos:global.vencidos, sinFecha:global.sinFecha, avanceProm:global.avanceProm,
+      hallazgosNoCumple:hallazgosNoCumple, evidenciaFaltante:evidenciaFaltante
+    },
+    sedes: sedes,
+    vasos: vasos,
+    capitulos: capitulos,
+    tendencia: tendencia
+  };
 }
 
 /* ---------- Índice de fotos por ítem (máx 2 por tipo) ---------- */
