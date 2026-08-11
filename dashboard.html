@@ -476,18 +476,22 @@ function render(d){
   // ---- Estado general + por sede ----
   html += '<div class="grid2">';
 
+  // Segmentos disjuntos: un ítem fuera del alcance de la Res. 929 cae SOLO
+  // en el segmento "Fuera de alcance", sin importar su estado — así no pinta
+  // a la vez su franja de estado y la de alcance, y el ancho siempre suma
+  // el total exacto (antes "Cumple" y "Fuera de alcance" se solapaban).
   var estados = [
-    {k:'cumple', l:'Cumple', c:'var(--c-cumple)'},
-    {k:'noCumple', l:'No cumple', c:'var(--c-nocumple)'},
-    {k:'enProceso', l:'En proceso', c:'var(--c-proceso)'},
-    {k:'pendiente', l:'Pendiente', c:'var(--c-pendiente)'},
-    {k:'noAplica', l:'No aplica', c:'var(--c-noaplica)'},
-    {k:'fueraAlcance', l:'Fuera de alcance', c:'var(--c-fuera)'}
+    {k:'cumpleEnAlcance', l:'Cumple', c:'var(--c-cumple)'},
+    {k:'noCumpleEnAlcance', l:'No cumple', c:'var(--c-nocumple)'},
+    {k:'enProcesoEnAlcance', l:'En proceso', c:'var(--c-proceso)'},
+    {k:'pendienteEnAlcance', l:'Pendiente', c:'var(--c-pendiente)'},
+    {k:'noAplicaEnAlcance', l:'No aplica', c:'var(--c-noaplica)'},
+    {k:'fueraAlcance', l:'Fuera de alcance (Res. 929)', c:'var(--c-fuera)'}
   ];
   html += '<div class="panel"><h2>Estado de los ítems</h2>'+
-    '<p class="hint">'+g.total+' ítems en total. Estos conteos son brutos: incluyen los ítems fuera del alcance de la Res. 929. '+
-      'De los '+g.cumple+' en "Cumple", '+(g.cumple-g.cumpleEnAlcance)+' quedan fuera de alcance, por eso el cumplimiento global es '+
-      g.cumpleEnAlcance+'/'+g.baseEnAlcance+' = '+g.pctCumplimiento+'%.</p>'+
+    '<p class="hint">'+g.total+' ítems en total. Los ítems fuera del alcance de la Res. 929 se agrupan aparte sin importar su estado, '+
+      'para que ningún ítem pinte dos franjas a la vez. El cumplimiento global ('+g.pctCumplimiento+'%) es '+
+      g.cumpleEnAlcance+' de '+g.baseEnAlcance+' ítems en alcance.</p>'+
     '<div class="stackBar">';
   estados.forEach(function(e){
     var pct = g.total>0 ? (100*g[e.k]/g.total) : 0;

@@ -605,7 +605,8 @@ var FUERA_ALCANCE_929 = {
 /* ---------- Métricas ejecutivas ---------- */
 function _metricas(filas){
   var m = {total:filas.length, cumple:0, noCumple:0, enProceso:0, pendiente:0, noAplica:0, fueraAlcance:0,
-           cumpleEnAlcance:0, baseEnAlcance:0,
+           cumpleEnAlcance:0, noCumpleEnAlcance:0, enProcesoEnAlcance:0, pendienteEnAlcance:0, noAplicaEnAlcance:0,
+           baseEnAlcance:0, fueraDelDenominador:0,
            critico:0, alto:0, medio:0, bajo:0, vencidos:0, sinFecha:0, avanceProm:0,
            porCapitulo:{}, criticosAltos:[]};
   var hoy = new Date(); hoy.setHours(0,0,0,0);
@@ -621,23 +622,34 @@ function _metricas(filas){
     // _tablaCapitulos pueda excluirlo del denominador igual que el cálculo
     // global (ver _tablaCapitulos más abajo). fueraAlcance sigue el mismo
     // patrón: contador propio, excluido del % pero visible en el tablero.
-    if(!m.porCapitulo[cap]) m.porCapitulo[cap] = {total:0, cumple:0, noCumple:0, noAplica:0, fueraAlcance:0, cumpleEnAlcance:0, otros:0};
+    if(!m.porCapitulo[cap]) m.porCapitulo[cap] = {total:0, cumple:0, noCumple:0, noAplica:0, fueraAlcance:0, cumpleEnAlcance:0, otros:0, fueraDelDenominador:0};
     m.porCapitulo[cap].total++;
     if(esFueraAlcance){ m.fueraAlcance++; m.porCapitulo[cap].fueraAlcance++; }
 
     // Los conteos brutos (cumple/noCumple/...) incluyen TODO, fuera de
     // alcance o no — Hallazgos y Plan de acción filtran directamente sobre
     // `filas`, no sobre estos contadores, así que un ítem "No cumple" fuera
-    // de alcance igual aparece ahí. Lo único que cambia con el alcance es
-    // cumpleEnAlcance (numerador del %) y baseEnAlcance (denominador).
+    // de alcance igual aparece ahí. Las variantes "...EnAlcance" son las que
+    // excluyen fuera de alcance en cada estado — se necesitan las cinco (no
+    // solo cumpleEnAlcance) para poder dibujar un desglose disjunto que sume
+    // el total exacto, sin asumir que solo "Cumple" puede quedar fuera del
+    // alcance de la Res. 929.
     if(est==='Cumple'){
       m.cumple++; m.porCapitulo[cap].cumple++;
       if(!esFueraAlcance){ m.cumpleEnAlcance++; m.porCapitulo[cap].cumpleEnAlcance++; }
     }
-    else if(est==='No cumple'){ m.noCumple++; m.porCapitulo[cap].noCumple++; }
-    else if(est==='En proceso'){ m.enProceso++; m.porCapitulo[cap].otros++; }
-    else if(est==='Pendiente'){ m.pendiente++; m.porCapitulo[cap].otros++; }
-    else if(est==='No aplica'){ m.noAplica++; m.porCapitulo[cap].noAplica++; }
+    else if(est==='No cumple'){ m.noCumple++; m.porCapitulo[cap].noCumple++; if(!esFueraAlcance) m.noCumpleEnAlcance++; }
+    else if(est==='En proceso'){ m.enProceso++; m.porCapitulo[cap].otros++; if(!esFueraAlcance) m.enProcesoEnAlcance++; }
+    else if(est==='Pendiente'){ m.pendiente++; m.porCapitulo[cap].otros++; if(!esFueraAlcance) m.pendienteEnAlcance++; }
+    else if(est==='No aplica'){ m.noAplica++; m.porCapitulo[cap].noAplica++; if(!esFueraAlcance) m.noAplicaEnAlcance++; }
+
+    // Denominador del %: un ítem sale del denominador si es "No aplica" O
+    // fuera de alcance (unión, no suma) — así uno que fuera ambas cosas a la
+    // vez no se resta dos veces y el % no queda inflado. Mismo criterio por
+    // capítulo, para que _tablaCapitulos y el gráfico de capítulos no
+    // repitan el bug de restar dos veces un ítem "No aplica" + fuera de
+    // alcance.
+    if(est==='No aplica' || esFueraAlcance){ m.fueraDelDenominador++; m.porCapitulo[cap].fueraDelDenominador++; }
 
     if(rie==='Critico'||rie==='Crítico') m.critico++;
     else if(rie==='Alto') m.alto++;
@@ -655,7 +667,7 @@ function _metricas(filas){
     if(av!=='' && av!=null && !isNaN(av)){ sumAvance += Number(av); conAvance++; }
   });
 
-  m.baseEnAlcance = m.total - m.noAplica - m.fueraAlcance;
+  m.baseEnAlcance = m.total - m.fueraDelDenominador;
   m.pctCumplimiento = m.baseEnAlcance>0 ? Math.round(100*m.cumpleEnAlcance/m.baseEnAlcance) : 0;
   m.avanceProm = conAvance? Math.round(sumAvance/conAvance) : 0;
   return m;
@@ -744,7 +756,7 @@ function obtenerDashboard(spreadsheetId){
 
   var capitulos = Object.keys(global.porCapitulo).map(function(cap){
     var c = global.porCapitulo[cap];
-    var base = c.total - c.noAplica - c.fueraAlcance;
+    var base = c.total - c.fueraDelDenominador;
     var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
     return {capitulo:cap, total:c.total, cumple:c.cumple, noCumple:c.noCumple,
              fueraAlcance:c.fueraAlcance||0, pctCumplimiento:pct};
@@ -760,6 +772,11 @@ function obtenerDashboard(spreadsheetId){
       // Numerador y denominador reales del %: el dashboard los muestra para
       // que no se lea "cumple" (conteo bruto) como si fuera el numerador.
       cumpleEnAlcance:global.cumpleEnAlcance, baseEnAlcance:global.baseEnAlcance,
+      // Variantes "en alcance" de cada estado: permiten dibujar un desglose
+      // disjunto (suma exacta = total) sin que un ítem fuera de alcance
+      // pinte a la vez su segmento de estado y el de "Fuera de alcance".
+      noCumpleEnAlcance:global.noCumpleEnAlcance, enProcesoEnAlcance:global.enProcesoEnAlcance,
+      pendienteEnAlcance:global.pendienteEnAlcance, noAplicaEnAlcance:global.noAplicaEnAlcance,
       cumple:global.cumple, noCumple:global.noCumple, enProceso:global.enProceso,
       pendiente:global.pendiente, noAplica:global.noAplica, fueraAlcance:global.fueraAlcance,
       critico:global.critico, alto:global.alto, medio:global.medio, bajo:global.bajo,
@@ -1071,10 +1088,11 @@ function _tablaCapitulos(body, m){
     // FIX histórico: antes el % por capítulo se calculaba contra c.total
     // (incluyendo "No aplica"), mientras que el % global excluía "No
     // aplica" del denominador — no reconciliaban. Ahora ambos usan el mismo
-    // criterio: base = total - noAplica - fueraAlcance, y el numerador es
-    // cumpleEnAlcance (no cumple, que sí incluiría ítems sin numeral en la
-    // 929 y podría superar el 100% frente a la base reducida).
-    var base = c.total - c.noAplica - c.fueraAlcance;
+    // criterio: base = total - fueraDelDenominador (unión de "No aplica" y
+    // fuera de alcance, sin restar dos veces un ítem que sea ambos), y el
+    // numerador es cumpleEnAlcance (no cumple, que sí incluiría ítems sin
+    // numeral en la 929 y podría superar el 100% frente a la base reducida).
+    var base = c.total - c.fueraDelDenominador;
     var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
     datos.push([cap, String(c.total), String(c.cumple), String(c.noCumple), String(c.fueraAlcance||0), pct+'%']);
     pcts.push(pct);
@@ -1590,7 +1608,7 @@ function _chartDistribucionEstados(m){
 function _chartCapitulos(m){
   var caps = Object.keys(m.porCapitulo).map(function(cap){
     var c = m.porCapitulo[cap];
-    var base = c.total - c.noAplica - c.fueraAlcance;
+    var base = c.total - c.fueraDelDenominador;
     var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
     // Los nombres de capítulo son largos ("1. Documentación técnica y
     // legal") — se recortan al número + primeras palabras para que la
