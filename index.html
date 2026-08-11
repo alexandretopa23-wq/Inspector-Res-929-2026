@@ -268,6 +268,8 @@ input,textarea,select{font-family:inherit;}
 .pill[data-k="En proceso"][data-active="1"]{background:var(--c-proceso);color:#fff;}
 .pill[data-k="Pendiente"][data-active="1"]{background:var(--c-pendiente);}
 .pill[data-k="No aplica"][data-active="1"]{background:var(--c-noaplica);color:#fff;}
+.pill[data-k="Todos"][data-active="1"]{background:var(--accent);color:var(--on-accent);}
+.pill[data-k="Sin responder"][data-active="1"]{background:var(--text-dim);color:var(--bg);}
 
 .pill[data-k="Critico"][data-active="1"]{background:var(--r-critico);color:#fff;}
 .pill[data-k="Alto"][data-active="1"]{background:var(--r-alto);}
@@ -347,9 +349,17 @@ input,textarea,select{font-family:inherit;}
     <div id="progressBarOuter"><div id="progressBarInner"></div></div>
     <div id="progressLabel"><span>Avance de esta inspección</span><b id="progressPct">0%</b></div>
   </div>
-  <div id="pendingSwitchRow" class="hidden">
-    <span class="lbl">Mostrar solo ítems pendientes</span>
-    <label class="switch"><input type="checkbox" id="onlyPendingToggle" checked><span class="slider"></span></label>
+  <div id="pendingSwitchRow" class="hidden" style="display:block;padding:10px 14px;">
+    <div class="lbl" style="margin-bottom:8px;">Filtrar por estado</div>
+    <div class="pillRow" id="estadoFilterPills">
+      <button class="pill small" data-k="Todos" data-active="1">Todos</button>
+      <button class="pill small" data-k="Sin responder" data-active="0">Sin responder</button>
+      <button class="pill small" data-k="Cumple" data-active="0">Cumple</button>
+      <button class="pill small" data-k="No cumple" data-active="0">No cumple</button>
+      <button class="pill small" data-k="En proceso" data-active="0">En proceso</button>
+      <button class="pill small" data-k="Pendiente" data-active="0">Pendiente</button>
+      <button class="pill small" data-k="No aplica" data-active="0">No aplica</button>
+    </div>
   </div>
 </div>
 
@@ -1400,8 +1410,8 @@ async function deleteSession(id){
 async function loadPrefs(){
   try{
     var v = await kvGet(LS_PREFS);
-    return v ? JSON.parse(v) : {onlyPending:true};
-  }catch(e){ return {onlyPending:true}; }
+    return v ? JSON.parse(v) : {estadoFiltro:[]};
+  }catch(e){ return {estadoFiltro:[]}; }
 }
 async function savePrefs(p){
   await kvSet(LS_PREFS, JSON.stringify(p));
@@ -1466,7 +1476,7 @@ window.addEventListener('beforeunload', function(e){
 
 /* ============ STATE ============ */
 
-var state = { view:'home', session:null, prefs: {onlyPending:true} };
+var state = { view:'home', session:null, prefs: {estadoFiltro:[]} };
 
 /* ============ TOAST ============ */
 var toastEl = document.getElementById('toast');
@@ -1484,8 +1494,17 @@ var checklistView = document.getElementById('checklistView');
 var progressWrap = document.getElementById('progressWrap');
 var pendingSwitchRow = document.getElementById('pendingSwitchRow');
 var fabSaveBar = document.getElementById('fabSaveBar');
-var onlyPendingToggle = document.getElementById('onlyPendingToggle');
-onlyPendingToggle.checked = !!state.prefs.onlyPending;
+var estadoFilterPills = document.getElementById('estadoFilterPills');
+
+function syncEstadoFilterPillsUI(){
+  var filtro = state.prefs.estadoFiltro || [];
+  estadoFilterPills.querySelectorAll('.pill').forEach(function(p){
+    var k = p.getAttribute('data-k');
+    var active = k==='Todos' ? filtro.length===0 : filtro.indexOf(k)>=0;
+    p.setAttribute('data-active', active?'1':'0');
+  });
+}
+syncEstadoFilterPillsUI();
 
 function fmtDate(ts){
   if(!ts) return '—';
@@ -2162,12 +2181,13 @@ function renderChapterBody(ci, forceShowAll){
   var cap = CHAPTERS[ci];
   var sess = state.session;
   var items = ITEMS.filter(function(it){return it.cap===cap;});
-  var onlyPending = forceShowAll ? false : state.prefs.onlyPending;
+  var filtro = forceShowAll ? [] : (state.prefs.estadoFiltro || []);
   var body = document.getElementById('chBody-'+ci);
 
-  var visibleItems = onlyPending ? items.filter(function(it){
+  var visibleItems = filtro.length ? items.filter(function(it){
     var r = sess.responses[it.id];
-    return !(r && r.estado);
+    var est = (r && r.estado) ? r.estado : 'Sin responder';
+    return filtro.indexOf(est) >= 0;
   }) : items;
 
   var html = '';
@@ -2188,7 +2208,7 @@ function renderChapterBody(ci, forceShowAll){
   }
 
   if(visibleItems.length===0){
-    html += '<div class="emptyState" style="padding:14px;">Todos los ítems de este capítulo ya fueron diligenciados. Desactiva "Solo pendientes" para revisarlos.</div>';
+    html += '<div class="emptyState" style="padding:14px;">Ningún ítem de este capítulo coincide con el filtro de estado seleccionado. Ajusta el filtro para revisarlos.</div>';
   }
 
   visibleItems.forEach(function(it){
@@ -2599,12 +2619,14 @@ function refreshAfterAnswer(itemEl, it, r){
   var ci = chapter.getAttribute('data-cap');
   updateChapterBadge(ci);
   renderChecklistHeader();
-  if(state.prefs.onlyPending){
+  var filtro = state.prefs.estadoFiltro || [];
+  var estNow = r.estado || 'Sin responder';
+  var stillMatches = filtro.length===0 || filtro.indexOf(estNow)>=0;
+  if(!stillMatches){
     itemEl.remove();
     var body = document.getElementById('chBody-'+ci);
     if(body && !body.querySelector('.item')){
-      var items = ITEMS.filter(function(x){return x.cap===CHAPTERS[ci];});
-      body.insertAdjacentHTML('beforeend','<div class="emptyState" style="padding:14px;">Todos los ítems de este capítulo ya fueron diligenciados. Desactiva "Solo pendientes" para revisarlos.</div>');
+      body.insertAdjacentHTML('beforeend','<div class="emptyState" style="padding:14px;">Ningún ítem de este capítulo coincide con el filtro de estado seleccionado. Ajusta el filtro para revisarlos.</div>');
     }
   } else {
     var showExtra = CIERRA_ITEM_ESTADOS.indexOf(r.estado)>=0;
@@ -2758,15 +2780,26 @@ document.addEventListener('click', function(e){
   }
 });
 
-onlyPendingToggle.onchange = function(){
-  state.prefs.onlyPending = onlyPendingToggle.checked;
-  savePrefs(state.prefs);
-  if(state.view==='checklist'){
-    document.querySelectorAll('.chapter.open').forEach(function(c){
-      renderChapterBody(c.getAttribute('data-cap'));
-    });
-  }
-};
+estadoFilterPills.querySelectorAll('.pill').forEach(function(p){
+  p.onclick = function(){
+    var k = p.getAttribute('data-k');
+    var filtro = (state.prefs.estadoFiltro || []).slice();
+    if(k==='Todos'){
+      filtro = [];
+    } else {
+      var idx = filtro.indexOf(k);
+      if(idx>=0) filtro.splice(idx,1); else filtro.push(k);
+    }
+    state.prefs.estadoFiltro = filtro;
+    savePrefs(state.prefs);
+    syncEstadoFilterPillsUI();
+    if(state.view==='checklist'){
+      document.querySelectorAll('.chapter.open').forEach(function(c){
+        renderChapterBody(c.getAttribute('data-cap'));
+      });
+    }
+  };
+});
 
 var STORAGE_PERSISTED = false;
 if('serviceWorker' in navigator){
@@ -2790,7 +2823,8 @@ if('serviceWorker' in navigator){
   STORAGE_PERSISTED = await requestPersistence();
   state.prefs = await loadPrefs();
   if(!state.prefs.syncMode) state.prefs.syncMode = 'manual';
-  onlyPendingToggle.checked = !!state.prefs.onlyPending;
+  if(!state.prefs.estadoFiltro) state.prefs.estadoFiltro = [];
+  syncEstadoFilterPillsUI();
   updateSyncModeUI();
   renderHome();
 })();
