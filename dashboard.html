@@ -433,7 +433,10 @@ function render(d){
   html += '<div class="bento">';
   html += statCard({
     lbl:'Cumplimiento global', val:g.pctCumplimiento+'%',
-    note: semaforoTexto(g.pctCumplimiento)+' · '+g.total+' ítems evaluados',
+    // El numerador NO es g.cumple (conteo bruto): es cumpleEnAlcance, que
+    // excluye los ítems fuera del alcance de la Res. 929. Se explicita aquí
+    // para que la cifra de la tarjeta cuadre con la leyenda de más abajo.
+    note: semaforoTexto(g.pctCumplimiento)+' · '+g.cumpleEnAlcance+' de '+g.baseEnAlcance+' ítems en alcance Res. 929',
     color: semaforoColor(g.pctCumplimiento),
     glow:'rgba(180,197,255,.25)',
     footer:'<div class="track"><i style="width:'+Math.max(2,g.pctCumplimiento)+'%;background:'+semaforoColor(g.pctCumplimiento)+'"></i></div>'
@@ -482,7 +485,9 @@ function render(d){
     {k:'fueraAlcance', l:'Fuera de alcance', c:'var(--c-fuera)'}
   ];
   html += '<div class="panel"><h2>Estado de los ítems</h2>'+
-    '<p class="hint">'+g.total+' ítems en total. "No aplica" y "Fuera de alcance" no cuentan para el %.</p>'+
+    '<p class="hint">'+g.total+' ítems en total. Estos conteos son brutos: incluyen los ítems fuera del alcance de la Res. 929. '+
+      'De los '+g.cumple+' en "Cumple", '+(g.cumple-g.cumpleEnAlcance)+' quedan fuera de alcance, por eso el cumplimiento global es '+
+      g.cumpleEnAlcance+'/'+g.baseEnAlcance+' = '+g.pctCumplimiento+'%.</p>'+
     '<div class="stackBar">';
   estados.forEach(function(e){
     var pct = g.total>0 ? (100*g[e.k]/g.total) : 0;

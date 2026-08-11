@@ -757,6 +757,9 @@ function obtenerDashboard(spreadsheetId){
     hojaNombre: sh.getName(),
     global: {
       total:global.total, pctCumplimiento:global.pctCumplimiento,
+      // Numerador y denominador reales del %: el dashboard los muestra para
+      // que no se lea "cumple" (conteo bruto) como si fuera el numerador.
+      cumpleEnAlcance:global.cumpleEnAlcance, baseEnAlcance:global.baseEnAlcance,
       cumple:global.cumple, noCumple:global.noCumple, enProceso:global.enProceso,
       pendiente:global.pendiente, noAplica:global.noAplica, fueraAlcance:global.fueraAlcance,
       critico:global.critico, alto:global.alto, medio:global.medio, bajo:global.bajo,
@@ -877,6 +880,17 @@ function _portada(body, sede, piscina, fecha, responsable, m){
     if(!coloresFila[rr]) continue;
     distTabla.getRow(rr).getCell(0).getChild(0).asParagraph().setForegroundColor(coloresFila[rr]).setBold(true);
     distTabla.getRow(rr).getCell(2).getChild(0).asParagraph().setForegroundColor(coloresFila[rr]);
+  }
+  // Aclaración obligada: esta tabla cuenta en bruto y la dona de arriba cuenta
+  // solo lo que está en alcance, así que "Cumple" y el numerador del % nunca
+  // coinciden cuando hay ítems fuera de alcance. Sin esta nota la diferencia
+  // se lee como un error de cálculo.
+  if(m.fueraAlcance > 0){
+    _nota(distCard,
+      'Los conteos de esta tabla son brutos e incluyen los ' + m.fueraAlcance + ' ítem(s) fuera del alcance de la ' +
+      'Res. 929. Por eso "Cumple" (' + m.cumple + ') no coincide con el numerador del cumplimiento global: ese ' +
+      'porcentaje se calcula únicamente sobre los ítems en alcance (' + m.cumpleEnAlcance + ' de ' +
+      m.baseEnAlcance + ' = ' + m.pctCumplimiento + '%).');
   }
 
   body.appendPageBreak();
