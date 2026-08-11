@@ -1854,9 +1854,12 @@ function refrescarAlertasFicha(itemEl, sess){
    ítem "dueño" de cada campo — para ver de un vistazo qué falta sin tener
    que ir capítulo por capítulo. No es un formulario, es solo lectura;
    diligenciar sigue haciéndose desde el ítem correspondiente. */
+var TUBERIA_LEGADO_KEYS = ['tuberiaSuccionDiam','tuberiaDescargaDiam','tuberiaLongitud','tuberiaAccesorios','tuberiaPctSuccion'];
+var LADO_LABEL = {succion:'Succión', presion:'Presión / descarga'};
 function abrirFichaModal(){
   var sess = state.session;
   var ficha = getFicha(sess);
+  var tramos = tramosValidos(ficha);
   var dueno = {};
   Object.keys(ITEM_FICHA_CAMPOS).forEach(function(itemId){
     ITEM_FICHA_CAMPOS[itemId].forEach(function(key){ if(!dueno[key]) dueno[key]=itemId; });
@@ -1865,7 +1868,9 @@ function abrirFichaModal(){
     var c = FICHA_CAMPOS[key];
     var val = ficha[key];
     var texto;
-    if(val==null || val===''){ texto = '<span style="color:var(--text-faint);">— sin diligenciar —</span>'; }
+    if(tramos.length && TUBERIA_LEGADO_KEYS.indexOf(key)>=0){
+      texto = '<span style="color:var(--text-faint);">— reemplazado por '+tramos.length+' tramo(s) cargados, ver detalle abajo —</span>';
+    } else if(val==null || val===''){ texto = '<span style="color:var(--text-faint);">— sin diligenciar —</span>'; }
     else if(c.type==='select'){
       var opt = c.options.filter(function(o){return o.v===val;})[0];
       texto = esc(opt?opt.l:val);
@@ -1874,6 +1879,15 @@ function abrirFichaModal(){
     }
     return '<tr><td>'+esc(c.label)+'</td><td>'+texto+'</td><td class="mono" style="white-space:nowrap;">'+esc(dueno[key]||'—')+'</td></tr>';
   }).join('');
+  if(tramos.length){
+    filas += tramos.map(function(t){
+      var nombre = t.nombre || '(sin nombre)';
+      var detalle = 'Ø'+(t.diametro!=null?t.diametro:'—')+' pulg · '+(LADO_LABEL[t.lado]||'Presión / descarga')+
+        ' · '+(t.longitud!=null?t.longitud:'—')+' m · '+(t.accesorios!=null?t.accesorios:'—')+' accesorios'+
+        (t.nLineas>1?' · '+t.nLineas+' líneas en paralelo':'');
+      return '<tr><td>Tramo — '+esc(nombre)+'</td><td>'+esc(detalle)+'</td><td class="mono" style="white-space:nowrap;">CHK-078</td></tr>';
+    }).join('');
+  }
   var overlay = document.createElement('div');
   overlay.className = 'modalOverlay';
   overlay.innerHTML =
