@@ -23,9 +23,67 @@ var COLUMNAS_ESPERADAS = [
   'Evidencia fotográfica - estado actual','Evidencia fotográfica - cierre','Link carpeta / evidencia','Observaciones'
 ];
 
-/* Paleta corporativa (coherente con plan-accion-piscinas) */
-var C_ENCABEZADO='#212121', C_TITULO='#424242', C_ACENTO='#E65100',
-    C_CELDA='#EEEEEE', C_FONDO='#FAFAFA', C_OK='#2E7D32';
+/* Paleta corporativa — alineada al diseño "Industrial Integrity" de la PWA
+   (index.html/dashboard.html) y al mockup de Stitch para el informe: slate
+   oscuro para texto/encabezados, azul para "conforme", coral para
+   hallazgos, ámbar para en proceso, gris para pendiente/no aplica. Los
+   nombres de las constantes se mantienen (C_TITULO, C_ACENTO, etc.) porque
+   los usan ~20 funciones de anexos más abajo — solo cambian los valores. */
+var C_ENCABEZADO='#0F172A',      // slate-900 — títulos H1/portada
+    C_TITULO='#475569',          // slate-600 — texto secundario/H2
+    C_ACENTO='#DC2626',          // rojo-600 — texto de alerta (crítico/no cumple)
+    C_CELDA='#E2E8F0',           // slate-200 — bordes y filas alternas
+    C_FONDO='#F8FAFC',           // slate-50 — filas pares
+    C_OK='#2563EB';              // azul-600 — texto "conforme" (coherente con la app)
+
+/* Colores de relleno para gráficas e insignias (más saturados que los de
+   texto de arriba, pensados para áreas de color, no para letras). */
+var C_FILL_CUMPLE='#3B82F6', C_FILL_NOCUMPLE='#F87171', C_FILL_PROCESO='#F59E0B',
+    C_FILL_PENDIENTE='#94A3B8', C_FILL_NOAPLICA='#CBD5E1',
+    C_HEADER_TABLA='#F1F5F9';    // slate-100 — fondo de encabezado de tabla
+var C_AMBAR='#B45309';           // ámbar-700 — riesgo medio / lectura de advertencia
+
+/* Tipografía y geometría de página. El mockup usa Inter + JetBrains Mono;
+   Google Docs no trae ninguna de las dos por defecto, así que se mapean a
+   las equivalentes disponibles en Docs (Arial para UI, Roboto Mono para
+   valores numéricos). A4 son 595 pt de ancho: con márgenes de 45 pt quedan
+   505 pt útiles, y ese es el ancho contra el que se dimensionan TODAS las
+   tablas y columnas del informe. */
+var FUENTE='Arial', FUENTE_MONO='Roboto Mono';
+var MARGEN_PAG=45, ANCHO_UTIL=595-(MARGEN_PAG*2);   // 505 pt
+
+/* Estilos por defecto del documento: se aplican una sola vez sobre el body
+   y los niveles de encabezado, así cada párrafo/tabla los hereda en vez de
+   tener que re-estilizar cada llamada. Equivale al bloque de fontSize/
+   fontFamily del tailwind.config del mockup. */
+function _configurarEstilosDoc(body){
+  body.setMarginTop(MARGEN_PAG).setMarginBottom(MARGEN_PAG)
+      .setMarginLeft(MARGEN_PAG).setMarginRight(MARGEN_PAG);
+
+  var A = DocumentApp.Attribute;
+  var normal = {};
+  normal[A.FONT_FAMILY]=FUENTE; normal[A.FONT_SIZE]=9.5;
+  normal[A.FOREGROUND_COLOR]=C_TITULO; normal[A.LINE_SPACING]=1.15;
+  body.setAttributes(normal);
+
+  var h1 = {};
+  h1[A.FONT_FAMILY]=FUENTE; h1[A.FONT_SIZE]=18; h1[A.BOLD]=true;
+  h1[A.FOREGROUND_COLOR]=C_ENCABEZADO;
+  h1[A.SPACING_BEFORE]=20; h1[A.SPACING_AFTER]=8;
+  body.setHeadingAttributes(DocumentApp.ParagraphHeading.HEADING1, h1);
+
+  var h2 = {};
+  h2[A.FONT_FAMILY]=FUENTE; h2[A.FONT_SIZE]=12.5; h2[A.BOLD]=true;
+  h2[A.FOREGROUND_COLOR]=C_ENCABEZADO;
+  h2[A.SPACING_BEFORE]=14; h2[A.SPACING_AFTER]=6;
+  body.setHeadingAttributes(DocumentApp.ParagraphHeading.HEADING2, h2);
+
+  var h3 = {};
+  h3[A.FONT_FAMILY]=FUENTE; h3[A.FONT_SIZE]=11.5; h3[A.BOLD]=true;
+  h3[A.FOREGROUND_COLOR]=C_ENCABEZADO;
+  h3[A.SPACING_BEFORE]=14; h3[A.SPACING_AFTER]=2;
+  body.setHeadingAttributes(DocumentApp.ParagraphHeading.HEADING3, h3);
+}
 
 /* Traducción de los códigos que manda la PWA (selects de la ficha técnica)
    a texto legible para los anexos del informe. */
@@ -501,6 +559,7 @@ function generarInformeVaso(sede, piscina, fecha){
   var body = doc.getBody();
   body.setPageWidth(595).setPageHeight(842); // A4 en puntos
   body.clear();
+  _configurarEstilosDoc(body);
 
   _portada(body, sede, piscina, fecha, filas[0][COL.responsable-1], m);
   _objetivo(body);
@@ -735,24 +794,211 @@ function _indiceFotos(sede, piscina, fecha){
 
 /* ---------- Secciones del documento ---------- */
 function _portada(body, sede, piscina, fecha, responsable, m){
-  var t = body.appendParagraph('INFORME DE INSPECCIÓN NORMATIVA');
-  t.setHeading(DocumentApp.ParagraphHeading.TITLE)
-   .setForegroundColor(C_ENCABEZADO).setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  // Encabezado: título+subtítulo a la izquierda y ficha de metadatos
+  // compacta a la derecha, en la misma fila — igual que el header del
+  // mockup de Stitch. DocumentApp no tiene flex/grid, así que el layout de
+  // columnas se logra con una tabla de una fila sin bordes visibles
+  // (_filaColumnas), y cada "tarjeta" es una tabla anidada de una sola
+  // celda con borde propio (_tarjetaEnCelda).
+  // 62% título / 38% ficha, sobre los 505 pt útiles.
+  var header = _filaColumnas(body, [313, 192]);
+  var colTitulo = header[0], colMeta = header[1];
 
-  body.appendParagraph('Resolución 929 de 2026 — Ministerio de Salud y Protección Social')
-      .setForegroundColor(C_TITULO).setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  var pTitulo = colTitulo.getChild(0).asParagraph();
+  pTitulo.setText('INFORME DE INSPECCIÓN NORMATIVA');
+  pTitulo.setFontSize(19).setBold(true).setForegroundColor(C_ENCABEZADO)
+         .setSpacingBefore(0).setSpacingAfter(2);
+  colTitulo.appendParagraph('Resolución 929 de 2026')
+    .setFontSize(10.5).setBold(false).setForegroundColor(C_TITULO);
+
+  var metaCard = _tarjetaEnCelda(colMeta, C_FONDO);
+  var metaTabla = metaCard.appendTable([
+    ['SEDE', String(sede)],
+    ['VASO', String(piscina)],
+    ['FECHA', String(fecha)],
+    ['RESPONSABLE', String(responsable||'—')]
+  ]);
+  metaTabla.setBorderWidth(0);
+  for(var r=0;r<metaTabla.getNumRows();r++){
+    var fila = metaTabla.getRow(r);
+    var etq = fila.getCell(0), val = fila.getCell(1);
+    etq.setWidth(68).setBackgroundColor(C_FONDO);
+    val.setWidth(94).setBackgroundColor(C_FONDO);
+    etq.setPaddingTop(3).setPaddingBottom(3).setPaddingLeft(0).setPaddingRight(4);
+    val.setPaddingTop(3).setPaddingBottom(3).setPaddingLeft(0).setPaddingRight(0);
+    etq.getChild(0).asParagraph().setFontSize(7.5).setBold(true).setForegroundColor(C_TITULO);
+    val.getChild(0).asParagraph().setFontSize(9).setBold(true).setForegroundColor(C_ENCABEZADO)
+       .setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+  }
 
   body.appendParagraph('');
-  var tabla = body.appendTable([
-    ['Sede', String(sede)],
-    ['Vaso / estructura', String(piscina)],
-    ['Fecha de inspección', String(fecha)],
-    ['Responsable de la inspección', String(responsable||'—')],
-    ['Cumplimiento global', m.pctCumplimiento + '%'],
-    ['Fecha de generación', Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')]
+  _h2(body, 'Resumen ejecutivo');
+
+  // Dos tarjetas apiladas a ancho completo: primero el cumplimiento global
+  // (dona + cifra), debajo la distribución de hallazgos (torta + tabla).
+  // La dona va a la izquierda de la cifra dentro de su propia tarjeta, para
+  // que el bloque no ocupe media página de alto.
+  var donaCard = _tarjetaEnCelda(_filaColumnas(body, [ANCHO_UTIL])[0]);
+  var pDonaTitulo = donaCard.getChild(0).asParagraph();
+  pDonaTitulo.setText('CUMPLIMIENTO GLOBAL');
+  pDonaTitulo.setFontSize(8).setBold(true).setForegroundColor(C_TITULO);
+
+  var interior = _filaColumnas(donaCard, [150, 325]);
+  _insertarImagenCentrada(interior[0], _chartDonutCumplimiento(m.pctCumplimiento), 130);
+  var pPct = interior[1].getChild(0).asParagraph();
+  pPct.setText(m.pctCumplimiento+'%');
+  pPct.setBold(true).setFontSize(34).setForegroundColor(C_ENCABEZADO)
+      .setSpacingBefore(18).setSpacingAfter(0);
+  interior[1].appendParagraph(_semaforo(m.pctCumplimiento))
+    .setFontSize(11).setBold(true).setForegroundColor(_colorPct(m.pctCumplimiento))
+    .setSpacingBefore(0);
+  interior[1].appendParagraph(m.cumpleEnAlcance+' de '+m.baseEnAlcance+' ítems conformes dentro del alcance de la Res. 929')
+    .setFontSize(8.5).setForegroundColor(C_TITULO).setSpacingBefore(4);
+
+  body.appendParagraph('').setFontSize(6);
+
+  var distCard = _tarjetaEnCelda(_filaColumnas(body, [ANCHO_UTIL])[0]);
+  var pDistTitulo = distCard.getChild(0).asParagraph();
+  pDistTitulo.setText('DISTRIBUCIÓN DE HALLAZGOS');
+  pDistTitulo.setFontSize(8).setBold(true).setForegroundColor(C_TITULO);
+  _insertarImagenCentrada(distCard, _chartDistribucionEstados(m), 300);
+
+  var distTabla = distCard.appendTable([
+    ['Estado','Cantidad','%'],
+    ['Cumple', String(m.cumple), (m.total>0?Math.round(100*m.cumple/m.total):0)+'%'],
+    ['No cumple', String(m.noCumple), (m.total>0?Math.round(100*m.noCumple/m.total):0)+'%'],
+    ['En proceso', String(m.enProceso), (m.total>0?Math.round(100*m.enProceso/m.total):0)+'%'],
+    ['Pendiente', String(m.pendiente), (m.total>0?Math.round(100*m.pendiente/m.total):0)+'%'],
+    ['No aplica', String(m.noAplica), '—']
   ]);
-  _estiloTabla(tabla, true);
+  _estiloTabla(distTabla, true, [230, 125, 120]);
+  var coloresFila = [null, C_OK, C_ACENTO, C_AMBAR, C_TITULO, C_TITULO];
+  for(var rr=1; rr<distTabla.getNumRows(); rr++){
+    if(!coloresFila[rr]) continue;
+    distTabla.getRow(rr).getCell(0).getChild(0).asParagraph().setForegroundColor(coloresFila[rr]).setBold(true);
+    distTabla.getRow(rr).getCell(2).getChild(0).asParagraph().setForegroundColor(coloresFila[rr]);
+  }
+
   body.appendPageBreak();
+}
+
+/* ---------- Layout: columnas y tarjetas sin CSS ----------
+   DocumentApp no tiene flexbox/grid — el truco estándar para poner
+   elementos lado a lado en un Google Doc es una tabla de layout con borde
+   invisible (_filaColumnas) y, dentro de cada celda, una tabla anidada de
+   1x1 con borde propio para simular una "tarjeta" (_tarjetaEnCelda). */
+function _filaColumnas(body, widths){
+  var vacio = widths.map(function(){ return ''; });
+  var t = body.appendTable([vacio]);
+  t.setBorderWidth(0).setBorderColor('#FFFFFF');
+  var celdas = [];
+  for(var i=0;i<widths.length;i++){
+    var celda = t.getCell(0,i);
+    celda.setWidth(widths[i]);
+    celda.setPaddingTop(0).setPaddingBottom(0);
+    celda.setPaddingLeft(i===0?0:10);
+    celda.setPaddingRight(0);
+    celdas.push(celda);
+  }
+  return celdas;
+}
+function _tarjetaEnCelda(celdaPadre, fondo){
+  var t = celdaPadre.appendTable([['']]);
+  t.setBorderColor(C_CELDA).setBorderWidth(1);
+  var celda = t.getCell(0,0);
+  celda.setBackgroundColor(fondo || '#FFFFFF');
+  celda.setPaddingTop(10).setPaddingBottom(10).setPaddingLeft(10).setPaddingRight(10);
+  return celda;
+}
+
+/* Color semántico de un porcentaje de cumplimiento — mismo umbral que
+   _semaforo(), centralizado para no repetir el ternario en cada sección. */
+function _colorPct(pct){
+  return pct>=85 ? C_OK : (pct>=70 ? C_AMBAR : C_ACENTO);
+}
+/* Color semántico de un nivel de riesgo (acepta "Critico" y "Crítico"). */
+function _colorRiesgo(riesgo){
+  var r = String(riesgo||'');
+  if(r==='Critico'||r==='Crítico'||r==='Alto') return C_ACENTO;
+  if(r==='Medio') return C_AMBAR;
+  return C_TITULO;
+}
+
+/* ---------- Tarjeta de datos etiqueta → valor ----------
+   Es el componente que más se repite en el diseño: una "card" con borde,
+   columna izquierda gris con la etiqueta en minúscula-negrita y columna
+   derecha blanca con el valor destacado. Sustituye a _estiloTabla(t,false)
+   en Hallazgos, Anexos A-D y Registro fotográfico.
+   opts: {ancho, pctEtiqueta, mono} — `mono` pone el valor en Roboto Mono,
+   como el font-mono que usa el mockup para magnitudes numéricas. */
+function _tarjetaDatos(contenedor, filas, opts){
+  opts = opts || {};
+  var ancho = opts.ancho || ANCHO_UTIL;
+  var anchoEtq = Math.round(ancho * (opts.pctEtiqueta || 0.34));
+  var t = contenedor.appendTable(filas.map(function(f){
+    return [String(f[0]), String(f[1])];
+  }));
+  t.setBorderColor(C_CELDA).setBorderWidth(0.75);
+  for(var r=0;r<t.getNumRows();r++){
+    var fila = t.getRow(r);
+    var etq = fila.getCell(0), val = fila.getCell(1);
+    etq.setWidth(anchoEtq).setBackgroundColor(C_HEADER_TABLA);
+    val.setWidth(ancho-anchoEtq).setBackgroundColor('#FFFFFF');
+    etq.setPaddingTop(6).setPaddingBottom(6).setPaddingLeft(9).setPaddingRight(9);
+    val.setPaddingTop(6).setPaddingBottom(6).setPaddingLeft(9).setPaddingRight(9);
+    etq.getChild(0).asParagraph().setFontSize(8.5).setBold(true).setForegroundColor(C_TITULO);
+    var pv = val.getChild(0).asParagraph();
+    pv.setFontSize(9.5).setBold(true).setForegroundColor(C_ENCABEZADO);
+    if(opts.mono) pv.setFontFamily(FUENTE_MONO);
+  }
+  return t;
+}
+
+/* Pinta el valor de una fila concreta de una tarjeta creada con
+   _tarjetaDatos (índice 0-based), para resaltar estado/riesgo en color. */
+function _colorValorFila(tabla, indiceFila, color){
+  tabla.getRow(indiceFila).getCell(1).getChild(0).asParagraph().setForegroundColor(color);
+}
+
+/* Tarjeta de datos con banda de encabezado propia: el ID del ítem (y su
+   insignia de riesgo debajo) en la columna izquierda, y el nombre del ítem
+   en la derecha. Al vivir el título DENTRO de la tabla, nunca queda
+   separado de sus datos por un salto de página. */
+function _tarjetaHallazgo(contenedor, itemId, nombreItem, riesgo, filas){
+  var color = _colorRiesgo(riesgo);
+  var todas = [[itemId, nombreItem]].concat(filas);
+  var t = _tarjetaDatos(contenedor, todas);
+
+  var cabId = t.getRow(0).getCell(0), cabNombre = t.getRow(0).getCell(1);
+  cabId.setBackgroundColor(C_FONDO);
+  cabNombre.setBackgroundColor(C_FONDO);
+
+  var pId = cabId.getChild(0).asParagraph();
+  pId.setFontSize(9).setBold(true).setFontFamily(FUENTE_MONO).setForegroundColor(color)
+     .setSpacingAfter(0);
+  cabId.appendParagraph('● RIESGO ' + String(riesgo).toUpperCase())
+       .setFontSize(7.5).setBold(true).setForegroundColor(color)
+       .setSpacingBefore(2).setSpacingAfter(0);
+
+  cabNombre.getChild(0).asParagraph()
+    .setFontSize(11).setBold(true).setForegroundColor(color);
+  return t;
+}
+
+/* Rótulo de sección corto en mayúscula (el "label-bold uppercase" del
+   mockup): más discreto que un HEADING, para encabezar galerías y bloques
+   dentro de una sección ya titulada. */
+function _rotulo(contenedor, txt){
+  return contenedor.appendParagraph(txt.toUpperCase())
+    .setFontSize(8).setBold(true).setForegroundColor(C_TITULO)
+    .setSpacingBefore(10).setSpacingAfter(3);
+}
+
+/* Nota al pie de sección: texto pequeño, gris y en cursiva. */
+function _nota(contenedor, txt){
+  return contenedor.appendParagraph(txt)
+    .setFontSize(8.5).setItalic(true).setForegroundColor(C_TITULO)
+    .setSpacingAfter(8);
 }
 
 function _objetivo(body){
@@ -767,16 +1013,14 @@ function _objetivo(body){
 }
 
 function _tableroKPI(body, m){
-  _h1(body, '2. Tablero ejecutivo');
+  // La distribución de hallazgos (gráfica + tabla) ya se muestra en el
+  // "Resumen ejecutivo" de la portada (_portada) — esta sección cubre los
+  // indicadores de gestión que no caben en esa tarjeta compacta, sin
+  // repetir la misma gráfica dos veces en el informe.
+  _h1(body, '2. Tablero ejecutivo — indicadores de gestión');
   var t = body.appendTable([
     ['Indicador','Valor','Lectura'],
-    ['Cumplimiento global (Res. 929)', m.pctCumplimiento+'%', _semaforo(m.pctCumplimiento)],
     ['Ítems evaluados', String(m.total), '—'],
-    ['Cumple', String(m.cumple), '—'],
-    ['No cumple', String(m.noCumple), m.noCumple>0?'Requiere acción':'Sin desviaciones'],
-    ['En proceso', String(m.enProceso), '—'],
-    ['Pendiente', String(m.pendiente), '—'],
-    ['No aplica', String(m.noAplica), 'Excluido del cálculo'],
     ['Fuera del alcance de la Res. 929', String(m.fueraAlcance), 'Excluido del cálculo — dominio de la Res. 234'],
     ['Riesgo crítico', String(m.critico), m.critico>0?'ATENCIÓN INMEDIATA':'Sin críticos'],
     ['Riesgo alto', String(m.alto), m.alto>0?'Prioritario':'—'],
@@ -784,7 +1028,14 @@ function _tableroKPI(body, m){
     ['Hallazgos sin fecha compromiso', String(m.sinFecha), m.sinFecha>0?'Asignar fecha':'Completo'],
     ['Avance promedio de cierre', m.avanceProm+'%', '—']
   ]);
-  _estiloTabla(t, true);
+  _estiloTabla(t, true, [220, 70, 215]);
+  // Realza en rojo las filas con lectura de alerta activa.
+  for(var i=1;i<t.getNumRows();i++){
+    var lectura = t.getRow(i).getCell(2).getText();
+    if(/ATENCIÓN|Prioritario|Fuera de plazo|Asignar fecha/.test(lectura)){
+      t.getRow(i).getCell(2).getChild(0).asParagraph().setForegroundColor(C_ACENTO).setBold(true);
+    }
+  }
 }
 function _semaforo(pct){
   if(pct>=95) return 'Conforme';
@@ -795,7 +1046,12 @@ function _semaforo(pct){
 
 function _tablaCapitulos(body, m){
   _h1(body, '3. Cumplimiento por capítulo normativo');
+
+  _insertarImagenCentrada(body, _chartCapitulos(m), ANCHO_UTIL);
+  body.appendParagraph('').setFontSize(6);
+
   var datos = [['Capítulo','Ítems','Cumple','No cumple','Fuera de alcance','% cumplimiento (Res. 929)']];
+  var pcts = [null]; // paralelo a `datos`, guarda el % de cada fila para colorear después
   Object.keys(m.porCapitulo).forEach(function(cap){
     var c = m.porCapitulo[cap];
     // FIX histórico: antes el % por capítulo se calculaba contra c.total
@@ -807,17 +1063,21 @@ function _tablaCapitulos(body, m){
     var base = c.total - c.noAplica - c.fueraAlcance;
     var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
     datos.push([cap, String(c.total), String(c.cumple), String(c.noCumple), String(c.fueraAlcance||0), pct+'%']);
+    pcts.push(pct);
   });
   var t = body.appendTable(datos);
-  _estiloTabla(t, true);
+  _estiloTabla(t, true, [175, 45, 50, 60, 65, 110]);
+  for(var r=1;r<t.getNumRows();r++){
+    var celda = t.getRow(r).getCell(5).getChild(0).asParagraph();
+    celda.setForegroundColor(_colorPct(pcts[r])).setBold(true);
+  }
 }
 
 function _hallazgosConFotos(body, filas, fotos){
   _h1(body, '4. Hallazgos');
-  body.appendParagraph(
+  _nota(body,
     'La evidencia fotográfica de cada ítem, incluidos los de esta sección, se presenta ' +
-    'de forma consolidada en el Anexo técnico — Registro fotográfico (sección 8).'
-  ).setForegroundColor(C_TITULO).setFontSize(9).setItalic(true);
+    'de forma consolidada en el Anexo técnico — Registro fotográfico (sección 8).');
   var conHallazgo = filas.filter(function(f){
     var est = String(f[COL.estado-1]||'');
     return est==='No cumple' || est==='En proceso' || est==='Pendiente';
@@ -836,15 +1096,15 @@ function _hallazgosConFotos(body, filas, fotos){
   });
 
   conHallazgo.forEach(function(f){
-    var itemId = String(f[COL.id-1]);
     var riesgo = String(f[COL.riesgo-1]||'Sin clasificar');
-    var esCritico = (riesgo==='Critico'||riesgo==='Crítico'||riesgo==='Alto');
 
-    var h = body.appendParagraph(itemId + ' · ' + String(f[COL.item-1]));
-    h.setHeading(DocumentApp.ParagraphHeading.HEADING3)
-     .setForegroundColor(esCritico ? C_ACENTO : C_TITULO);
-
-    var t = body.appendTable([
+    // Cada hallazgo es UNA sola tabla, con el ID y el nombre del ítem en su
+    // primera fila a modo de encabezado. Antes eran un título suelto + dos
+    // tablas: al saltar de página Docs dejaba el título huérfano o mandaba
+    // la segunda tabla sola a la página siguiente con medio folio en blanco.
+    // Con una tabla única el corte, si ocurre, es entre filas y se lee
+    // continuo. (DocumentApp no expone "mantener junto con lo siguiente".)
+    var t = _tarjetaHallazgo(body, String(f[COL.id-1]), String(f[COL.item-1]), riesgo, [
       ['Capítulo', String(f[COL.capitulo-1]||'—')],
       ['Estado', String(f[COL.estado-1]||'—')],
       ['Nivel de riesgo', riesgo],
@@ -854,8 +1114,9 @@ function _hallazgosConFotos(body, filas, fotos){
       ['Fecha compromiso', _fechaStr(f[COL.fechaCompromiso-1])||'—'],
       ['% avance', String(f[COL.avance-1]!==''?f[COL.avance-1]+'%':'—')]
     ]);
-    _estiloTabla(t, false);
-    body.appendParagraph('');
+    _colorValorFila(t, 2, C_ACENTO);              // Estado
+    _colorValorFila(t, 3, _colorRiesgo(riesgo));  // Nivel de riesgo
+    body.appendParagraph('').setFontSize(8);
   });
 
   // Esta sección es la narrativa de hallazgo (riesgo, acción, responsable,
@@ -876,10 +1137,9 @@ function _hallazgosConFotos(body, filas, fotos){
 function _anexoFotografico(body, filas, fotos){
   body.appendPageBreak();
   _h1(body, '8. Anexo técnico — Registro fotográfico');
-  body.appendParagraph(
+  _nota(body,
     'Evidencia fotográfica de los ítems verificados, en orden de ítem, con la fecha de ' +
-    'inspección y la observación o hallazgo correspondiente según el estado registrado.'
-  ).setForegroundColor(C_TITULO).setFontSize(9);
+    'inspección y la observación o hallazgo correspondiente según el estado registrado.');
 
   var conFoto = filas.filter(function(f){
     var fi = fotos[String(f[COL.id-1])];
@@ -903,40 +1163,57 @@ function _anexoFotografico(body, filas, fotos){
     var etiquetaObs = esConforme ? 'Observación' : 'Hallazgo / condición observada';
     var textoObs = esConforme ? String(f[COL.observaciones-1]||'—') : String(f[COL.hallazgo-1]||'—');
 
-    var h = body.appendParagraph(itemId + ' · ' + String(f[COL.item-1]));
-    h.setHeading(DocumentApp.ParagraphHeading.HEADING3).setForegroundColor(C_TITULO);
-
-    var t = body.appendTable([
+    // Mismo criterio que en Hallazgos: el título va dentro de la tabla para
+    // que un salto de página no lo deje solo al final del folio.
+    var t = _tarjetaDatos(body, [
+      [itemId, String(f[COL.item-1])],
       ['Fecha de inspección', _fechaStr(f[COL.fecha-1])||'—'],
       ['Estado', est],
       [etiquetaObs, textoObs]
     ]);
-    _estiloTabla(t, false);
+    var cabId = t.getRow(0).getCell(0), cabNombre = t.getRow(0).getCell(1);
+    cabId.setBackgroundColor(C_FONDO);
+    cabNombre.setBackgroundColor(C_FONDO);
+    cabId.getChild(0).asParagraph()
+      .setFontSize(9).setBold(true).setFontFamily(FUENTE_MONO).setForegroundColor(C_ENCABEZADO);
+    cabNombre.getChild(0).asParagraph()
+      .setFontSize(11).setBold(true).setForegroundColor(C_ENCABEZADO);
+    _colorValorFila(t, 2, esConforme ? C_OK : C_ACENTO);
 
     var fi = fotos[itemId];
     _insertarFotos(body, fi.actual, 'Fotografía — estado actual');
     _insertarFotos(body, fi.cierre, 'Fotografía — cierre');
-    body.appendParagraph('');
+    body.appendParagraph('').setFontSize(8);
   });
 }
 
-/** Inserta hasta 2 fotos en una fila de tabla de 2 columnas, escaladas a ancho A4. */
+/** Galería de hasta 2 fotos en una fila de 2 columnas, con el nombre del
+ *  archivo como pie en monoespaciada — la "photo card" del mockup. */
 function _insertarFotos(body, archivos, rotulo){
   if(!archivos || !archivos.length) return;
-  body.appendParagraph(rotulo).setForegroundColor(C_TITULO).setBold(true).setFontSize(9);
+  _rotulo(body, rotulo);
+  var anchoCelda = Math.floor(ANCHO_UTIL/2);            // 252 pt por columna
+  // Una sola foto no se estira a todo el ancho: se topa en 330 pt para que
+  // una imagen vertical no ocupe la página entera.
+  var maxW = archivos.length>1 ? anchoCelda-24 : 330;
   var tabla = body.appendTable();
   var fila = tabla.appendTableRow();
   archivos.slice(0,2).forEach(function(file){
     var celda = fila.appendTableCell('');
+    celda.setWidth(archivos.length>1 ? anchoCelda : ANCHO_UTIL)
+         .setBackgroundColor('#FFFFFF')
+         .setPaddingTop(8).setPaddingBottom(8).setPaddingLeft(8).setPaddingRight(8);
     var img = celda.appendImage(file.getBlob());
-    var maxW = archivos.length>1 ? 230 : 400;
     var esc = Math.min(1, maxW / img.getWidth());
     img.setWidth(Math.round(img.getWidth()*esc));
     img.setHeight(Math.round(img.getHeight()*esc));
-    celda.appendParagraph(file.getName()).setFontSize(7).setForegroundColor(C_TITULO);
+    celda.appendParagraph(file.getName())
+         .setFontSize(7).setFontFamily(FUENTE_MONO).setForegroundColor(C_TITULO)
+         .setSpacingBefore(4).setSpacingAfter(0);
   });
-  if(archivos.length===1) fila.appendTableCell('');
-  tabla.setBorderColor(C_CELDA);
+  // Con una sola foto la tabla queda de una columna a ancho completo — no
+  // se agrega celda vacía de relleno (Docs no acepta ancho 0).
+  tabla.setBorderColor(C_CELDA).setBorderWidth(0.75);
 }
 
 /* ---------- Anexos técnicos A-D: ficha del escenario ----------
@@ -947,18 +1224,22 @@ function _anexoFichaEscenario(body, ficha){
   body.appendPageBreak();
   _h1(body, '9. Anexo técnico A — Ficha del escenario');
   var area = ficha.areaManual || ((ficha.largo && ficha.ancho) ? (ficha.largo*ficha.ancho) : null);
-  var t = body.appendTable([
+  _h2(body, 'A.1 Geometría del vaso');
+  _tarjetaDatos(body, [
     ['Largo del espejo de agua', ficha.largo!=null ? ficha.largo+' m' : '—'],
     ['Ancho del espejo de agua', ficha.ancho!=null ? ficha.ancho+' m' : '—'],
     ['Área directa (si forma irregular)', ficha.areaManual!=null ? ficha.areaManual+' m²' : '—'],
     ['Área usada en los cálculos', area!=null ? area.toFixed(1)+' m²' : '— sin dato —'],
     ['Profundidad máxima', ficha.profMax!=null ? ficha.profMax+' m' : '—'],
     ['Profundidad mínima', ficha.profMin!=null ? ficha.profMin+' m' : '—'],
-    ['Profundidad intermedia', ficha.profIntermedia!=null ? ficha.profIntermedia+' m' : '—'],
+    ['Profundidad intermedia', ficha.profIntermedia!=null ? ficha.profIntermedia+' m' : '—']
+  ], {mono:true, pctEtiqueta:0.45});
+
+  _h2(body, 'A.2 Clasificación de uso');
+  _tarjetaDatos(body, [
     ['Tipo de uso del estanque', TIPO_USO_LABEL[ficha.tipoUso] || '— sin dato —'],
     ['¿Bajo cubierta / recinto cerrado?', ficha.cubierta==='si' ? 'Sí' : (ficha.cubierta==='no' ? 'No' : '— sin dato —')]
-  ]);
-  _estiloTabla(t, false);
+  ], {pctEtiqueta:0.45});
 }
 
 function _anexoFichaHidraulica(body, ficha){
@@ -970,22 +1251,28 @@ function _anexoFichaHidraulica(body, ficha){
         .setForegroundColor(C_TITULO).setItalic(true);
     return;
   }
-  var t = body.appendTable([
+  _h2(body, 'B.1 Punto de operación');
+  _tarjetaDatos(body, [
     ['Curva de bomba usada', String(r.origen||'—')],
     ['Fecha del cálculo', r.ts ? Utilities.formatDate(new Date(r.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '—'],
     ['Caudal en el punto de operación', r.caudal!=null ? r.caudal.toFixed(2)+' m³/h' : '— sin dato —'],
-    ['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : '— sin dato —'],
+    ['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : '— sin dato —']
+  ], {pctEtiqueta:0.45});
+
+  _h2(body, 'B.2 Velocidades y recirculación');
+  _tarjetaDatos(body, [
     ['Velocidad en succión', r.vSuccion!=null ? r.vSuccion.toFixed(2)+' m/s' : '— sin dato —'],
     ['Velocidad en descarga/retorno', r.vDescarga!=null ? r.vDescarga.toFixed(2)+' m/s' : '— sin dato —'],
     ['Velocidad de filtración', r.vFiltracion!=null ? r.vFiltracion.toFixed(1)+' m³/h/m²' : '— sin dato —'],
     ['Volumen estimado del vaso', r.volumen!=null ? r.volumen.toFixed(1)+' m³' : '— sin dato —'],
     ['Tiempo de recirculación', r.tiempoRecirc!=null ? r.tiempoRecirc.toFixed(2)+' h' : '— sin dato —'],
     ['Rotaciones estimadas por día', r.rotacionesDia!=null ? r.rotacionesDia.toFixed(1) : '— sin dato —']
-  ]);
-  _estiloTabla(t, false);
+  ], {mono:true, pctEtiqueta:0.45});
+
   if(r.tramos && r.tramos.length){
-    body.appendParagraph('Detalle de velocidad por tramo').setFontSize(10).setBold(true);
+    _h2(body, 'B.3 Detalle de velocidad por tramo');
     var filasTramoV = [['Tramo','Ø (pulg)','Lado','Líneas','Velocidad (m/s)','Estado']];
+    var excede = [null];
     r.tramos.forEach(function(t){
       var limite = t.lado==='succion' ? 1.8 : 2.4;
       filasTramoV.push([
@@ -996,15 +1283,20 @@ function _anexoFichaHidraulica(body, ficha){
         t.v.toFixed(2),
         t.v > limite ? 'Supera '+limite+' m/s' : 'Cumple'
       ]);
+      excede.push(t.v > limite);
     });
     var tTramoV = body.appendTable(filasTramoV);
-    _estiloTabla(tTramoV, true);
+    _estiloTabla(tTramoV, true, [135, 60, 65, 50, 90, 105]);
+    for(var i=1;i<tTramoV.getNumRows();i++){
+      var col = excede[i] ? C_ACENTO : C_OK;
+      tTramoV.getRow(i).getCell(4).getChild(0).asParagraph().setFontFamily(FUENTE_MONO).setBold(true).setForegroundColor(col);
+      tTramoV.getRow(i).getCell(5).getChild(0).asParagraph().setBold(true).setForegroundColor(col);
+    }
   }
-  body.appendParagraph(
+  _nota(body,
     'Límites normativos de referencia: succión ≤ 1.8 m/s, descarga ≤ 2.4 m/s (Numeral 10.1); ' +
     'filtración 20-40 m³/h/m² (50 en uso restringido, Numeral 10.2); tiempo de recirculación ' +
-    'según Tabla No. 1 del Anexo Técnico.'
-  ).setFontSize(8).setForegroundColor(C_TITULO).setItalic(true);
+    'según Tabla No. 1 del Anexo Técnico.');
 }
 
 function _anexoDimensionamiento(body, ficha){
@@ -1016,37 +1308,43 @@ function _anexoDimensionamiento(body, ficha){
         .setForegroundColor(C_TITULO).setItalic(true);
     return;
   }
-  var resumen = body.appendTable([
+  _h2(body, 'C.1 Aforo máximo');
+  _tarjetaDatos(body, [
     ['Área del espejo de agua', r.area.toFixed(1)+' m²'],
     ['Factor de uso aplicado (Tabla 4)', r.factorUso+' m²/bañista — '+String(r.criterioProf||'')],
     ['Aforo máximo (Numeral 10.9)', r.aforo+' bañistas'],
     ['Fecha del cálculo', r.ts ? Utilities.formatDate(new Date(r.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '—']
-  ]);
-  _estiloTabla(resumen, false);
-  body.appendParagraph('');
+  ], {pctEtiqueta:0.45});
 
+  _h2(body, 'C.2 Dotación sanitaria requerida (Tabla 5)');
   var etiquetas = {duchas:'Duchas', inodoroH:'Inodoros hombres', inodoroM:'Inodoros mujeres',
                     orinal:'Orinales', lavamanos:'Lavamanos', vestier:'Vestieres'};
   var datos = [['Elemento (Tabla 5)','Ratio normativo','Requerido','Encontrado','Estado']];
+  var estados = [null];
   Object.keys(etiquetas).forEach(function(k){
     var d = r.dotacion && r.dotacion[k];
     if(!d) return;
     var encontrado = (d.encontrado==null) ? '— sin dato —' : String(d.encontrado);
-    var estadoTxt = (d.encontrado==null) ? 'Pendiente de conteo' : (d.encontrado < d.requerido ? 'Faltan '+(d.requerido-d.encontrado) : 'Cumple');
+    var falta = (d.encontrado!=null && d.encontrado < d.requerido);
+    var estadoTxt = (d.encontrado==null) ? 'Pendiente de conteo' : (falta ? 'Faltan '+(d.requerido-d.encontrado) : 'Cumple');
     datos.push([etiquetas[k], d.ratio, String(d.requerido), encontrado, estadoTxt]);
+    estados.push(d.encontrado==null ? 'sin dato' : (falta ? 'falta' : 'ok'));
   });
   var t = body.appendTable(datos);
-  _estiloTabla(t, true);
+  _estiloTabla(t, true, [125, 130, 80, 85, 85]);
+  for(var i=1;i<t.getNumRows();i++){
+    var col = estados[i]==='ok' ? C_OK : (estados[i]==='falta' ? C_ACENTO : C_AMBAR);
+    t.getRow(i).getCell(4).getChild(0).asParagraph().setBold(true).setForegroundColor(col);
+  }
 }
 
 function _anexoMemoriaCalculo(body, ficha){
   body.appendPageBreak();
   _h1(body, '12. Anexo técnico D — Memoria de cálculo');
-  body.appendParagraph(
+  _nota(body,
     'Estimaciones de apoyo a la decisión del inspector: no reemplazan la medición directa con ' +
     'caudalímetro ni el conteo físico de la dotación sanitaria. Los supuestos declarados a ' +
-    'continuación permiten reproducir o auditar cada resultado de los Anexos B y C.'
-  ).setForegroundColor(C_TITULO).setFontSize(9).setItalic(true);
+    'continuación permiten reproducir o auditar cada resultado de los Anexos B y C.');
 
   _h2(body, 'D.1 Datos de la bomba');
   var filasBomba = [
@@ -1067,8 +1365,7 @@ function _anexoMemoriaCalculo(body, ficha){
       .join('  |  ');
     filasBomba.push(['Puntos de la curva manual', puntos || '—']);
   }
-  var tBomba = body.appendTable(filasBomba);
-  _estiloTabla(tBomba, false);
+  _tarjetaDatos(body, filasBomba, {mono:true, pctEtiqueta:0.45});
 
   _h2(body, 'D.2 Datos de tubería y filtro');
   var tramosValidos = (ficha.tuberiaTramos||[]).filter(function(t){ return t && t.diametro>0; });
@@ -1085,46 +1382,43 @@ function _anexoMemoriaCalculo(body, ficha){
       ]);
     });
     var tTramos = body.appendTable(filasTramos);
-    _estiloTabla(tTramos, true);
+    _estiloTabla(tTramos, true, [125, 60, 65, 85, 80, 90]);
   } else {
-    var tTub = body.appendTable([
+    _tarjetaDatos(body, [
       ['Diámetro de succión', ficha.tuberiaSuccionDiam!=null ? ficha.tuberiaSuccionDiam+' pulg' : '—'],
       ['Diámetro de descarga/retorno', ficha.tuberiaDescargaDiam!=null ? ficha.tuberiaDescargaDiam+' pulg' : '—'],
       ['Longitud total de tubería', ficha.tuberiaLongitud!=null ? ficha.tuberiaLongitud+' m' : '—'],
       ['Número de accesorios', ficha.tuberiaAccesorios!=null ? String(ficha.tuberiaAccesorios) : '—'],
       ['Reparto succión/descarga', ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'% / '+(100-ficha.tuberiaPctSuccion)+'%' : '50% / 50% (por defecto)']
-    ]);
-    _estiloTabla(tTub, false);
+    ], {mono:true, pctEtiqueta:0.45});
   }
-  var tFiltro = body.appendTable([
+  body.appendParagraph('').setFontSize(4);
+  _tarjetaDatos(body, [
     ['Desnivel succión-descarga', ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m' : '—'],
     ['Tipo de filtro', FILTRO_TIPO_LABEL[ficha.filtroTipo] || '—'],
     ['Área filtrante', ficha.filtroArea!=null ? ficha.filtroArea+' m²' : '—'],
     ['Presión de manómetro del filtro', ficha.presionManometro!=null ? ficha.presionManometro+' PSI' : '—']
-  ]);
-  _estiloTabla(tFiltro, false);
+  ], {mono:true, pctEtiqueta:0.45});
 
   var sup = (ficha.motorResultado && ficha.motorResultado.supuestos) || null;
   if(sup){
     _h2(body, 'D.3 Supuestos del cálculo hidráulico');
-    var tSup = body.appendTable([
+    _tarjetaDatos(body, [
       ['Coeficiente de Hazen-Williams (C)', String(sup.C)],
       ['Longitud equivalente de accesorios', String(sup.LeqPorAccesorio)],
       ['Carga estática asumida', String(sup.Hgeo)],
       ['Reparto de tubería succión/descarga', String(sup.repartoLongitud)],
       ['Conversión de presión', String(sup.conversionPsi)]
-    ]);
-    _estiloTabla(tSup, false);
+    ], {mono:true, pctEtiqueta:0.45});
   }
 
   if(ficha.aforoResultado && !ficha.aforoResultado.error){
     _h2(body, 'D.4 Supuesto del aforo y dotación');
-    body.appendParagraph(
+    _nota(body,
       'La fila de la Tabla No. 4 (factor de uso) se determina con la profundidad MÁXIMA del vaso ' +
       '— criterio conservador. La dotación sanitaria requerida (Tabla No. 5) se calcula sobre el ' +
       '100% del aforo para cada elemento; en campo puede repartirse por género según la ' +
-      'composición real de bañistas.'
-    ).setForegroundColor(C_TITULO).setFontSize(9);
+      'composición real de bañistas.');
   }
 }
 
@@ -1132,26 +1426,34 @@ function _planAccion(body, filas){
   body.appendPageBreak();
   _h1(body, '5. Plan de acción y matriz de cierre');
   var datos = [['ID','Ítem','Riesgo','Acción','Responsable','Compromiso','Avance']];
+  var riesgos = [null]; // paralelo a `datos`, para colorear la celda de riesgo
   filas.forEach(function(f){
     var est = String(f[COL.estado-1]||'');
     if(est==='Cumple' || est==='No aplica' || est==='') return;
+    var riesgo = String(f[COL.riesgo-1]||'—');
     datos.push([
       String(f[COL.id-1]),
       String(f[COL.item-1]).slice(0,70),
-      String(f[COL.riesgo-1]||'—'),
+      riesgo,
       String(f[COL.accion-1]||'—').slice(0,70),
       String(f[COL.respCierre-1]||'—'),
       _fechaStr(f[COL.fechaCompromiso-1])||'—',
       (f[COL.avance-1]!==''? f[COL.avance-1]+'%':'—')
     ]);
+    riesgos.push(riesgo);
   });
   if(datos.length===1){ body.appendParagraph('Sin acciones abiertas.'); return; }
   var t = body.appendTable(datos);
-  _estiloTabla(t, true);
+  _estiloTabla(t, true, [55, 110, 50, 110, 80, 60, 40]);
+  for(var r=1;r<t.getNumRows();r++){
+    t.getRow(r).getCell(2).getChild(0).asParagraph()
+     .setForegroundColor(_colorRiesgo(riesgos[r])).setBold(true);
+    t.getRow(r).getCell(0).getChild(0).asParagraph().setFontFamily(FUENTE_MONO).setFontSize(8);
+  }
 }
 
 function _conclusion(body, m, sede, piscina){
-  _h1(body, '6. Conclusión ejecutiva');
+  _h1(body, '6. Conclusión');
   var txt = 'El vaso ' + piscina + ' de la sede ' + sede + ' presenta un cumplimiento global del ' +
     m.pctCumplimiento + '% frente a los criterios de la Resolución 929 de 2026, con ' +
     m.noCumple + ' ítem(s) en estado No cumple y ' + (m.critico + m.alto) +
@@ -1160,7 +1462,9 @@ function _conclusion(body, m, sede, piscina){
     'lo que constituye la desviación de gestión más relevante del período. ';
   if(m.sinFecha>0) txt += m.sinFecha + ' hallazgo(s) permanecen sin fecha compromiso asignada. ';
   txt += 'La condición general se califica como: ' + _semaforo(m.pctCumplimiento) + '.';
-  body.appendParagraph(txt).setForegroundColor(m.critico>0 ? C_ACENTO : C_TITULO);
+  // Texto corrido en color normal: el rojo se reserva para estados y niveles
+  // de riesgo puntuales, no para párrafos enteros.
+  body.appendParagraph(txt).setForegroundColor(C_TITULO);
 }
 
 function _responsabilidades(body, responsable){
@@ -1172,15 +1476,14 @@ function _responsabilidades(body, responsable){
     ['Facility Management','Seguimiento periódico al cierre de hallazgos, gestión de recursos y validación del cierre técnico.'],
     ['Administración de sede','Aprobación presupuestal de las intervenciones y cumplimiento de los plazos del régimen transitorio (Art. 12, Res. 929/2026).']
   ]);
-  _estiloTabla(t, true);
+  _estiloTabla(t, true, [140, 365]);
 
-  body.appendParagraph('');
-  var f = body.appendTable([
+  _rotulo(body, 'Firmas y aprobación');
+  _tarjetaDatos(body, [
     ['Elaboró', String(responsable||'—')],
     ['Revisó',''],
     ['Aprobó','']
-  ]);
-  _estiloTabla(f, false);
+  ], {pctEtiqueta:0.3});
 }
 
 /* ---------- Utilidades de formato ---------- */
@@ -1194,18 +1497,131 @@ function _h2(body, txt){
       .setHeading(DocumentApp.ParagraphHeading.HEADING2)
       .setForegroundColor(C_TITULO);
 }
-function _estiloTabla(tabla, conEncabezado){
-  tabla.setBorderColor(C_CELDA);
+/* Tabla tipo "matriz" (encabezado + filas de datos, N columnas).
+   `widths` es opcional: array de anchos en pt por columna — sin él Docs
+   reparte el ancho solo, que en tablas de 6-7 columnas suele descuadrar. */
+function _estiloTabla(tabla, conEncabezado, widths){
+  tabla.setBorderColor(C_CELDA).setBorderWidth(0.75);
   for(var r=0;r<tabla.getNumRows();r++){
     var fila = tabla.getRow(r);
+    var esEncabezado = conEncabezado && r===0;
     for(var c=0;c<fila.getNumCells();c++){
       var celda = fila.getCell(c);
-      celda.setBackgroundColor((conEncabezado && r===0) ? C_TITULO : (r%2===0 ? C_FONDO : C_CELDA));
+      if(widths && widths[c]) celda.setWidth(widths[c]);
+      celda.setBackgroundColor(esEncabezado ? C_HEADER_TABLA : (r%2===0 ? '#FFFFFF' : C_FONDO));
+      celda.setPaddingTop(5).setPaddingBottom(5).setPaddingLeft(8).setPaddingRight(8);
       var p = celda.getChild(0).asParagraph();
-      p.setFontSize(9).setForegroundColor((conEncabezado && r===0) ? '#FFFFFF' : C_TITULO);
-      if(conEncabezado && r===0) p.setBold(true);
+      p.setFontSize(esEncabezado ? 8.5 : 9).setForegroundColor(esEncabezado ? C_ENCABEZADO : C_TITULO);
+      if(esEncabezado) p.setBold(true);
     }
   }
+}
+
+/* ---------- Gráficas (servicio Charts) ----------
+   Genera imágenes de gráfica reales (PNG) para incrustar en el Doc — a
+   diferencia del mockup HTML/SVG de Stitch, DocumentApp no soporta CSS ni
+   SVG animado, así que el equivalente correcto en un informe de Google
+   Docs es el servicio Charts (Charts.new...().build().getBlob()). */
+function _chartDonutCumplimiento(pct){
+  var colorOk = pct>=95 ? C_FILL_CUMPLE : (pct>=85 ? C_FILL_CUMPLE : (pct>=70 ? C_FILL_PROCESO : C_FILL_NOCUMPLE));
+  var dt = Charts.newDataTable()
+    .addColumn(Charts.ColumnType.STRING, 'Estado')
+    .addColumn(Charts.ColumnType.NUMBER, 'Valor')
+    .addRow(['Cumplimiento', pct])
+    .addRow(['Restante', Math.max(0, 100-pct)])
+    .build();
+  var chart = Charts.newPieChart()
+    .setDataTable(dt)
+    .setDimensions(280, 280)
+    .setColors([colorOk, '#E2E8F0'])
+    .setLegendPosition(Charts.Position.NONE)
+    .setOption('pieHole', 0.68)
+    .setOption('pieSliceText', 'none')
+    .setOption('backgroundColor', 'transparent')
+    .setOption('tooltip', {trigger:'none'})
+    .setOption('chartArea', {left:6, top:6, width:'92%', height:'92%'})
+    .build();
+  return chart.getBlob();
+}
+
+function _chartDistribucionEstados(m){
+  var dt = Charts.newDataTable()
+    .addColumn(Charts.ColumnType.STRING, 'Estado')
+    .addColumn(Charts.ColumnType.NUMBER, 'Cantidad')
+    .addRow(['Cumple', m.cumple])
+    .addRow(['No cumple', m.noCumple])
+    .addRow(['En proceso', m.enProceso])
+    .addRow(['Pendiente', m.pendiente])
+    .addRow(['No aplica', m.noAplica])
+    .build();
+  // Se renderiza al doble del tamaño al que se inserta (220 pt) para que el
+  // PDF no la muestre pixelada; por eso las fuentes van en 15, que al
+  // reducir quedan en ~7 pt reales.
+  var chart = Charts.newPieChart()
+    .setDataTable(dt)
+    .setDimensions(440, 300)
+    .setColors([C_FILL_CUMPLE, C_FILL_NOCUMPLE, C_FILL_PROCESO, C_FILL_PENDIENTE, C_FILL_NOAPLICA])
+    .setOption('pieHole', 0.45)
+    .setOption('backgroundColor', 'transparent')
+    .setOption('pieSliceTextStyle', {fontSize:14, color:'#FFFFFF'})
+    // Se define legend en un único setOption (posición + estilo juntos) —
+    // combinarlo con setLegendPosition() pisaría este objeto o al revés,
+    // según el orden de evaluación interno del builder.
+    .setOption('legend', {position:'right', textStyle:{fontSize:15, color:C_TITULO}})
+    .setOption('chartArea', {left:10, top:10, width:'62%', height:'88%'})
+    .build();
+  return chart.getBlob();
+}
+
+function _chartCapitulos(m){
+  var caps = Object.keys(m.porCapitulo).map(function(cap){
+    var c = m.porCapitulo[cap];
+    var base = c.total - c.noAplica - c.fueraAlcance;
+    var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
+    // Los nombres de capítulo son largos ("1. Documentación técnica y
+    // legal") — se recortan al número + primeras palabras para que la
+    // gráfica quepa en el ancho A4 sin desbordar las etiquetas del eje Y.
+    var etiqueta = cap.length>34 ? cap.slice(0,32)+'…' : cap;
+    return {etiqueta:etiqueta, pct:pct};
+  }).sort(function(a,b){ return a.pct - b.pct; }); // peor primero, arriba en la barra horizontal
+
+  var dtb = Charts.newDataTable()
+    .addColumn(Charts.ColumnType.STRING, 'Capítulo')
+    .addColumn(Charts.ColumnType.NUMBER, '% cumplimiento')
+    .addColumn(Charts.ColumnType.NUMBER, '% restante');
+  caps.forEach(function(c){ dtb.addRow([c.etiqueta, c.pct, 100-c.pct]); });
+  var dt = dtb.build();
+
+  // Igual que la torta: se renderiza a ~1.5x del ancho al que se inserta
+  // (ANCHO_UTIL) y las fuentes se escalan en la misma proporción.
+  var anchoRender = 760;
+  var alturaPorFila = 26;
+  var chart = Charts.newBarChart()
+    .setDataTable(dt)
+    .setDimensions(anchoRender, Math.max(180, caps.length*alturaPorFila + 60))
+    .setColors([C_FILL_CUMPLE, '#E2E8F0'])
+    .setStacked()
+    .setLegendPosition(Charts.Position.NONE)
+    .setOption('backgroundColor', 'transparent')
+    .setOption('hAxis', {minValue:0, maxValue:100, textStyle:{fontSize:12, color:C_TITULO}})
+    .setOption('vAxis', {textStyle:{fontSize:12, color:C_ENCABEZADO}})
+    .setOption('bar', {groupWidth:'72%'})
+    .setOption('chartArea', {left:'40%', top:10, width:'56%', height:'90%'})
+    .build();
+  return chart.getBlob();
+}
+
+/** Inserta una imagen centrada en el cuerpo del documento, con ancho fijo. */
+function _insertarImagenCentrada(body, blob, width){
+  var p = body.appendParagraph('');
+  p.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  var img = p.appendInlineImage(blob);
+  if(width){
+    var esc = width / img.getWidth();
+    img.setWidth(width);
+    img.setHeight(Math.round(img.getHeight()*esc));
+  }
+  return img;
 }
 
 /* ============================================================================
