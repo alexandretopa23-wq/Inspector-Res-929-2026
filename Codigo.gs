@@ -673,6 +673,53 @@ function _metricas(filas){
   return m;
 }
 
+/* ---------- Bloque de KPIs + capítulos para un conjunto de filas ----------
+   Se usa igual para el total de la hoja y para las filas de un solo vaso, de
+   modo que cuando el dashboard filtra por la inspección que el usuario toca,
+   los números salgan de esta misma función y no de un recuento paralelo en
+   JavaScript que podría divergir de _metricas(). */
+function _capitulosDashboard(m){
+  return Object.keys(m.porCapitulo).map(function(cap){
+    var c = m.porCapitulo[cap];
+    var base = c.total - c.fueraDelDenominador;
+    var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
+    return {capitulo:cap, total:c.total, cumple:c.cumple, noCumple:c.noCumple,
+             fueraAlcance:c.fueraAlcance||0, pctCumplimiento:pct};
+  }).sort(function(a,b){ return a.pctCumplimiento - b.pctCumplimiento; });
+}
+
+function _resumenDashboard(filas){
+  var m = _metricas(filas);
+  // Evidencia faltante: hallazgos "No cumple" sin foto del estado actual —
+  // el dato que más le importa a un auditor externo.
+  var hallazgosNoCumple = 0, evidenciaFaltante = 0;
+  filas.forEach(function(f){
+    if(String(f[COL.estado-1]||'')==='No cumple'){
+      hallazgosNoCumple++;
+      if(!String(f[COL.evidActual-1]||'').trim()) evidenciaFaltante++;
+    }
+  });
+  return {
+    global: {
+      total:m.total, pctCumplimiento:m.pctCumplimiento,
+      // Numerador y denominador reales del %: el dashboard los muestra para
+      // que no se lea "cumple" (conteo bruto) como si fuera el numerador.
+      cumpleEnAlcance:m.cumpleEnAlcance, baseEnAlcance:m.baseEnAlcance,
+      // Variantes "en alcance" de cada estado: permiten dibujar un desglose
+      // disjunto (suma exacta = total) sin que un ítem fuera de alcance
+      // pinte a la vez su segmento de estado y el de "Fuera de alcance".
+      noCumpleEnAlcance:m.noCumpleEnAlcance, enProcesoEnAlcance:m.enProcesoEnAlcance,
+      pendienteEnAlcance:m.pendienteEnAlcance, noAplicaEnAlcance:m.noAplicaEnAlcance,
+      cumple:m.cumple, noCumple:m.noCumple, enProceso:m.enProceso,
+      pendiente:m.pendiente, noAplica:m.noAplica, fueraAlcance:m.fueraAlcance,
+      critico:m.critico, alto:m.alto, medio:m.medio, bajo:m.bajo,
+      vencidos:m.vencidos, sinFecha:m.sinFecha, avanceProm:m.avanceProm,
+      hallazgosNoCumple:hallazgosNoCumple, evidenciaFaltante:evidenciaFaltante
+    },
+    capitulos: _capitulosDashboard(m)
+  };
+}
+
 /* ---------- Dashboard de avances (todas las sedes/piscinas/fechas) ----------
    _metricas() ya es genérica sobre cualquier conjunto de filas (no asume una
    sola sede+piscina+fecha, como en el informe individual) — así que el
@@ -688,7 +735,7 @@ function obtenerDashboard(spreadsheetId){
   var todo = last>=2 ? sh.getRange(2,1,last-1,TOTAL_COLS).getValues() : [];
   if(!todo.length) return {ok:true, vacio:true, spreadsheetNombre:ss.getName(), hojaNombre:sh.getName()};
 
-  var global = _metricas(todo);
+  var resumenGlobal = _resumenDashboard(todo);
 
   var porSede = {};
   todo.forEach(function(f){
@@ -715,7 +762,11 @@ function obtenerDashboard(spreadsheetId){
   });
   var vasos = Object.keys(porVaso).map(function(key){
     var v = porVaso[key];
-    var m = _metricas(v.filas);
+    // Un solo recorrido de métricas por vaso: los campos de la fila de la
+    // lista se leen del mismo resumen que después alimenta los paneles al
+    // filtrar, así la fila y los KPIs filtrados nunca pueden discrepar.
+    var resumen = _resumenDashboard(v.filas);
+    var m = resumen.global;
     var fechas = Object.keys(v.fechas).sort();
     var ultima = fechas.length ? fechas[fechas.length-1] : null;
     // Responsable de la inspección más reciente de este vaso.
@@ -727,7 +778,12 @@ function obtenerDashboard(spreadsheetId){
       sede:v.sede, piscina:v.piscina, responsable:resp,
       ultimaFecha: ultima,
       total:m.total, pctCumplimiento:m.pctCumplimiento, noCumple:m.noCumple,
-      vencidos:m.vencidos, critico:m.critico, alto:m.alto
+      vencidos:m.vencidos, critico:m.critico, alto:m.alto,
+      // Resumen propio del vaso: es lo que el dashboard pinta en los KPIs, el
+      // desglose de estados y el gráfico de capítulos cuando el usuario toca
+      // esta inspección en la lista. Viene pre-calculado en el servidor para
+      // que filtrar sea instantáneo y funcione sin señal.
+      resumen: resumen
     };
   }).sort(function(a,b){ return String(b.ultimaFecha||'').localeCompare(String(a.ultimaFecha||'')); });
 
@@ -744,48 +800,15 @@ function obtenerDashboard(spreadsheetId){
     return {fecha:fecha, vasos:Object.keys(porFecha[fecha]).length};
   });
 
-  // Evidencia faltante: hallazgos "No cumple" sin foto del estado actual —
-  // el dato que más le importa a un auditor externo.
-  var hallazgosNoCumple = 0, evidenciaFaltante = 0;
-  todo.forEach(function(f){
-    if(String(f[COL.estado-1]||'')==='No cumple'){
-      hallazgosNoCumple++;
-      if(!String(f[COL.evidActual-1]||'').trim()) evidenciaFaltante++;
-    }
-  });
-
-  var capitulos = Object.keys(global.porCapitulo).map(function(cap){
-    var c = global.porCapitulo[cap];
-    var base = c.total - c.fueraDelDenominador;
-    var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
-    return {capitulo:cap, total:c.total, cumple:c.cumple, noCumple:c.noCumple,
-             fueraAlcance:c.fueraAlcance||0, pctCumplimiento:pct};
-  }).sort(function(a,b){ return a.pctCumplimiento - b.pctCumplimiento; });
-
   return {
     ok:true,
     actualizadoEn: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'),
     spreadsheetNombre: ss.getName(),
     hojaNombre: sh.getName(),
-    global: {
-      total:global.total, pctCumplimiento:global.pctCumplimiento,
-      // Numerador y denominador reales del %: el dashboard los muestra para
-      // que no se lea "cumple" (conteo bruto) como si fuera el numerador.
-      cumpleEnAlcance:global.cumpleEnAlcance, baseEnAlcance:global.baseEnAlcance,
-      // Variantes "en alcance" de cada estado: permiten dibujar un desglose
-      // disjunto (suma exacta = total) sin que un ítem fuera de alcance
-      // pinte a la vez su segmento de estado y el de "Fuera de alcance".
-      noCumpleEnAlcance:global.noCumpleEnAlcance, enProcesoEnAlcance:global.enProcesoEnAlcance,
-      pendienteEnAlcance:global.pendienteEnAlcance, noAplicaEnAlcance:global.noAplicaEnAlcance,
-      cumple:global.cumple, noCumple:global.noCumple, enProceso:global.enProceso,
-      pendiente:global.pendiente, noAplica:global.noAplica, fueraAlcance:global.fueraAlcance,
-      critico:global.critico, alto:global.alto, medio:global.medio, bajo:global.bajo,
-      vencidos:global.vencidos, sinFecha:global.sinFecha, avanceProm:global.avanceProm,
-      hallazgosNoCumple:hallazgosNoCumple, evidenciaFaltante:evidenciaFaltante
-    },
+    global: resumenGlobal.global,
     sedes: sedes,
     vasos: vasos,
-    capitulos: capitulos,
+    capitulos: resumenGlobal.capitulos,
     tendencia: tendencia
   };
  }catch(err){

@@ -192,6 +192,51 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 @media(min-width:640px){.sideBlock{display:block;}}
 .pctBig{font-family:var(--display);font-size:22px;font-weight:700;flex:none;}
 
+/* ---------- Filtro por inspección (cross-filter tipo Power BI) ----------
+   La lista de inspecciones es el único selector: al tocar un vaso, los KPIs,
+   el desglose de estados y los capítulos se recalculan sobre ese vaso. La
+   barra queda sticky porque si el usuario filtra desde el final de la lista y
+   sube a ver los números, tiene que seguir viendo QUÉ está filtrando —
+   números distintos sin contexto visible se leen como datos malos. */
+.filterBar{
+  position:sticky;top:60px;z-index:40;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:var(--c-proceso-bg);border:1px solid rgba(122,184,232,.35);
+  border-radius:8px;padding:11px 14px;margin-bottom:20px;
+}
+.filterBar .fLbl{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--c-proceso);}
+.filterBar .fVal{font-size:13.5px;font-weight:600;color:var(--text);}
+.filterBar .fSede{font-family:var(--mono);font-size:11.5px;color:var(--text-faint);}
+.filterBar .fClear{
+  margin-left:auto;background:transparent;border:1px solid rgba(122,184,232,.45);
+  color:var(--c-proceso);border-radius:32px;padding:5px 12px;
+  font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;
+}
+.filterBar .fClear:hover{background:rgba(122,184,232,.14);}
+
+/* Etiqueta para los paneles que NO reaccionan al filtro. Sin esto, un panel
+   quieto mientras los demás cambian se lee como un gráfico roto. */
+.panelTag{
+  font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--text-faint);
+  border:1px solid var(--border-soft);border-radius:32px;padding:3px 8px;
+  vertical-align:middle;margin-left:8px;white-space:nowrap;
+}
+.panelHead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+
+/* Fila seleccionable */
+.listRow{cursor:pointer;}
+.listRow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.listRow.sel{background:rgba(122,184,232,.12);box-shadow:inset 3px 0 0 var(--c-proceso);}
+.listRow.sel .listTitle{color:var(--accent);}
+.listRow.dim{opacity:.45;}
+.listRow.dim:hover{opacity:.75;}
+.selMark{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.05em;color:var(--c-proceso);}
+/* Barra de la sede a la que pertenece el vaso filtrado. */
+.barRow.sedeSel .name{color:var(--accent);}
+.barRow.sedeSel .name::after{content:' ◂';color:var(--c-proceso);}
+.barRow.other{opacity:.5;}
+
 /* ---------- Estados ---------- */
 .state{padding:70px 20px;text-align:center;color:var(--text-dim);font-size:14px;}
 .state .big{font-size:34px;margin-bottom:12px;}
@@ -421,18 +466,74 @@ function statCard(opts){
   '</div>';
 }
 
+/* ---------- Estado del cross-filter ----------
+   DATA es la respuesta completa del servidor; VASO_SEL es el índice del vaso
+   seleccionado en d.vasos (null = sin filtro, vista global). Filtrar no vuelve
+   a pedir datos: cada vaso ya trae su propio `resumen` pre-calculado por
+   _resumenDashboard() en Codigo.gs, así que la selección es instantánea, sirve
+   offline y los números filtrados salen de la MISMA función que los globales.
+   Solo hay una dimensión de filtro (el vaso) a propósito: es la pregunta real
+   del supervisor —"¿qué pasa en esta inspección?"— sin la complejidad de un
+   cross-filter multidireccional. */
+var DATA = null, VASO_SEL = null;
+
+function vasoActivo(){
+  return (VASO_SEL!=null && DATA && DATA.vasos[VASO_SEL]) ? DATA.vasos[VASO_SEL] : null;
+}
+/* Alcance activo: el resumen del vaso filtrado, o el global. Los paneles que
+   reaccionan al filtro leen de aquí y no de DATA.global. */
+function alcance(){
+  var v = vasoActivo();
+  return v ? v.resumen : {global:DATA.global, capitulos:DATA.capitulos};
+}
+
+function seleccionarVaso(i){
+  VASO_SEL = (VASO_SEL===i) ? null : i;   // volver a tocar la misma fila quita el filtro
+  pintar();
+  // Se devuelve el foco a la fila tocada para no romper el recorrido por
+  // teclado; preventScroll evita que el repintado salte la vista.
+  var fila = document.querySelector('.listRow[data-i="'+i+'"]');
+  if(fila) fila.focus({preventScroll:true});
+}
+
 function render(d){
   if(d.vacio){
     renderState('<div class="state"><div class="big">📭</div>Aún no hay inspecciones registradas en la hoja.</div>');
     return;
   }
-  var g = d.global;
+  DATA = d;
+  // Un refresco de datos puede cambiar el orden o el número de vasos, así que
+  // la selección por índice deja de ser válida y se limpia.
+  VASO_SEL = null;
+  pintar();
+  document.getElementById('updatedLabel').textContent = 'Actualizado: '+d.actualizadoEn;
+  document.getElementById('footScope').textContent = d.vasos.length+' vasos · '+d.sedes.length+' sedes';
+}
+
+function pintar(){
+  var d = DATA;
+  var sel = vasoActivo();
+  var g = alcance().global;
   var html = '';
+
+  // ---- Barra de filtro activo ----
+  if(sel){
+    html += '<div class="filterBar">'+
+      '<span class="fLbl">Filtrando por inspección</span>'+
+      '<span class="fVal">'+esc(sel.piscina)+'</span>'+
+      '<span class="fSede">'+esc(sel.sede)+(sel.ultimaFecha?' · '+esc(sel.ultimaFecha):'')+'</span>'+
+      '<button class="fClear" type="button" id="btnClearFiltro">✕ Ver todo</button>'+
+    '</div>';
+  }
 
   // ---- Bento de KPIs ----
   html += '<div class="bento">';
   html += statCard({
-    lbl:'Cumplimiento global', val:g.pctCumplimiento+'%',
+    // Con filtro activo la palabra "global" sería falsa: el % ya es de un solo
+    // vaso y su denominador es otro. La etiqueta cambia con el alcance para que
+    // nadie lea la cifra filtrada como si fuera la de toda la operación.
+    lbl: sel ? 'Cumplimiento de la inspección' : 'Cumplimiento global',
+    val:g.pctCumplimiento+'%',
     // El numerador NO es g.cumple (conteo bruto): es cumpleEnAlcance, que
     // excluye los ítems fuera del alcance de la Res. 929. Se explicita aquí
     // para que la cifra de la tarjeta cuadre con la leyenda de más abajo.
@@ -465,12 +566,16 @@ function render(d){
 
   // ---- Gráficos ----
   html += '<div class="grid2">';
-  html += '<div class="panel"><h2>Tendencia de inspecciones</h2>'+
+  // La tendencia NO se filtra: el eje temporal cuenta vasos por fecha, y para
+  // un solo vaso quedaría un punto por fecha — un gráfico sin información. Se
+  // marca como vista general para que no se lea como que ignoró el filtro.
+  html += '<div class="panel"><div class="panelHead"><h2>Tendencia de inspecciones</h2>'+
+    (sel?'<span class="panelTag">Todas las sedes</span>':'')+'</div>'+
     '<p class="hint">Vasos inspeccionados en cada fecha registrada.</p>'+
     '<div class="chartBox">'+lineChart(d.tendencia||[])+'</div></div>';
   html += '<div class="panel"><h2>Capítulos con más fallas</h2>'+
-    '<p class="hint">Top 5 por cantidad de ítems en "No cumple".</p>'+
-    '<div class="chartBox">'+barChart(d.capitulos||[])+'</div></div>';
+    '<p class="hint">Top 5 por cantidad de ítems en "No cumple"'+(sel?' en esta inspección.':'.')+'</p>'+
+    '<div class="chartBox">'+barChart(alcance().capitulos||[])+'</div></div>';
   html += '</div>';
 
   // ---- Estado general + por sede ----
@@ -489,9 +594,9 @@ function render(d){
     {k:'fueraAlcance', l:'Fuera de alcance (Res. 929)', c:'var(--c-fuera)'}
   ];
   html += '<div class="panel"><h2>Estado de los ítems</h2>'+
-    '<p class="hint">'+g.total+' ítems en total. Los ítems fuera del alcance de la Res. 929 se agrupan aparte sin importar su estado, '+
-      'para que ningún ítem pinte dos franjas a la vez. El cumplimiento global ('+g.pctCumplimiento+'%) es '+
-      g.cumpleEnAlcance+' de '+g.baseEnAlcance+' ítems en alcance.</p>'+
+    '<p class="hint">'+g.total+' ítems '+(sel?'en '+esc(sel.piscina):'en total')+'. Los ítems fuera del alcance de la Res. 929 se agrupan aparte sin importar su estado, '+
+      'para que ningún ítem pinte dos franjas a la vez. El cumplimiento '+(sel?'de esta inspección':'global')+
+      ' ('+g.pctCumplimiento+'%) es '+g.cumpleEnAlcance+' de '+g.baseEnAlcance+' ítems en alcance.</p>'+
     '<div class="stackBar">';
   estados.forEach(function(e){
     var pct = g.total>0 ? (100*g[e.k]/g.total) : 0;
@@ -503,10 +608,15 @@ function render(d){
   });
   html += '</div></div>';
 
-  html += '<div class="panel"><h2>Cumplimiento por sede</h2>'+
-    '<p class="hint">De menor a mayor cumplimiento.</p>';
+  // Este panel tampoco se filtra: es el que da la comparación entre sedes, y
+  // filtrarlo a una sola barra destruiría justo eso. En vez de filtrar,
+  // resalta la sede del vaso seleccionado y atenúa las demás.
+  html += '<div class="panel"><div class="panelHead"><h2>Cumplimiento por sede</h2>'+
+    (sel?'<span class="panelTag">Comparación</span>':'')+'</div>'+
+    '<p class="hint">De menor a mayor cumplimiento'+(sel?' — resaltada la sede de la inspección filtrada.':'.')+'</p>';
   d.sedes.slice().sort(function(a,b){ return a.pctCumplimiento-b.pctCumplimiento; }).forEach(function(s){
-    html += '<div class="barRow"><div class="top"><span class="name">'+esc(s.sede)+'</span>'+
+    var cls = sel ? (s.sede===sel.sede ? ' sedeSel' : ' other') : '';
+    html += '<div class="barRow'+cls+'"><div class="top"><span class="name">'+esc(s.sede)+'</span>'+
       '<span class="meta">'+s.pctCumplimiento+'% · '+s.total+' ítems'+(s.vencidos>0?' · '+s.vencidos+' venc.':'')+'</span></div>'+
       '<div class="barTrack"><div class="barFill" style="width:'+Math.max(2,s.pctCumplimiento)+'%;background:'+semaforoColor(s.pctCumplimiento)+'"></div></div></div>';
   });
@@ -515,14 +625,18 @@ function render(d){
   // ---- Inspecciones recientes ----
   html += '<div class="panel" style="padding:0;border:none;background:transparent;">'+
     '<h2 style="font-family:var(--display);font-size:20px;font-weight:600;margin:0 0 3px;">Inspecciones recientes</h2>'+
-    '<p class="hint">'+d.vasos.length+' vaso'+(d.vasos.length===1?'':'s')+' con ítems registrados, más recientes primero.</p></div>';
-  html += '<div class="listWrap">';
-  d.vasos.forEach(function(v){
+    '<p class="hint">'+d.vasos.length+' vaso'+(d.vasos.length===1?'':'s')+' con ítems registrados, más recientes primero. '+
+      'Toca una inspección para filtrar los indicadores de arriba; tócala otra vez (o Esc) para ver todo.</p></div>';
+  html += '<div class="listWrap" id="listaVasos">';
+  d.vasos.forEach(function(v,i){
     var pill = semaforoPill(v.pctCumplimiento);
-    html += '<div class="listRow">'+
+    var esSel = (VASO_SEL===i);
+    html += '<div class="listRow'+(esSel?' sel':(sel?' dim':''))+'" role="button" tabindex="0"'+
+      ' aria-pressed="'+(esSel?'true':'false')+'" data-i="'+i+'"'+
+      ' aria-label="Filtrar por '+esc(v.piscina)+' — '+esc(v.sede)+'">'+
       '<div class="listMain">'+
         '<span class="statusDot" style="background:'+semaforoColor(v.pctCumplimiento)+'"></span>'+
-        '<div><div class="listTitle">'+esc(v.piscina)+'</div>'+
+        '<div><div class="listTitle">'+esc(v.piscina)+(esSel?' <span class="selMark">● FILTRANDO</span>':'')+'</div>'+
         '<div class="listMeta">'+
           '<span class="metaId">'+esc(v.sede)+'</span>'+
           '<span class="metaSep"></span>'+
@@ -544,8 +658,27 @@ function render(d){
   html += '</div>';
 
   renderState(html);
-  document.getElementById('updatedLabel').textContent = 'Actualizado: '+d.actualizadoEn;
-  document.getElementById('footScope').textContent = d.vasos.length+' vasos · '+d.sedes.length+' sedes';
+
+  // Los handlers se re-enlazan en cada repintado porque pintar() reemplaza el
+  // HTML completo: es más simple y barato (el DOM son decenas de nodos) que
+  // hacer cirugía panel por panel, y garantiza que ningún panel quede
+  // mostrando cifras del alcance anterior.
+  var lista = document.getElementById('listaVasos');
+  if(lista){
+    lista.addEventListener('click', function(ev){
+      var fila = ev.target.closest('.listRow');
+      if(fila) seleccionarVaso(Number(fila.dataset.i));
+    });
+    lista.addEventListener('keydown', function(ev){
+      if(ev.key!=='Enter' && ev.key!==' ') return;
+      var fila = ev.target.closest('.listRow');
+      if(!fila) return;
+      ev.preventDefault();   // Espacio no debe hacer scroll de página
+      seleccionarVaso(Number(fila.dataset.i));
+    });
+  }
+  var btnClear = document.getElementById('btnClearFiltro');
+  if(btnClear) btnClear.onclick = function(){ VASO_SEL = null; pintar(); window.scrollTo({top:0,behavior:'smooth'}); };
 }
 
 /* ---------- Config: ancla global (servidor) + prueba local (navegador) ----------
@@ -690,6 +823,11 @@ async function ejecutarDiagnostico(spreadsheetIdOverride){
 }
 
 document.getElementById('btnRefresh').onclick = cargar;
+// Esc quita el filtro desde cualquier parte de la página — la salida esperada
+// cuando el usuario ya se alejó de la lista y solo ve los indicadores.
+document.addEventListener('keydown', function(ev){
+  if(ev.key==='Escape' && VASO_SEL!=null){ VASO_SEL = null; pintar(); }
+});
 document.getElementById('btnCfgToggle').onclick = function(){
   document.getElementById('cfgPanel').classList.toggle('hidden');
 };
