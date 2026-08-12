@@ -420,7 +420,14 @@ function lineChart(puntos){
 
 /* Gráfico de barras verticales: capítulos con más ítems "No cumple". */
 function barChart(items){
-  var conFallas = items.filter(function(c){ return c.noCumple>0; }).slice(0,5);
+  // Se reordena por cantidad de "No cumple" descendente: `items` llega
+  // ordenado por % de cumplimiento (lo que necesita la tabla del informe),
+  // y ese orden no es el mismo que "más fallas primero" — un capítulo con 2
+  // ítems de 3 tiene peor % que uno con 10 fallas de 200. El panel promete
+  // "Top 5 por cantidad", así que ordena por cantidad.
+  var conFallas = items.filter(function(c){ return c.noCumple>0; })
+    .sort(function(a,b){ return b.noCumple - a.noCumple; })
+    .slice(0,5);
   if(!conFallas.length){
     return '<div class="state" style="padding:30px;">Sin incumplimientos registrados. 🎉</div>';
   }

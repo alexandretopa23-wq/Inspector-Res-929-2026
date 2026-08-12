@@ -338,6 +338,16 @@ function guardarFilas(rows){
       var clave = _claveFila(row);
       if(indice.hasOwnProperty(clave)){
         var idx = indice[clave];
+        // linkCarpeta es la única columna que la PWA nunca conoce: la escribe
+        // el servidor en _marcarEvidenciaEnHoja() cuando sube la primera foto
+        // del ítem, y el navegador no la vuelve a leer de vuelta. Si la fila
+        // entrante la trae vacía pero la existente ya tenía un valor, se
+        // conserva la existente — de lo contrario, resincronizar el capítulo
+        // (p.ej. tras cambiar el estado o el hallazgo) borraría el link a la
+        // carpeta de Drive aunque la carpeta y las fotos sigan ahí intactas.
+        if(!row[COL.linkCarpeta-1] && datos[idx][COL.linkCarpeta-1]){
+          row[COL.linkCarpeta-1] = datos[idx][COL.linkCarpeta-1];
+        }
         sh.getRange(idx+2, 1, 1, TOTAL_COLS).setValues([row]);
         datos[idx] = row;
         actualizadas++;
