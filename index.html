@@ -125,6 +125,21 @@ input,textarea,select{font-family:inherit;}
 .sessionCard .chev{color:var(--text-faint);font-size:18px;flex:none;}
 .emptyState{color:var(--text-faint);font-size:12.5px;text-align:center;padding:26px 10px;border:1px dashed var(--border);border-radius:12px;}
 
+.sedeGroup{margin-bottom:8px;}
+.sedeGroupHeader{
+  display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--panel-2);
+  border:1px solid var(--border-soft);border-radius:12px;cursor:pointer;
+}
+.sedeGroupHeader .chev{color:var(--text-faint);font-size:13px;flex:none;transition:transform .15s;}
+.sedeGroupHeader.collapsed .chev{transform:rotate(-90deg);}
+.sedeGroupHeader .name{flex:1;min-width:0;font-size:13px;font-weight:700;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sedeGroupHeader .count{
+  flex:none;font-size:10.5px;font-family:var(--mono);color:var(--text-faint);background:var(--panel);
+  border:1px solid var(--border-soft);border-radius:20px;padding:2px 8px;
+}
+.sedeGroupBody{padding:8px 0 0 10px;}
+.sedeGroupBody.collapsed{display:none;}
+
 .exportRow{display:flex;gap:8px;margin-top:6px;}
 .btn2{
   flex:1;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);
@@ -1476,7 +1491,7 @@ window.addEventListener('beforeunload', function(e){
 
 /* ============ STATE ============ */
 
-var state = { view:'home', session:null, prefs: {estadoFiltro:[]} };
+var state = { view:'home', session:null, prefs: {estadoFiltro:[]}, collapsedSedes: {} };
 
 /* ============ TOAST ============ */
 var toastEl = document.getElementById('toast');
@@ -1556,9 +1571,9 @@ async function renderHome(){
   if(sessions.length===0){
     html += '<div class="emptyState">Aún no tienes inspecciones. Crea una nueva para empezar a diligenciar los 248 ítems por piscina.</div>';
   } else {
-    sessions.forEach(function(s){
+    function sessionCardHtml(s){
       var pct = s.total ? Math.round(100*s.answered/s.total) : 0;
-      html += '<div class="sessionCard" data-id="'+s.id+'">'+
+      return '<div class="sessionCard" data-id="'+s.id+'">'+
         '<div class="ring" style="--pct:'+pct+'"><span>'+pct+'%</span></div>'+
         '<div class="info">'+
           '<div class="t1">'+esc(s.sede||'(sin sede)')+' · '+esc(s.piscina||'(sin piscina)')+'</div>'+
@@ -1567,6 +1582,32 @@ async function renderHome(){
         '<button class="cardDeleteBtn" data-delete-id="'+s.id+'" title="Eliminar inspección" style="flex:none;background:none;border:none;color:var(--c-nocumple);font-size:16px;padding:6px;">🗑</button>'+
         '<div class="chev">›</div>'+
       '</div>';
+    }
+
+    var sedeOrder = [], sedeMap = {};
+    sessions.forEach(function(s){
+      var key = s.sede || '(sin sede)';
+      if(!sedeMap[key]){ sedeMap[key]=[]; sedeOrder.push(key); }
+      sedeMap[key].push(s);
+    });
+
+    sedeOrder.forEach(function(sedeKey){
+      var group = sedeMap[sedeKey];
+      if(group.length>1){
+        var collapsed = !!state.collapsedSedes[sedeKey];
+        html += '<div class="sedeGroup">'+
+          '<div class="sedeGroupHeader'+(collapsed?' collapsed':'')+'" data-sede="'+esc(sedeKey)+'">'+
+            '<div class="chev">▾</div>'+
+            '<div class="name">'+esc(sedeKey)+'</div>'+
+            '<div class="count">'+group.length+'</div>'+
+          '</div>'+
+          '<div class="sedeGroupBody'+(collapsed?' collapsed':'')+'">'+
+            group.map(sessionCardHtml).join('')+
+          '</div>'+
+        '</div>';
+      } else {
+        html += sessionCardHtml(group[0]);
+      }
     });
   }
   html += '<div class="section-title">Respaldo</div>';
@@ -1583,6 +1624,13 @@ async function renderHome(){
   document.getElementById('newInspectionBtn').onclick = function(){ openSetupModal(null); };
   homeView.querySelectorAll('.sessionCard').forEach(function(card){
     card.onclick = function(){ openSession(card.getAttribute('data-id')); };
+  });
+  homeView.querySelectorAll('.sedeGroupHeader').forEach(function(header){
+    header.onclick = function(){
+      var key = header.getAttribute('data-sede');
+      state.collapsedSedes[key] = !state.collapsedSedes[key];
+      renderHome();
+    };
   });
   homeView.querySelectorAll('.cardDeleteBtn').forEach(function(btn){
     btn.onclick = async function(e){
