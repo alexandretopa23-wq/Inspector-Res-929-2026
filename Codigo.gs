@@ -698,6 +698,50 @@ function _capitulosDashboard(m){
   }).sort(function(a,b){ return a.pctCumplimiento - b.pctCumplimiento; });
 }
 
+/* Prioridad de riesgo para ordenar la lista de hallazgos abiertos: lo que el
+   ingeniero necesita ver primero al presentar resultados es lo crítico, no
+   el orden en que quedó la fila en la hoja. */
+var _RIESGO_ORDEN = {'Critico':0,'Crítico':0,'Alto':1,'Medio':2,'Bajo':3};
+
+/* ---------- Detalle de ítems "No cumple" para el dashboard ----------
+   A diferencia de _metricas() (que solo cuenta), esto arma la lista
+   completa de hallazgos abiertos con el texto que el ingeniero necesita
+   para presentar resultados: qué ítem, por qué no cumple, qué acción y
+   quién responde. Se calcula sobre el mismo `filas` que ya recibe
+   _resumenDashboard, así que respeta el filtro por vaso sin duplicar lógica. */
+function _hallazgosAbiertos(filas){
+  var lista = [];
+  filas.forEach(function(f){
+    if(String(f[COL.estado-1]||'')!=='No cumple') return;
+    var id = String(f[COL.id-1]);
+    var fc = f[COL.fechaCompromiso-1], cierre = f[COL.fechaCierre-1];
+    var hoy = new Date(); hoy.setHours(0,0,0,0);
+    var vencido = !!fc && !cierre && new Date(fc) < hoy;
+    lista.push({
+      id:id,
+      capitulo:String(f[COL.capitulo-1]||''),
+      item:String(f[COL.item-1]||''),
+      sede:String(f[COL.sede-1]||''),
+      piscina:String(f[COL.piscina-1]||''),
+      riesgo:String(f[COL.riesgo-1]||''),
+      hallazgo:String(f[COL.hallazgo-1]||''),
+      accion:String(f[COL.accion-1]||''),
+      respCierre:String(f[COL.respCierre-1]||''),
+      fechaCompromiso: fc ? _fechaStr(fc) : '',
+      vencido:vencido,
+      fueraAlcance: !!FUERA_ALCANCE_929[id]
+    });
+  });
+  lista.sort(function(a,b){
+    var ra = _RIESGO_ORDEN.hasOwnProperty(a.riesgo) ? _RIESGO_ORDEN[a.riesgo] : 9;
+    var rb = _RIESGO_ORDEN.hasOwnProperty(b.riesgo) ? _RIESGO_ORDEN[b.riesgo] : 9;
+    if(ra!==rb) return ra-rb;
+    if(a.vencido!==b.vencido) return a.vencido ? -1 : 1;
+    return a.capitulo.localeCompare(b.capitulo);
+  });
+  return lista;
+}
+
 function _resumenDashboard(filas){
   var m = _metricas(filas);
   // Evidencia faltante: hallazgos "No cumple" sin foto del estado actual —

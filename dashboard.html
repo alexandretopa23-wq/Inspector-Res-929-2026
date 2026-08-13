@@ -211,6 +211,71 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 .sedeGroupBody .listRow{padding-left:32px;}
 .listWrap>.listRow:first-child,.listWrap>.sedeGroup:first-child .sedeGroupHeader{border-top:none;}
 
+/* ---------- Tarjeta "Hallazgos abiertos" clickable ---------- */
+.statCard.clickable{cursor:pointer;transition:transform .15s,border-color .15s;}
+.statCard.clickable:hover{border-color:var(--c-nocumple);transform:translateY(-1px);}
+.statCard.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.statCard.clickable .openHint{
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--c-nocumple);margin-top:10px;display:flex;align-items:center;gap:5px;
+}
+
+/* ---------- Panel de hallazgos: ocupa la mitad derecha de la pantalla,
+   el dashboard queda visible (sin oscurecer) en la otra mitad — es un panel
+   lateral tipo "plataforma de inspección", no un modal que tapa todo. ---------- */
+.hallazgosScrim{
+  position:fixed;inset:0;background:transparent;z-index:59;
+  pointer-events:none;transition:background .2s;
+}
+.hallazgosScrim.open{pointer-events:auto;}
+@media(max-width:900px){.hallazgosScrim.open{background:rgba(4,14,31,.55);}}
+.hallazgosPanel{
+  position:fixed;top:0;right:0;width:50%;height:100vh;z-index:60;
+  background:var(--panel);border-left:1px solid var(--border);
+  box-shadow:-16px 0 40px rgba(4,14,31,.5);
+  display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .28s cubic-bezier(.32,.72,0,1);
+}
+.hallazgosPanel.open{transform:translateX(0);}
+@media(max-width:900px){.hallazgosPanel{width:100%;}}
+.hgPanelHead{
+  flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:20px 22px;border-bottom:1px solid var(--border);background:var(--panel-lowest);
+}
+.hgPanelKicker{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--c-nocumple);margin-bottom:4px;}
+.hgPanelHead h2{font-family:var(--display);font-size:19px;font-weight:700;margin:0;color:var(--text);}
+.hgPanelSub{font-size:12.5px;color:var(--text-faint);margin:6px 0 0;}
+.hgPanelClose{
+  flex:none;width:34px;height:34px;border-radius:8px;background:var(--panel-2);
+  border:1px solid var(--border);color:var(--text-dim);font-size:15px;cursor:pointer;
+}
+.hgPanelClose:hover{background:var(--panel-high);color:var(--text);}
+.hgPanelBody{flex:1;overflow-y:auto;padding:14px 0;}
+
+.hgSedeHeader{
+  padding:12px 22px;display:flex;align-items:center;gap:10px;cursor:pointer;
+  background:var(--panel-2);border-top:1px solid var(--border-soft);
+}
+.hgSedeHeader:first-child{border-top:none;}
+.hgSedeHeader:hover{background:var(--panel-high);}
+.hgSedeHeader .sgChev{color:var(--text-faint);font-size:12px;flex:none;transition:transform .15s;}
+.hgSedeHeader.collapsed .sgChev{transform:rotate(-90deg);}
+.hgSedeHeader .sgName{font-family:var(--display);font-size:13.5px;font-weight:700;color:var(--text);flex:1;min-width:0;}
+.hgSedeHeader .sgCount{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);flex:none;}
+.hgSedeBody.collapsed{display:none;}
+
+.hgRow{padding:14px 22px;border-top:1px solid var(--border-soft);}
+.hgTop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+.hgCap{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);}
+.hgPiscina{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);}
+.hgItem{font-size:13.5px;font-weight:600;color:var(--text);margin:2px 0 6px;line-height:1.4;}
+.hgTexto{font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:8px;}
+.hgTexto b{color:var(--text-faint);font-weight:600;}
+.hgMeta{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text-faint);}
+.hgMeta b{color:var(--text-dim);}
+.hgMeta .venc{color:var(--c-nocumple);font-weight:700;}
+.hgEmpty{padding:40px 22px;text-align:center;color:var(--text-faint);font-size:13px;}
+
 /* ---------- Filtro por inspección (cross-filter tipo Power BI) ----------
    La lista de inspecciones es el único selector: al tocar un vaso, los KPIs,
    el desglose de estados y los capítulos se recalculan sobre ese vaso. La
@@ -351,6 +416,23 @@ footer{
   <div id="content"></div>
 </main>
 
+<!-- Panel de hallazgos: vive fuera de #content porque pintar() reemplaza ese
+     HTML completo en cada repintado (ver comentario junto a esa función) y el
+     panel debe sobrevivir a los filtros de vaso — solo se refresca su
+     contenido, nunca se recrea el nodo. -->
+<div class="hallazgosScrim" id="hallazgosScrim"></div>
+<div class="hallazgosPanel" id="hallazgosPanel" role="dialog" aria-label="Hallazgos abiertos" aria-hidden="true">
+  <div class="hgPanelHead">
+    <div>
+      <div class="hgPanelKicker">Plataforma de inspección</div>
+      <h2 id="hgPanelTitulo">Hallazgos abiertos</h2>
+      <p class="hgPanelSub" id="hgPanelSub"></p>
+    </div>
+    <button class="hgPanelClose" id="hgPanelClose" type="button" aria-label="Cerrar panel de hallazgos">✕</button>
+  </div>
+  <div class="hgPanelBody" id="hgPanelBody"></div>
+</div>
+
 <footer>
   <span>Inspector de Piscinas · Res. 000929 de 2026</span>
   <span id="footScope">—</span>
@@ -481,12 +563,17 @@ function barChart(items){
 }
 
 function statCard(opts){
-  return '<div class="statCard'+(opts.err?' err':'')+'">'+
+  var clickable = !!opts.onOpenPanel;
+  return '<div class="statCard'+(opts.err?' err':'')+(clickable?' clickable':'')+'"'+
+      (opts.id?' id="'+opts.id+'"':'')+
+      (clickable?' role="button" tabindex="0" data-open-panel="'+opts.onOpenPanel+'" aria-label="'+esc(opts.lbl)+' — ver detalle"':'')+
+    '>'+
     '<div class="glow" style="background:'+opts.glow+'"></div>'+
     '<div>'+
       '<div class="lbl" style="'+(opts.lblColor?'color:'+opts.lblColor:'')+'">'+esc(opts.lbl)+'</div>'+
       '<div class="val" style="color:'+(opts.color||'var(--text)')+'">'+esc(opts.val)+'</div>'+
       '<div class="note">'+esc(opts.note)+'</div>'+
+      (clickable?'<div class="openHint">Ver detalle de hallazgos →</div>':'')+
     '</div>'+
     (opts.footer||'')+
   '</div>';
@@ -579,6 +666,7 @@ function pintar(){
     footer:'<div class="track"><i style="width:'+Math.max(2,g.pctCumplimiento)+'%;background:'+semaforoColor(g.pctCumplimiento)+'"></i></div>'
   });
   html += statCard({
+    id:'cardHallazgos', onOpenPanel:'hallazgos',
     lbl:'Hallazgos abiertos', val:g.noCumple,
     note:'ítems en "No cumple"',
     color:'var(--secondary)',
@@ -758,7 +846,136 @@ function pintar(){
   }
   var btnClear = document.getElementById('btnClearFiltro');
   if(btnClear) btnClear.onclick = function(){ VASO_SEL = null; pintar(); window.scrollTo({top:0,behavior:'smooth'}); };
+
+  // El panel de hallazgos vive fuera de #content, pero su contenido depende
+  // del alcance activo (global o el vaso filtrado) — si está abierto, se
+  // refresca en cada repintado para que nunca muestre datos de un filtro
+  // anterior.
+  if(HALLAZGOS_PANEL_ABIERTO) renderHallazgosPanel();
 }
+
+/* ---------- Panel de hallazgos abiertos ----------
+   Un panel lateral (mitad de pantalla en desktop, pantalla completa en
+   móvil) con el detalle de cada ítem "No cumple" — lo que el ingeniero
+   necesita para presentar resultados sin tener que abrir la hoja de Sheets.
+   Vive fuera de #content a propósito (ver comentario junto a su HTML): así
+   sobrevive a los repintados de pintar() y solo se refresca su contenido. */
+var HALLAZGOS_PANEL_ABIERTO = false;
+var COLLAPSED_HG_SEDES = {};
+
+function riesgoColor(r){
+  if(r==='Critico'||r==='Crítico') return 'var(--c-nocumple)';
+  if(r==='Alto') return 'var(--r-alto)';
+  if(r==='Medio') return 'var(--c-medio)';
+  if(r==='Bajo') return 'var(--text-faint)';
+  return 'var(--text-faint)';
+}
+
+function hgRowHtml(h){
+  var color = riesgoColor(h.riesgo);
+  return '<div class="hgRow">'+
+    '<div class="hgTop">'+
+      '<span class="pill" style="border-color:'+color+';color:'+color+';">'+esc(h.riesgo||'Sin riesgo')+'</span>'+
+      '<span class="hgCap">'+esc(h.capitulo)+'</span>'+
+      '<span class="metaSep"></span>'+
+      '<span class="hgPiscina">'+esc(h.piscina)+'</span>'+
+      (h.fueraAlcance?'<span class="pill" style="border-color:var(--text-faint);color:var(--text-faint);">Fuera de alcance 929</span>':'')+
+    '</div>'+
+    '<div class="hgItem">'+esc(h.item)+'</div>'+
+    (h.hallazgo?'<div class="hgTexto"><b>Hallazgo: </b>'+esc(h.hallazgo)+'</div>':'')+
+    (h.accion?'<div class="hgTexto"><b>Acción correctiva: </b>'+esc(h.accion)+'</div>':'')+
+    '<div class="hgMeta">'+
+      '<span><b>'+esc(h.respCierre||'Sin responsable asignado')+'</b></span>'+
+      (h.fechaCompromiso?'<span class="'+(h.vencido?'venc':'')+'">'+(h.vencido?'⚠ Vencida — compromiso ':'Compromiso: ')+esc(h.fechaCompromiso)+'</span>':'<span>Sin fecha compromiso</span>')+
+    '</div>'+
+  '</div>';
+}
+
+function renderHallazgosPanel(){
+  if(!DATA) return;
+  var g = alcance().global;
+  var v = vasoActivo();
+  var lista = g.hallazgos || [];
+
+  document.getElementById('hgPanelSub').textContent =
+    lista.length+(lista.length===1?' hallazgo abierto':' hallazgos abiertos')+
+    (v ? ' — '+v.piscina+' · '+v.sede : ' — todas las sedes');
+
+  var body = document.getElementById('hgPanelBody');
+  if(!lista.length){
+    body.innerHTML = '<div class="hgEmpty">🎉 Sin hallazgos "No cumple" '+(v?'en esta inspección.':'registrados.')+'</div>';
+    return;
+  }
+
+  // Mismo patrón de agrupación colapsable por sede que la lista de
+  // inspecciones: solo agrupa si hay más de una sede en el alcance actual
+  // (con un vaso filtrado, siempre es una sola, así que no tiene sentido
+  // el encabezado).
+  var orden = [], porSede = {};
+  lista.forEach(function(h){
+    var k = h.sede || '(sin sede)';
+    if(!porSede[k]){ porSede[k]=[]; orden.push(k); }
+    porSede[k].push(h);
+  });
+
+  var html = '';
+  orden.forEach(function(sede){
+    var items = porSede[sede];
+    if(orden.length>1){
+      var collapsed = !!COLLAPSED_HG_SEDES[sede];
+      html += '<div class="hgSedeHeader'+(collapsed?' collapsed':'')+'" role="button" tabindex="0"'+
+        ' data-hg-sede-toggle="'+esc(sede)+'" aria-expanded="'+(collapsed?'false':'true')+'">'+
+        '<span class="sgChev">▾</span><span class="sgName">'+esc(sede)+'</span>'+
+        '<span class="sgCount">'+items.length+(items.length===1?' hallazgo':' hallazgos')+'</span></div>'+
+        '<div class="hgSedeBody'+(collapsed?' collapsed':'')+'">'+
+          items.map(hgRowHtml).join('')+
+        '</div>';
+    } else {
+      html += items.map(hgRowHtml).join('');
+    }
+  });
+  body.innerHTML = html;
+}
+
+function abrirHallazgosPanel(){
+  HALLAZGOS_PANEL_ABIERTO = true;
+  renderHallazgosPanel();
+  document.getElementById('hallazgosPanel').classList.add('open');
+  document.getElementById('hallazgosPanel').setAttribute('aria-hidden','false');
+  document.getElementById('hallazgosScrim').classList.add('open');
+}
+function cerrarHallazgosPanel(){
+  HALLAZGOS_PANEL_ABIERTO = false;
+  document.getElementById('hallazgosPanel').classList.remove('open');
+  document.getElementById('hallazgosPanel').setAttribute('aria-hidden','true');
+  document.getElementById('hallazgosScrim').classList.remove('open');
+}
+
+document.addEventListener('click', function(ev){
+  if(ev.target.closest('[data-open-panel="hallazgos"]')){ abrirHallazgosPanel(); return; }
+  if(ev.target.closest('#hgPanelClose')){ cerrarHallazgosPanel(); return; }
+  if(ev.target.id==='hallazgosScrim'){ cerrarHallazgosPanel(); return; }
+  var hgHeader = ev.target.closest('[data-hg-sede-toggle]');
+  if(hgHeader){
+    var k = hgHeader.dataset.hgSedeToggle;
+    COLLAPSED_HG_SEDES[k] = !COLLAPSED_HG_SEDES[k];
+    renderHallazgosPanel();
+  }
+});
+document.addEventListener('keydown', function(ev){
+  if(ev.key==='Enter' || ev.key===' '){
+    var opener = ev.target.closest('[data-open-panel="hallazgos"]');
+    if(opener){ ev.preventDefault(); abrirHallazgosPanel(); return; }
+    var hgHeader = ev.target.closest('[data-hg-sede-toggle]');
+    if(hgHeader){
+      ev.preventDefault();
+      var k = hgHeader.dataset.hgSedeToggle;
+      COLLAPSED_HG_SEDES[k] = !COLLAPSED_HG_SEDES[k];
+      renderHallazgosPanel();
+      return;
+    }
+  }
+});
 
 /* ---------- Config: ancla global (servidor) + prueba local (navegador) ----------
    Dos capas independientes:
@@ -905,6 +1122,9 @@ document.getElementById('btnRefresh').onclick = cargar;
 // Esc quita el filtro desde cualquier parte de la página — la salida esperada
 // cuando el usuario ya se alejó de la lista y solo ve los indicadores.
 document.addEventListener('keydown', function(ev){
+  // Esc cierra primero el panel de hallazgos si está abierto; solo si no lo
+  // está, cae al comportamiento previo de quitar el filtro por vaso.
+  if(ev.key==='Escape' && HALLAZGOS_PANEL_ABIERTO){ cerrarHallazgosPanel(); return; }
   if(ev.key==='Escape' && VASO_SEL!=null){ VASO_SEL = null; pintar(); }
 });
 document.getElementById('btnCfgToggle').onclick = function(){
