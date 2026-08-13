@@ -192,6 +192,25 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 @media(min-width:640px){.sideBlock{display:block;}}
 .pctBig{font-family:var(--display);font-size:22px;font-weight:700;flex:none;}
 
+/* ---------- Agrupación por sede en la lista de inspecciones ----------
+   Solo se agrupa cuando una sede tiene más de un vaso: una sola inspección
+   ya se lee sola, agruparla añadiría un encabezado sin aportar nada. */
+.sedeGroupHeader{
+  padding:14px 16px;display:flex;align-items:center;gap:12px;
+  border-top:1px solid var(--border-soft);cursor:pointer;
+  background:var(--panel-2);transition:background .15s;
+}
+.sedeGroupHeader:hover{background:var(--panel-high);}
+.sedeGroupHeader:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.sgChev{color:var(--text-faint);font-size:12px;flex:none;transition:transform .15s;}
+.sedeGroupHeader.collapsed .sgChev{transform:rotate(-90deg);}
+.sgName{font-family:var(--display);font-size:14.5px;font-weight:700;color:var(--text);flex:1;min-width:0;}
+.sgCount{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:none;}
+.sgPct{font-family:var(--display);font-size:16px;font-weight:700;flex:none;}
+.sedeGroupBody.collapsed{display:none;}
+.sedeGroupBody .listRow{padding-left:32px;}
+.listWrap>.listRow:first-child,.listWrap>.sedeGroup:first-child .sedeGroupHeader{border-top:none;}
+
 /* ---------- Filtro por inspección (cross-filter tipo Power BI) ----------
    La lista de inspecciones es el único selector: al tocar un vaso, los KPIs,
    el desglose de estados y los capítulos se recalculan sobre ese vaso. La
@@ -483,6 +502,9 @@ function statCard(opts){
    del supervisor —"¿qué pasa en esta inspección?"— sin la complejidad de un
    cross-filter multidireccional. */
 var DATA = null, VASO_SEL = null;
+// Colapso por sede en la lista de inspecciones (solo en memoria: no necesita
+// persistir entre recargas, es una preferencia de exploración momentánea).
+var COLLAPSED_SEDES = {};
 
 function vasoActivo(){
   return (VASO_SEL!=null && DATA && DATA.vasos[VASO_SEL]) ? DATA.vasos[VASO_SEL] : null;
@@ -501,6 +523,13 @@ function seleccionarVaso(i){
   // teclado; preventScroll evita que el repintado salte la vista.
   var fila = document.querySelector('.listRow[data-i="'+i+'"]');
   if(fila) fila.focus({preventScroll:true});
+}
+
+function toggleSedeGroup(sede){
+  COLLAPSED_SEDES[sede] = !COLLAPSED_SEDES[sede];
+  pintar();
+  var header = document.querySelector('.sedeGroupHeader[data-sede-toggle="'+CSS.escape(sede)+'"]');
+  if(header) header.focus({preventScroll:true});
 }
 
 function render(d){
@@ -634,11 +663,10 @@ function pintar(){
     '<h2 style="font-family:var(--display);font-size:20px;font-weight:600;margin:0 0 3px;">Inspecciones recientes</h2>'+
     '<p class="hint">'+d.vasos.length+' vaso'+(d.vasos.length===1?'':'s')+' con ítems registrados, más recientes primero. '+
       'Toca una inspección para filtrar los indicadores de arriba; tócala otra vez (o Esc) para ver todo.</p></div>';
-  html += '<div class="listWrap" id="listaVasos">';
-  d.vasos.forEach(function(v,i){
+  function vasoRowHtml(v,i){
     var pill = semaforoPill(v.pctCumplimiento);
     var esSel = (VASO_SEL===i);
-    html += '<div class="listRow'+(esSel?' sel':(sel?' dim':''))+'" role="button" tabindex="0"'+
+    return '<div class="listRow'+(esSel?' sel':(sel?' dim':''))+'" role="button" tabindex="0"'+
       ' aria-pressed="'+(esSel?'true':'false')+'" data-i="'+i+'"'+
       ' aria-label="Filtrar por '+esc(v.piscina)+' — '+esc(v.sede)+'">'+
       '<div class="listMain">'+
@@ -661,6 +689,39 @@ function pintar(){
         '<div class="pctBig" style="color:'+semaforoColor(v.pctCumplimiento)+'">'+v.pctCumplimiento+'%</div>'+
       '</div>'+
     '</div>';
+  }
+
+  // Agrupa por sede preservando el orden (más recientes primero) que ya trae
+  // d.vasos; el índice original de cada vaso se conserva para que data-i siga
+  // apuntando a DATA.vasos[i] sin importar el agrupamiento visual.
+  var sedeOrden = [], sedeIdx = {};
+  d.vasos.forEach(function(v,i){
+    var key = v.sede || '(sin sede)';
+    if(!sedeIdx[key]){ sedeIdx[key]=[]; sedeOrden.push(key); }
+    sedeIdx[key].push(i);
+  });
+
+  html += '<div class="listWrap" id="listaVasos">';
+  sedeOrden.forEach(function(key){
+    var idxs = sedeIdx[key];
+    if(idxs.length>1){
+      var sedeInfo = (d.sedes||[]).filter(function(s){ return s.sede===key; })[0];
+      var collapsed = !!COLLAPSED_SEDES[key];
+      html += '<div class="sedeGroup">'+
+        '<div class="sedeGroupHeader'+(collapsed?' collapsed':'')+'" role="button" tabindex="0"'+
+          ' data-sede-toggle="'+esc(key)+'" aria-expanded="'+(collapsed?'false':'true')+'">'+
+          '<span class="sgChev">▾</span>'+
+          '<span class="sgName">'+esc(key)+'</span>'+
+          '<span class="sgCount">'+idxs.length+' vasos</span>'+
+          (sedeInfo ? '<span class="sgPct" style="color:'+semaforoColor(sedeInfo.pctCumplimiento)+'">'+sedeInfo.pctCumplimiento+'%</span>' : '')+
+        '</div>'+
+        '<div class="sedeGroupBody'+(collapsed?' collapsed':'')+'">'+
+          idxs.map(function(i){ return vasoRowHtml(d.vasos[i], i); }).join('')+
+        '</div>'+
+      '</div>';
+    } else {
+      html += vasoRowHtml(d.vasos[idxs[0]], idxs[0]);
+    }
   });
   html += '</div>';
 
@@ -682,6 +743,17 @@ function pintar(){
       if(!fila) return;
       ev.preventDefault();   // Espacio no debe hacer scroll de página
       seleccionarVaso(Number(fila.dataset.i));
+    });
+    lista.addEventListener('click', function(ev){
+      var header = ev.target.closest('.sedeGroupHeader');
+      if(header) toggleSedeGroup(header.dataset.sedeToggle);
+    });
+    lista.addEventListener('keydown', function(ev){
+      if(ev.key!=='Enter' && ev.key!==' ') return;
+      var header = ev.target.closest('.sedeGroupHeader');
+      if(!header) return;
+      ev.preventDefault();
+      toggleSedeGroup(header.dataset.sedeToggle);
     });
   }
   var btnClear = document.getElementById('btnClearFiltro');
