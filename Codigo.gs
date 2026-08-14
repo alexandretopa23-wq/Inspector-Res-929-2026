@@ -768,7 +768,8 @@ function _resumenDashboard(filas){
       pendiente:m.pendiente, noAplica:m.noAplica, fueraAlcance:m.fueraAlcance,
       critico:m.critico, alto:m.alto, medio:m.medio, bajo:m.bajo,
       vencidos:m.vencidos, sinFecha:m.sinFecha, avanceProm:m.avanceProm,
-      hallazgosNoCumple:hallazgosNoCumple, evidenciaFaltante:evidenciaFaltante
+      hallazgosNoCumple:hallazgosNoCumple, evidenciaFaltante:evidenciaFaltante,
+      hallazgos:_hallazgosAbiertos(filas)
     },
     capitulos: _capitulosDashboard(m)
   };

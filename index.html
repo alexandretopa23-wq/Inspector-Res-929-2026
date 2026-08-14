@@ -188,6 +188,10 @@ input,textarea,select{font-family:inherit;}
 .chBadge.complete{background:var(--c-cumple-bg);color:var(--c-cumple);}
 .chBadge.partial{background:var(--c-pendiente-bg);color:var(--c-pendiente);}
 .chBadge.empty{background:var(--panel-2);color:var(--text-faint);}
+/* Badge que solo aparece cuando hay filtro de estado activo: cuenta los ítems
+   del capítulo que coinciden con el filtro, con el color del estado filtrado. */
+.chBadge.filtro{border:1px solid currentColor;}
+.chapter.filteredOut{display:none;}
 .chArrow{color:var(--text-faint);font-size:13px;transition:transform .15s;}
 .chapter.open .chArrow{transform:rotate(90deg);}
 .chapterBody{display:none;border-top:1px solid var(--border-soft);padding:10px;}
@@ -2149,13 +2153,16 @@ function renderChecklist(){
         '</div>'+
         '<div class="chRight">'+
           '<div class="chSyncBadge" style="font-size:10px;font-weight:600;"></div>'+
-          '<div class="chBadge '+(complete?'complete':(answered>0?'partial':'empty'))+'">'+answered+'/'+items.length+'</div>'+
+          '<div class="chBadge filtro hidden"></div>'+
+          '<div class="chBadge chBadgeAvance '+(complete?'complete':(answered>0?'partial':'empty'))+'">'+answered+'/'+items.length+'</div>'+
           '<div class="chArrow">›</div>'+
         '</div>'+
       '</div>'+
       '<div class="chapterBody" id="chBody-'+ci+'"></div>'+
     '</div>';
   });
+
+  html += '<div id="filtroSinCapitulos" class="emptyState hidden" style="padding:16px;">Ningún capítulo tiene ítems con el estado filtrado. Vuelve a "Todos" o elige otro estado.</div>';
 
   checklistView.innerHTML = html;
   document.getElementById('btnBackHome').onclick = function(){ renderHome(); };
@@ -2212,6 +2219,7 @@ function renderChecklist(){
   renderChecklistHeader();
   wireSearch();
   document.getElementById('btnNextPending').onclick = jumpToNextPending;
+  applyEstadoFiltroToChapters();
 }
 
 function jumpToItem(itemId, forceShowAll){
@@ -2221,6 +2229,9 @@ function jumpToItem(itemId, forceShowAll){
   var chapter = document.querySelector('.chapter[data-cap="'+ci+'"]');
   if(!chapter) return;
   checklistView.querySelectorAll('.chapter.open').forEach(function(c){ if(c!==chapter) c.classList.remove('open'); });
+  // El salto (búsqueda / siguiente pendiente) manda sobre el filtro: si el
+  // capítulo estaba oculto por no tener coincidencias, se revela para el salto.
+  if(forceShowAll) chapter.classList.remove('filteredOut');
   chapter.classList.add('open');
   renderChapterBody(ci, forceShowAll);
   setTimeout(function(){
@@ -2380,6 +2391,17 @@ function dueBadgeHtml(fechaCompromiso){
   return '<span class="dueBadge ok">Vence en '+diffDays+'d</span>';
 }
 
+var ESTADO_COLOR_MAP = {
+  'Cumple':'var(--c-cumple)','No cumple':'var(--c-nocumple)','En proceso':'var(--c-proceso)',
+  'Pendiente':'var(--c-pendiente)','No aplica':'var(--c-noaplica)','Sin responder':'var(--text-faint)'
+};
+var ESTADO_BG_MAP = {
+  'Cumple':'var(--c-cumple-bg)','No cumple':'var(--c-nocumple-bg)','En proceso':'var(--c-proceso-bg)',
+  'Pendiente':'var(--c-pendiente-bg)','No aplica':'var(--c-noaplica-bg)','Sin responder':'var(--panel-2)'
+};
+function estadoColor(est){ return ESTADO_COLOR_MAP[est] || 'var(--text-faint)'; }
+function estadoBg(est){ return ESTADO_BG_MAP[est] || 'var(--panel-2)'; }
+
 /* Fila compacta (colapsada) de un ítem. Antes solo existía para ítems ya
    respondidos; ahora se usa para TODOS, incluidos los sin responder (con
    punto/etiqueta neutra "Sin responder"), para que un capítulo con muchos
@@ -2387,14 +2409,8 @@ function dueBadgeHtml(fechaCompromiso){
 function collapsedRowHtml(it, r){
   r = r || {};
   var hasEstado = !!r.estado;
-  var estColorVar = hasEstado ? {
-    'Cumple':'var(--c-cumple)','No cumple':'var(--c-nocumple)','En proceso':'var(--c-proceso)',
-    'Pendiente':'var(--c-pendiente)','No aplica':'var(--c-noaplica)'
-  }[r.estado] : 'var(--text-faint)';
-  var estBg = hasEstado ? {
-    'Cumple':'var(--c-cumple-bg)','No cumple':'var(--c-nocumple-bg)','En proceso':'var(--c-proceso-bg)',
-    'Pendiente':'var(--c-pendiente-bg)','No aplica':'var(--c-noaplica-bg)'
-  }[r.estado] : 'var(--panel-2)';
+  var estColorVar = estadoColor(hasEstado ? r.estado : 'Sin responder');
+  var estBg = estadoBg(hasEstado ? r.estado : 'Sin responder');
   return '<div class="collapsedRow" data-action="expand">'+
       '<div class="collapsedDot" style="background:'+estColorVar+'"></div>'+
       '<div class="collapsedText"><span class="mono itemId">'+it.id+'</span> — '+esc(it.item)+'</div>'+
@@ -2740,6 +2756,61 @@ function refreshAfterAnswer(itemEl, it, r){
   }
 }
 
+/* Cuenta cuántos ítems del capítulo tienen alguno de los estados filtrados. */
+function contarItemsPorFiltro(cap, filtro){
+  var sess = state.session;
+  if(!sess) return 0;
+  return ITEMS.filter(function(it){
+    if(it.cap!==cap) return false;
+    var r = sess.responses[it.id];
+    return filtro.indexOf((r && r.estado) ? r.estado : 'Sin responder') >= 0;
+  }).length;
+}
+
+/* Con filtro activo, cada capítulo muestra un badge propio del filtro (color del
+   estado filtrado + cantidad de coincidencias) en lugar del badge de avance, y
+   los capítulos sin coincidencias se ocultan. Con "Todos" se restituye todo.
+   opts.keepVisible evita ocultar capítulos en caliente (ver updateChapterBadge). */
+function applyEstadoFiltroToChapters(opts){
+  opts = opts || {};
+  if(state.view!=='checklist' || !state.session) return;
+  var filtro = state.prefs.estadoFiltro || [];
+  var activo = filtro.length > 0;
+  var visibles = 0;
+  document.querySelectorAll('#checklistView .chapter').forEach(function(chapter){
+    var ci = chapter.getAttribute('data-cap');
+    var cap = CHAPTERS[ci];
+    var badgeFiltro = chapter.querySelector('.chBadge.filtro');
+    var badgeAvance = chapter.querySelector('.chBadgeAvance');
+    var meta = chapter.querySelector('.chMeta');
+    var total = ITEMS.filter(function(it){return it.cap===cap;}).length;
+    if(!activo){
+      chapter.classList.remove('filteredOut');
+      badgeFiltro.classList.add('hidden');
+      badgeAvance.classList.remove('hidden');
+      if(meta) meta.textContent = total+' ítems';
+      visibles++;
+      return;
+    }
+    var n = contarItemsPorFiltro(cap, filtro);
+    // Un solo estado filtrado → color de ese estado. Varios → color de acento.
+    var fg = filtro.length===1 ? estadoColor(filtro[0]) : 'var(--accent)';
+    var bg = filtro.length===1 ? estadoBg(filtro[0]) : 'var(--panel-2)';
+    badgeFiltro.textContent = n;
+    badgeFiltro.style.color = fg;
+    badgeFiltro.style.background = bg;
+    badgeFiltro.classList.remove('hidden');
+    badgeAvance.classList.add('hidden');
+    if(meta) meta.textContent = n+' de '+total+' ítems';
+    var ocultar = n===0 && !(opts.keepVisible && chapter.classList.contains('open'));
+    chapter.classList.toggle('filteredOut', ocultar);
+    if(ocultar) chapter.classList.remove('open');
+    if(!ocultar) visibles++;
+  });
+  var vacio = document.getElementById('filtroSinCapitulos');
+  if(vacio) vacio.classList.toggle('hidden', visibles>0);
+}
+
 function updateChapterBadge(ci){
   var cap = CHAPTERS[ci];
   var sess = state.session;
@@ -2748,9 +2819,13 @@ function updateChapterBadge(ci){
   var complete = answered===items.length;
   var chapter = document.querySelector('.chapter[data-cap="'+ci+'"]');
   if(!chapter) return;
-  var badge = chapter.querySelector('.chBadge');
+  var badge = chapter.querySelector('.chBadgeAvance');
   badge.textContent = answered+'/'+items.length;
-  badge.className = 'chBadge '+(complete?'complete':(answered>0?'partial':'empty'));
+  badge.className = 'chBadge chBadgeAvance '+(complete?'complete':(answered>0?'partial':'empty'));
+  // El conteo del filtro también cambia al responder un ítem (p.ej. filtrando
+  // por "Sin responder"), pero el capítulo no se oculta en caliente para no
+  // sacarle el piso a quien está diligenciando: se reacomoda al tocar el filtro.
+  applyEstadoFiltroToChapters({keepVisible:true});
 }
 
 function updateSavedLabel(){
@@ -2899,6 +2974,7 @@ estadoFilterPills.querySelectorAll('.pill').forEach(function(p){
     savePrefs(state.prefs);
     syncEstadoFilterPillsUI();
     if(state.view==='checklist'){
+      applyEstadoFiltroToChapters();
       document.querySelectorAll('.chapter.open').forEach(function(c){
         renderChapterBody(c.getAttribute('data-cap'));
       });
