@@ -1268,6 +1268,44 @@ async function syncChapterToSheets(sess, cap, opts){
   }
 }
 
+/* Sincroniza TODO de una vez: cada capítulo que tenga al menos un ítem
+   diligenciado, más la ficha técnica si tiene datos. Reutiliza los mismos
+   syncChapterToSheets/syncFichaToSheets (con sus candados de "envío en
+   curso") en lugar de duplicar la lógica de red. */
+async function syncAllToSheets(sess){
+  if(!STORAGE_OK || !SHEETS_WEBHOOK_URL){ toast('⚠ No hay webhook de Sheets configurado (config.json)'); return; }
+
+  var capsConDatos = CHAPTERS.filter(function(cap){
+    return chapterRows(sess, cap).length > 0;
+  });
+  var fichaConDatos = Object.keys(getFicha(sess)).length > 0;
+
+  if(capsConDatos.length===0 && !fichaConDatos){
+    toast('No hay ítems diligenciados todavía para sincronizar');
+    return;
+  }
+
+  var btn = document.getElementById('btnSyncAll');
+  if(btn){ btn.disabled = true; btn.textContent = '↑ Sincronizando todo…'; }
+
+  var ok = 0, fail = 0;
+  for(var i=0;i<capsConDatos.length;i++){
+    var cap = capsConDatos[i];
+    setChapterSyncBadge(cap, 'sending');
+    var res = await syncChapterToSheets(sess, cap, {silent:true});
+    if(res) ok++; else fail++;
+  }
+  if(fichaConDatos){
+    var fres = await syncFichaToSheets(sess, {silent:true});
+    if(fres) ok++; else fail++;
+  }
+
+  if(btn){ btn.disabled = false; btn.textContent = '↑ Sincronizar todo con Sheets'; }
+
+  if(fail===0){ toast('✓ Todo sincronizado con Sheets ('+ok+' de '+ok+')'); }
+  else{ toast('⚠ Sincronizado con errores: '+ok+' ok, '+fail+' con problemas — reintenta más tarde'); }
+}
+
 function setChapterSyncBadge(cap, status){
   var ci = CHAPTERS.indexOf(cap);
   var badge = document.querySelector('.chapter[data-cap="'+ci+'"] .chSyncBadge');
@@ -2139,7 +2177,8 @@ function renderChecklist(){
     '<input id="searchInput" placeholder="🔍 Buscar ítem por texto o ID (ej. CHK-045, turbidez…)" style="width:100%;background:var(--panel);border:1px solid var(--border-soft);color:var(--text);border-radius:10px;padding:11px 12px;font-size:13px;">'+
     '<div id="searchResults" class="hidden" style="position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel);border:1px solid var(--border);border-radius:10px;max-height:340px;overflow-y:auto;z-index:40;box-shadow:0 10px 30px rgba(0,0,0,.5);"></div>'+
   '</div>';
-  html += '<button id="btnNextPending" style="width:100%;background:var(--panel);border:1px solid var(--border-soft);color:var(--accent);border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-bottom:12px;">⏭ Ir al siguiente ítem pendiente</button>';
+  html += '<button id="btnNextPending" style="width:100%;background:var(--panel);border:1px solid var(--border-soft);color:var(--accent);border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-bottom:8px;">⏭ Ir al siguiente ítem pendiente</button>';
+  html += '<button id="btnSyncAll" style="width:100%;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-bottom:12px;">↑ Sincronizar todo con Sheets</button>';
 
   CHAPTERS.forEach(function(cap, ci){
     var items = ITEMS.filter(function(it){return it.cap===cap;});
@@ -2219,6 +2258,7 @@ function renderChecklist(){
   renderChecklistHeader();
   wireSearch();
   document.getElementById('btnNextPending').onclick = jumpToNextPending;
+  document.getElementById('btnSyncAll').onclick = function(){ syncAllToSheets(state.session); };
   applyEstadoFiltroToChapters();
 }
 
