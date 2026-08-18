@@ -832,7 +832,11 @@ function _hallazgosAbiertos(filas){
       respCierre:String(f[COL.respCierre-1]||''),
       fechaCompromiso: fc ? _fechaStr(fc) : '',
       vencido:vencido,
-      fueraAlcance: !!FUERA_ALCANCE_929[id]
+      fueraAlcance: !!FUERA_ALCANCE_929[id],
+      // Permite filtrar este mismo panel por área desde el dashboard (tabla
+      // "Repartición por área") sin tener que duplicar ID_A_AREA en el
+      // cliente ni pedir un endpoint nuevo.
+      area: _areaDe(id)
     });
   });
   lista.sort(function(a,b){

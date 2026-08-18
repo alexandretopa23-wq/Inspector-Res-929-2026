@@ -133,6 +133,11 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 .grid2{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:28px;}
 @media(min-width:900px){.grid2{grid-template-columns:1fr 1fr;}}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;}
+/* Mismo ritmo vertical de 28px que .bento y .grid2 usan entre sí, para
+   paneles de ancho completo que viven sueltos en el flujo (no dentro de un
+   grid2) — sin esto, el panel queda pegado al siguiente bloque en vez de
+   respirar igual que el resto. */
+.panelFull{margin-bottom:28px;}
 .panel h2{font-family:var(--display);font-size:20px;line-height:28px;font-weight:600;margin:0 0 3px;}
 .panel .hint{font-size:12px;color:var(--text-faint);margin:0 0 16px;}
 .chartBox{width:100%;overflow-x:auto;}
@@ -149,39 +154,39 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 
 /* ---------- Tabla "Repartición por área" ----------
    Enrutamiento de hallazgos hacia Eléctrico / Infraestructura / Térmica e
-   Hidráulica / Gestión de sede. A diferencia de .barRow (capítulos), cada
-   fila lleva un chip de identidad de área (color fijo, no de desempeño) más
-   una barra de cumplimiento independiente — así el color nunca se confunde
-   entre "de quién es" y "qué tan bien va". */
-.areaTable{display:flex;flex-direction:column;gap:10px;}
-.areaRow{
-  display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;
-  padding:14px 16px;border-radius:10px;background:var(--panel-2);
-  border:1px solid var(--border-soft);transition:border-color .15s,background .15s,transform .15s;
+   Hidráulica / Gestión de sede. Se usa una tabla real (no otra fila+barra
+   como "Capítulos con más fallas" o "Estado de los ítems") a propósito: esas
+   dos son gráficos exploratorios (ranking / proporción), mientras que esta
+   es un listado fijo de asignación que cada área va a leer para saber
+   cuántos hallazgos le tocan — con solo 4-5 filas, precisión de lectura
+   importa más que forma, y una tabla además diferencia visualmente esta
+   sección de los dos gráficos vecinos. */
+.areaTableWrap{overflow-x:auto;}
+.areaTable{width:100%;border-collapse:collapse;min-width:460px;}
+.areaTable th{
+  font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--text-faint);text-align:left;padding:0 12px 10px;border-bottom:1px solid var(--border);
 }
-.areaRow:hover{border-color:var(--border);background:var(--panel-high);transform:translateY(-1px);}
-.areaChip{
-  display:flex;align-items:center;gap:8px;flex:none;
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-  padding:6px 10px;border-radius:32px;border:1px solid transparent;white-space:nowrap;
-}
-.areaDot{width:8px;height:8px;border-radius:50%;flex:none;}
-.areaMain{min-width:0;}
-.areaCountRow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
-.areaCount{font-size:13px;font-weight:600;color:var(--text);}
-.areaNoCumple{font-family:var(--mono);font-size:11.5px;color:var(--text-faint);}
-.areaNoCumple b{color:var(--c-nocumple);font-weight:700;}
-.areaBarTrack{width:100%;height:6px;border-radius:32px;background:var(--panel-highest);overflow:hidden;margin-top:7px;}
+.areaTable th.num{text-align:right;}
+.areaTable td{padding:12px;border-bottom:1px solid var(--border-soft);vertical-align:middle;}
+.areaTable tbody tr:last-child td{border-bottom:none;}
+.areaTable tbody tr{transition:background .15s;cursor:pointer;}
+.areaTable tbody tr:nth-child(even){background:var(--panel-2);}
+.areaTable tbody tr:hover{background:var(--panel-high);}
+.areaTable tbody tr:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.areaGoHint{font-family:var(--mono);font-size:10px;color:var(--text-faint);white-space:nowrap;}
+.areaTable tbody tr:hover .areaGoHint{color:var(--c-proceso);}
+.areaNameCell{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;}
+.areaDot{width:9px;height:9px;border-radius:50%;flex:none;}
+.areaGoHint{opacity:0;transition:opacity .15s;margin-left:6px;}
+.areaTable tbody tr:hover .areaGoHint,.areaTable tbody tr:focus-visible .areaGoHint{opacity:1;}
+.areaTable td.num{font-family:var(--mono);font-size:13px;color:var(--text-dim);text-align:right;white-space:nowrap;}
+.areaTable td.num b{color:var(--text);font-weight:600;}
+.areaTable td.num.bad b{color:var(--c-nocumple);}
+.areaPctCell{display:flex;align-items:center;justify-content:flex-end;gap:8px;}
+.areaPctVal{font-family:var(--mono);font-size:13px;font-weight:700;width:34px;text-align:right;}
+.areaBarTrack{width:52px;height:5px;border-radius:32px;background:var(--panel-highest);overflow:hidden;flex:none;}
 .areaBarFill{height:100%;border-radius:32px;}
-.areaStats{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none;}
-.areaPct{font-family:var(--display);font-size:19px;font-weight:700;line-height:1;}
-.areaPctLbl{font-family:var(--mono);font-size:9.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;}
-@media(max-width:520px){
-  .areaRow{grid-template-columns:1fr auto;grid-template-areas:"chip stats" "main main";}
-  .areaChip{grid-area:chip;}
-  .areaStats{grid-area:stats;}
-  .areaMain{grid-area:main;}
-}
 
 /* ---------- Stacked bar + legend ---------- */
 .stackBar{display:flex;height:14px;border-radius:32px;overflow:hidden;background:var(--panel-highest);margin-bottom:14px;}
@@ -286,7 +291,30 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
   border:1px solid var(--border);color:var(--text-dim);font-size:15px;cursor:pointer;
 }
 .hgPanelClose:hover{background:var(--panel-high);color:var(--text);}
+.hgAreaClear{
+  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--c-proceso);
+  background:none;border:none;padding:0;margin-top:2px;cursor:pointer;text-decoration:underline;
+  text-underline-offset:2px;
+}
+.hgAreaClear:hover{color:var(--text);}
 .hgPanelBody{flex:1;overflow-y:auto;padding:14px 0;}
+
+/* ---------- Ranking "ítems que más se repiten" dentro del panel de
+   hallazgos ---------- Solo aparece cuando el filtro por área deja algún
+   ítem repetido en más de una fila (varias sedes o varias piscinas); si no
+   hay repetición no aporta nada y no se pinta, para no meter ruido en una
+   lista corta. Responde directamente "cuáles incumplen más" sin que el
+   usuario tenga que contarlos a mano en la lista de abajo. */
+.hgTopItems{padding:14px 22px 16px;border-bottom:1px solid var(--border-soft);background:var(--panel-2);}
+.hgTopItemsTitle{
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-faint);margin-bottom:10px;
+}
+.hgTopItemRow{display:flex;align-items:baseline;gap:10px;margin-bottom:7px;}
+.hgTopItemRow:last-child{margin-bottom:0;}
+.hgTopItemRank{font-family:var(--mono);font-size:11px;color:var(--text-faint);width:16px;flex:none;}
+.hgTopItemName{flex:1;font-size:12.5px;color:var(--text-dim);line-height:1.4;min-width:0;}
+.hgTopItemCount{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--c-nocumple);flex:none;white-space:nowrap;}
 
 .hgSedeHeader{
   padding:12px 22px;display:flex;align-items:center;gap:10px;cursor:pointer;
@@ -524,28 +552,34 @@ var AREA_COLOR = {
 };
 function areaColor(area){ return AREA_COLOR[area] || 'var(--text-faint)'; }
 
-/* Fila de la tabla "Repartición por área": chip de identidad (color fijo) +
-   conteo + barra de cumplimiento (color de semáforo, independiente del
-   chip). Se filtra igual que barChart(alcance().capitulos) — llega ya
-   recortada al vaso activo porque alcance().areas viene de vaso.resumen. */
+/* Fila de la tabla "Repartición por área": punto de identidad (color fijo,
+   igual a AREA_COLOR) + columnas numéricas alineadas a la derecha en
+   --mono + celda de % con barrita pequeña (color de semáforo, independiente
+   del punto de identidad). Se filtra igual que barChart(alcance().capitulos)
+   — llega ya recortada al vaso activo porque alcance().areas viene de
+   vaso.resumen.
+   La fila entera es clicable (mismo patrón que la tarjeta "Hallazgos
+   abiertos": data-open-panel="hallazgos") y abre el panel lateral ya
+   existente, filtrado a esta área — así "qué ítems le tocan, cuáles fallan
+   más y en qué sedes" sale del mismo detalle que ya arma _hallazgosAbiertos(),
+   sin agregar una tabla nueva ni tocar la hoja de origen. El hint "Ver
+   detalle →" solo se ve en hover/foco para no ensuciar la fila en reposo. */
 function areaRowHtml(a){
   var col = areaColor(a.area);
-  return '<div class="areaRow">'+
-    '<span class="areaChip" style="color:'+col+';border-color:'+col+'55;background:'+col+'1c;">'+
-      '<span class="areaDot" style="background:'+col+'"></span>'+esc(a.area)+
-    '</span>'+
-    '<div class="areaMain">'+
-      '<div class="areaCountRow">'+
-        '<span class="areaCount">'+a.total+' ítem'+(a.total===1?'':'s')+'</span>'+
-        '<span class="areaNoCumple">· <b>'+a.noCumple+'</b> en "No cumple"'+(a.fueraAlcance>0?' · '+a.fueraAlcance+' fuera de alcance':'')+'</span>'+
-      '</div>'+
-      '<div class="areaBarTrack"><div class="areaBarFill" style="width:'+Math.max(2,a.pctCumplimiento)+'%;background:'+semaforoColor(a.pctCumplimiento)+'"></div></div>'+
-    '</div>'+
-    '<div class="areaStats">'+
-      '<span class="areaPct" style="color:'+semaforoColor(a.pctCumplimiento)+'">'+a.pctCumplimiento+'%</span>'+
-      '<span class="areaPctLbl">cumple</span>'+
-    '</div>'+
-  '</div>';
+  return '<tr role="button" tabindex="0" data-open-panel="hallazgos" data-area="'+esc(a.area)+'" '+
+      'aria-label="Ver hallazgos de '+esc(a.area)+'">'+
+    '<td><span class="areaNameCell"><span class="areaDot" style="background:'+col+'"></span>'+esc(a.area)+
+      '<span class="areaGoHint">Ver detalle →</span></span></td>'+
+    '<td class="num">'+a.total+'</td>'+
+    '<td class="num'+(a.noCumple>0?' bad':'')+'"><b>'+a.noCumple+'</b></td>'+
+    '<td class="num">'+(a.fueraAlcance>0 ? a.fueraAlcance : '—')+'</td>'+
+    '<td class="num">'+
+      '<span class="areaPctCell">'+
+        '<span class="areaBarTrack"><span class="areaBarFill" style="width:'+Math.max(2,a.pctCumplimiento)+'%;background:'+semaforoColor(a.pctCumplimiento)+'"></span></span>'+
+        '<span class="areaPctVal" style="color:'+semaforoColor(a.pctCumplimiento)+'">'+a.pctCumplimiento+'%</span>'+
+      '</span>'+
+    '</td>'+
+  '</tr>';
 }
 
 function renderState(html){ document.getElementById('content').innerHTML = html; }
@@ -780,12 +814,13 @@ function pintar(){
   // Gestión de sede. Reacciona al filtro por vaso igual que "Capítulos con
   // más fallas": alcance().areas ya viene recortado al vaso activo desde el
   // servidor (vaso.resumen.areas), así que no hay que refiltrar en el cliente.
-  html += '<div class="panel"><div class="panelHead"><h2>Repartición por área</h2>'+
+  html += '<div class="panel panelFull"><div class="panelHead"><h2>Repartición por área</h2>'+
     (sel?'<span class="panelTag">'+esc(sel.piscina)+'</span>':'')+'</div>'+
     '<p class="hint">Hallazgos de '+(sel?'esta inspección':'toda la operación')+' agrupados por el equipo responsable de cerrarlos.</p>'+
-    '<div class="areaTable">'+
-      (alcance().areas||[]).map(areaRowHtml).join('')+
-    '</div></div>';
+    '<div class="areaTableWrap"><table class="areaTable">'+
+      '<thead><tr><th>Área</th><th class="num">Ítems</th><th class="num">No cumple</th><th class="num">Fuera de alcance</th><th class="num">% Cumple</th></tr></thead>'+
+      '<tbody>'+(alcance().areas||[]).map(areaRowHtml).join('')+'</tbody>'+
+    '</table></div></div>';
 
   // ---- Estado general + por sede ----
   html += '<div class="grid2">';
@@ -947,6 +982,10 @@ function pintar(){
    sobrevive a los repintados de pintar() y solo se refresca su contenido. */
 var HALLAZGOS_PANEL_ABIERTO = false;
 var COLLAPSED_HG_SEDES = {};
+// Filtro por área dentro del panel — null = todas las áreas (apertura desde
+// la tarjeta "Hallazgos abiertos"); un nombre de área cuando se abre desde
+// una fila de "Repartición por área".
+var HG_FILTRO_AREA = null;
 
 function riesgoColor(r){
   if(r==='Critico'||r==='Crítico') return 'var(--c-nocumple)';
@@ -976,19 +1015,54 @@ function hgRowHtml(h){
   '</div>';
 }
 
+/* Ranking "ítems que más se repiten" — agrupa por CHK-id (no por texto, que
+   podría variar) y cuenta en cuántas filas/sedes aparece. Solo tiene sentido
+   con el filtro de área activo (con las áreas sin filtrar ya hay demasiada
+   variedad de capítulos para que un top-5 diga algo útil), y solo se pinta
+   si al menos un ítem se repite más de una vez — si no, no aporta nada y
+   se omite en vez de mostrar un ranking de "1×" sin valor. */
+function hgTopItemsHtml(lista){
+  if(!HG_FILTRO_AREA || lista.length < 2) return '';
+  var porId = {}, orden = [];
+  lista.forEach(function(h){
+    if(!porId[h.id]){ porId[h.id] = {item:h.item, capitulo:h.capitulo, n:0, sedes:{}}; orden.push(h.id); }
+    porId[h.id].n++;
+    porId[h.id].sedes[h.sede] = 1;
+  });
+  var top = orden.map(function(id){ return porId[id]; })
+    .filter(function(c){ return c.n > 1; })
+    .sort(function(a,b){ return b.n - a.n; })
+    .slice(0, 5);
+  if(!top.length) return '';
+  return '<div class="hgTopItems"><div class="hgTopItemsTitle">Ítems que más se repiten en '+esc(HG_FILTRO_AREA)+'</div>'+
+    top.map(function(c,i){
+      var nSedes = Object.keys(c.sedes).length;
+      return '<div class="hgTopItemRow"><span class="hgTopItemRank">#'+(i+1)+'</span>'+
+        '<span class="hgTopItemName">'+esc(c.item)+'</span>'+
+        '<span class="hgTopItemCount">'+c.n+'× · '+nSedes+' sede'+(nSedes===1?'':'s')+'</span></div>';
+    }).join('')+
+  '</div>';
+}
+
 function renderHallazgosPanel(){
   if(!DATA) return;
   var g = alcance().global;
   var v = vasoActivo();
   var lista = g.hallazgos || [];
+  if(HG_FILTRO_AREA) lista = lista.filter(function(h){ return h.area === HG_FILTRO_AREA; });
 
-  document.getElementById('hgPanelSub').textContent =
-    lista.length+(lista.length===1?' hallazgo abierto':' hallazgos abiertos')+
-    (v ? ' — '+v.piscina+' · '+v.sede : ' — todas las sedes');
+  document.getElementById('hgPanelTitulo').textContent =
+    HG_FILTRO_AREA ? 'Hallazgos · '+HG_FILTRO_AREA : 'Hallazgos abiertos';
+  document.getElementById('hgPanelSub').innerHTML =
+    esc(lista.length+(lista.length===1?' hallazgo abierto':' hallazgos abiertos'))+
+    (v ? ' — '+esc(v.piscina)+' · '+esc(v.sede) : ' — todas las sedes')+
+    (HG_FILTRO_AREA ? ' <button class="hgAreaClear" type="button" id="hgAreaClearBtn">Ver todas las áreas ✕</button>' : '');
 
   var body = document.getElementById('hgPanelBody');
   if(!lista.length){
-    body.innerHTML = '<div class="hgEmpty">🎉 Sin hallazgos "No cumple" '+(v?'en esta inspección.':'registrados.')+'</div>';
+    body.innerHTML = '<div class="hgEmpty">🎉 Sin hallazgos "No cumple" '+
+      (HG_FILTRO_AREA ? 'para '+esc(HG_FILTRO_AREA)+(v?' en esta inspección.':'.') : (v?'en esta inspección.':'registrados.'))+
+    '</div>';
     return;
   }
 
@@ -1003,7 +1077,7 @@ function renderHallazgosPanel(){
     porSede[k].push(h);
   });
 
-  var html = '';
+  var html = hgTopItemsHtml(lista);
   orden.forEach(function(sede){
     var items = porSede[sede];
     if(orden.length>1){
@@ -1022,7 +1096,11 @@ function renderHallazgosPanel(){
   body.innerHTML = html;
 }
 
-function abrirHallazgosPanel(){
+/* area: nombre de área para filtrar el panel (tabla "Repartición por
+   área"), o undefined/null para abrirlo sin filtro (tarjeta "Hallazgos
+   abiertos" y el link "Ver todas las áreas" dentro del propio panel). */
+function abrirHallazgosPanel(area){
+  HG_FILTRO_AREA = area || null;
   HALLAZGOS_PANEL_ABIERTO = true;
   renderHallazgosPanel();
   document.getElementById('hallazgosPanel').classList.add('open');
@@ -1037,7 +1115,9 @@ function cerrarHallazgosPanel(){
 }
 
 document.addEventListener('click', function(ev){
-  if(ev.target.closest('[data-open-panel="hallazgos"]')){ abrirHallazgosPanel(); return; }
+  var opener = ev.target.closest('[data-open-panel="hallazgos"]');
+  if(opener){ abrirHallazgosPanel(opener.dataset.area); return; }
+  if(ev.target.closest('#hgAreaClearBtn')){ abrirHallazgosPanel(); return; }
   if(ev.target.closest('#hgPanelClose')){ cerrarHallazgosPanel(); return; }
   if(ev.target.id==='hallazgosScrim'){ cerrarHallazgosPanel(); return; }
   var hgHeader = ev.target.closest('[data-hg-sede-toggle]');
@@ -1050,7 +1130,7 @@ document.addEventListener('click', function(ev){
 document.addEventListener('keydown', function(ev){
   if(ev.key==='Enter' || ev.key===' '){
     var opener = ev.target.closest('[data-open-panel="hallazgos"]');
-    if(opener){ ev.preventDefault(); abrirHallazgosPanel(); return; }
+    if(opener){ ev.preventDefault(); abrirHallazgosPanel(opener.dataset.area); return; }
     var hgHeader = ev.target.closest('[data-hg-sede-toggle]');
     if(hgHeader){
       ev.preventDefault();
