@@ -328,6 +328,25 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 .hgSedeHeader .sgCount{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);flex:none;}
 .hgSedeBody.collapsed{display:none;}
 
+/* ---------- Sub-nivel piscina dentro de cada sede ----------
+   El mismo ítem puede incumplir en piscinas distintas por razones distintas
+   — agrupar solo por sede los mezclaba en una sola lista. Solo se pinta
+   cuando la sede tiene más de una piscina con hallazgos (mismo criterio que
+   ya usa el nivel sede: agrupar una sola cosa no aporta nada). Visualmente
+   más sutil que .hgSedeHeader — texto mono más chico, fondo más oscuro,
+   indentado — para que se lea como el segundo nivel, no como otra sede. */
+.hgPiscinaHeader{
+  padding:10px 22px 10px 34px;display:flex;align-items:center;gap:9px;cursor:pointer;
+  background:var(--panel-lowest);border-top:1px solid var(--border-soft);
+}
+.hgPiscinaHeader:hover{background:var(--panel-2);}
+.hgPiscinaHeader .sgChev{color:var(--text-faint);font-size:10.5px;flex:none;transition:transform .15s;}
+.hgPiscinaHeader.collapsed .sgChev{transform:rotate(-90deg);}
+.hgPiscinaHeader .sgName{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--text-dim);flex:1;min-width:0;letter-spacing:.02em;}
+.hgPiscinaHeader .sgCount{font-family:var(--mono);font-size:10px;color:var(--text-faint);flex:none;}
+.hgPiscinaBody.collapsed{display:none;}
+.hgPiscinaBody .hgRow{padding-left:34px;}
+
 .hgRow{padding:14px 22px;border-top:1px solid var(--border-soft);}
 .hgTop{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
 .hgCap{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);}
@@ -982,6 +1001,10 @@ function pintar(){
    sobrevive a los repintados de pintar() y solo se refresca su contenido. */
 var HALLAZGOS_PANEL_ABIERTO = false;
 var COLLAPSED_HG_SEDES = {};
+// Clave "sede␟piscina" (mismo separador que usa Codigo.gs para los vasos),
+// para no chocar si dos sedes distintas tienen una piscina con el mismo
+// nombre.
+var COLLAPSED_HG_PISCINAS = {};
 // Filtro por área dentro del panel — null = todas las áreas (apertura desde
 // la tarjeta "Hallazgos abiertos"); un nombre de área cuando se abre desde
 // una fila de "Repartición por área".
@@ -995,14 +1018,17 @@ function riesgoColor(r){
   return 'var(--text-faint)';
 }
 
-function hgRowHtml(h){
+/* hidePiscina: true cuando la fila ya vive bajo su propio encabezado de
+   piscina (ver renderHallazgosPanel) — repetirla en cada tarjeta sería
+   redundante. Cuando la sede solo tiene una piscina no hay encabezado, así
+   que ahí sí se muestra inline. */
+function hgRowHtml(h, hidePiscina){
   var color = riesgoColor(h.riesgo);
   return '<div class="hgRow">'+
     '<div class="hgTop">'+
       '<span class="pill" style="border-color:'+color+';color:'+color+';">'+esc(h.riesgo||'Sin riesgo')+'</span>'+
       '<span class="hgCap">'+esc(h.capitulo)+'</span>'+
-      '<span class="metaSep"></span>'+
-      '<span class="hgPiscina">'+esc(h.piscina)+'</span>'+
+      (hidePiscina?'':'<span class="metaSep"></span><span class="hgPiscina">'+esc(h.piscina)+'</span>')+
       (h.fueraAlcance?'<span class="pill" style="border-color:var(--text-faint);color:var(--text-faint);">Fuera de alcance 929</span>':'')+
     '</div>'+
     '<div class="hgItem">'+esc(h.item)+'</div>'+
@@ -1077,6 +1103,35 @@ function renderHallazgosPanel(){
     porSede[k].push(h);
   });
 
+  // Segundo nivel dentro de cada sede: agrupa por piscina, porque el mismo
+  // ítem puede incumplir en piscinas distintas de la misma sede por razones
+  // distintas — antes quedaban mezcladas en una sola lista sin separar. Solo
+  // se pinta el encabezado de piscina si esa sede tiene más de una en el
+  // alcance actual (mismo criterio que ya usa el nivel sede).
+  function piscinasHtml(items, sede){
+    var ordenP = [], porPiscina = {};
+    items.forEach(function(h){
+      var pk = h.piscina || '(sin piscina)';
+      if(!porPiscina[pk]){ porPiscina[pk]=[]; ordenP.push(pk); }
+      porPiscina[pk].push(h);
+    });
+    if(ordenP.length<=1){
+      return items.map(function(h){ return hgRowHtml(h, false); }).join('');
+    }
+    return ordenP.map(function(piscina){
+      var pItems = porPiscina[piscina];
+      var key = sede+'␟'+piscina;
+      var collapsed = !!COLLAPSED_HG_PISCINAS[key];
+      return '<div class="hgPiscinaHeader'+(collapsed?' collapsed':'')+'" role="button" tabindex="0"'+
+        ' data-hg-piscina-toggle="'+esc(key)+'" aria-expanded="'+(collapsed?'false':'true')+'">'+
+        '<span class="sgChev">▾</span><span class="sgName">'+esc(piscina)+'</span>'+
+        '<span class="sgCount">'+pItems.length+(pItems.length===1?' hallazgo':' hallazgos')+'</span></div>'+
+        '<div class="hgPiscinaBody'+(collapsed?' collapsed':'')+'">'+
+          pItems.map(function(h){ return hgRowHtml(h, true); }).join('')+
+        '</div>';
+    }).join('');
+  }
+
   var html = hgTopItemsHtml(lista);
   orden.forEach(function(sede){
     var items = porSede[sede];
@@ -1087,10 +1142,10 @@ function renderHallazgosPanel(){
         '<span class="sgChev">▾</span><span class="sgName">'+esc(sede)+'</span>'+
         '<span class="sgCount">'+items.length+(items.length===1?' hallazgo':' hallazgos')+'</span></div>'+
         '<div class="hgSedeBody'+(collapsed?' collapsed':'')+'">'+
-          items.map(hgRowHtml).join('')+
+          piscinasHtml(items, sede)+
         '</div>';
     } else {
-      html += items.map(hgRowHtml).join('');
+      html += piscinasHtml(items, sede);
     }
   });
   body.innerHTML = html;
@@ -1125,6 +1180,13 @@ document.addEventListener('click', function(ev){
     var k = hgHeader.dataset.hgSedeToggle;
     COLLAPSED_HG_SEDES[k] = !COLLAPSED_HG_SEDES[k];
     renderHallazgosPanel();
+    return;
+  }
+  var hgPiscinaHeader = ev.target.closest('[data-hg-piscina-toggle]');
+  if(hgPiscinaHeader){
+    var pk = hgPiscinaHeader.dataset.hgPiscinaToggle;
+    COLLAPSED_HG_PISCINAS[pk] = !COLLAPSED_HG_PISCINAS[pk];
+    renderHallazgosPanel();
   }
 });
 document.addEventListener('keydown', function(ev){
@@ -1136,6 +1198,14 @@ document.addEventListener('keydown', function(ev){
       ev.preventDefault();
       var k = hgHeader.dataset.hgSedeToggle;
       COLLAPSED_HG_SEDES[k] = !COLLAPSED_HG_SEDES[k];
+      renderHallazgosPanel();
+      return;
+    }
+    var hgPiscinaHeader = ev.target.closest('[data-hg-piscina-toggle]');
+    if(hgPiscinaHeader){
+      ev.preventDefault();
+      var pk = hgPiscinaHeader.dataset.hgPiscinaToggle;
+      COLLAPSED_HG_PISCINAS[pk] = !COLLAPSED_HG_PISCINAS[pk];
       renderHallazgosPanel();
       return;
     }
