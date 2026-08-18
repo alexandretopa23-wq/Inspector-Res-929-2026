@@ -147,6 +147,42 @@ main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:20px 16px 40px;}
 .barTrack{height:8px;border-radius:32px;background:var(--panel-highest);overflow:hidden;}
 .barFill{height:100%;border-radius:32px;}
 
+/* ---------- Tabla "Repartición por área" ----------
+   Enrutamiento de hallazgos hacia Eléctrico / Infraestructura / Térmica e
+   Hidráulica / Gestión de sede. A diferencia de .barRow (capítulos), cada
+   fila lleva un chip de identidad de área (color fijo, no de desempeño) más
+   una barra de cumplimiento independiente — así el color nunca se confunde
+   entre "de quién es" y "qué tan bien va". */
+.areaTable{display:flex;flex-direction:column;gap:10px;}
+.areaRow{
+  display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;
+  padding:14px 16px;border-radius:10px;background:var(--panel-2);
+  border:1px solid var(--border-soft);transition:border-color .15s,background .15s,transform .15s;
+}
+.areaRow:hover{border-color:var(--border);background:var(--panel-high);transform:translateY(-1px);}
+.areaChip{
+  display:flex;align-items:center;gap:8px;flex:none;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  padding:6px 10px;border-radius:32px;border:1px solid transparent;white-space:nowrap;
+}
+.areaDot{width:8px;height:8px;border-radius:50%;flex:none;}
+.areaMain{min-width:0;}
+.areaCountRow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.areaCount{font-size:13px;font-weight:600;color:var(--text);}
+.areaNoCumple{font-family:var(--mono);font-size:11.5px;color:var(--text-faint);}
+.areaNoCumple b{color:var(--c-nocumple);font-weight:700;}
+.areaBarTrack{width:100%;height:6px;border-radius:32px;background:var(--panel-highest);overflow:hidden;margin-top:7px;}
+.areaBarFill{height:100%;border-radius:32px;}
+.areaStats{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none;}
+.areaPct{font-family:var(--display);font-size:19px;font-weight:700;line-height:1;}
+.areaPctLbl{font-family:var(--mono);font-size:9.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;}
+@media(max-width:520px){
+  .areaRow{grid-template-columns:1fr auto;grid-template-areas:"chip stats" "main main";}
+  .areaChip{grid-area:chip;}
+  .areaStats{grid-area:stats;}
+  .areaMain{grid-area:main;}
+}
+
 /* ---------- Stacked bar + legend ---------- */
 .stackBar{display:flex;height:14px;border-radius:32px;overflow:hidden;background:var(--panel-highest);margin-bottom:14px;}
 .stackBar div{height:100%;}
@@ -475,6 +511,43 @@ function iniciales(nombre){
   return (p[0][0] + (p.length>1 ? p[p.length-1][0] : '')).toUpperCase();
 }
 
+/* Color de identidad por área — fijo, no depende del % de cumplimiento (ese
+   lo pinta semaforoColor en la barra de cada fila). Mismo orden que
+   AREA_ORDEN en Codigo.gs, para que la tabla del dashboard y el reparto que
+   reciben las áreas por correo/Excel se lean con la misma paleta. */
+var AREA_COLOR = {
+  'Eléctrico': '#e0b04a',
+  'Infraestructura': '#7ab8e8',
+  'Térmica e Hidráulica': '#4ade80',
+  'Gestión de sede': '#8d90a0',
+  'Compartido (los 3)': '#bec6e0'
+};
+function areaColor(area){ return AREA_COLOR[area] || 'var(--text-faint)'; }
+
+/* Fila de la tabla "Repartición por área": chip de identidad (color fijo) +
+   conteo + barra de cumplimiento (color de semáforo, independiente del
+   chip). Se filtra igual que barChart(alcance().capitulos) — llega ya
+   recortada al vaso activo porque alcance().areas viene de vaso.resumen. */
+function areaRowHtml(a){
+  var col = areaColor(a.area);
+  return '<div class="areaRow">'+
+    '<span class="areaChip" style="color:'+col+';border-color:'+col+'55;background:'+col+'1c;">'+
+      '<span class="areaDot" style="background:'+col+'"></span>'+esc(a.area)+
+    '</span>'+
+    '<div class="areaMain">'+
+      '<div class="areaCountRow">'+
+        '<span class="areaCount">'+a.total+' ítem'+(a.total===1?'':'s')+'</span>'+
+        '<span class="areaNoCumple">· <b>'+a.noCumple+'</b> en "No cumple"'+(a.fueraAlcance>0?' · '+a.fueraAlcance+' fuera de alcance':'')+'</span>'+
+      '</div>'+
+      '<div class="areaBarTrack"><div class="areaBarFill" style="width:'+Math.max(2,a.pctCumplimiento)+'%;background:'+semaforoColor(a.pctCumplimiento)+'"></div></div>'+
+    '</div>'+
+    '<div class="areaStats">'+
+      '<span class="areaPct" style="color:'+semaforoColor(a.pctCumplimiento)+'">'+a.pctCumplimiento+'%</span>'+
+      '<span class="areaPctLbl">cumple</span>'+
+    '</div>'+
+  '</div>';
+}
+
 function renderState(html){ document.getElementById('content').innerHTML = html; }
 
 /* Gráfico de línea en SVG: tendencia de vasos inspeccionados por fecha.
@@ -600,7 +673,7 @@ function vasoActivo(){
    reaccionan al filtro leen de aquí y no de DATA.global. */
 function alcance(){
   var v = vasoActivo();
-  return v ? v.resumen : {global:DATA.global, capitulos:DATA.capitulos};
+  return v ? v.resumen : {global:DATA.global, capitulos:DATA.capitulos, areas:DATA.areas};
 }
 
 function seleccionarVaso(i){
@@ -701,6 +774,18 @@ function pintar(){
     '<p class="hint">Top 5 por cantidad de ítems en "No cumple"'+(sel?' en esta inspección.':'.')+'</p>'+
     '<div class="chartBox">'+barChart(alcance().capitulos||[])+'</div></div>';
   html += '</div>';
+
+  // ---- Repartición de hallazgos por área ----
+  // Enrutamiento hacia Eléctrico / Infraestructura / Térmica e Hidráulica /
+  // Gestión de sede. Reacciona al filtro por vaso igual que "Capítulos con
+  // más fallas": alcance().areas ya viene recortado al vaso activo desde el
+  // servidor (vaso.resumen.areas), así que no hay que refiltrar en el cliente.
+  html += '<div class="panel"><div class="panelHead"><h2>Repartición por área</h2>'+
+    (sel?'<span class="panelTag">'+esc(sel.piscina)+'</span>':'')+'</div>'+
+    '<p class="hint">Hallazgos de '+(sel?'esta inspección':'toda la operación')+' agrupados por el equipo responsable de cerrarlos.</p>'+
+    '<div class="areaTable">'+
+      (alcance().areas||[]).map(areaRowHtml).join('')+
+    '</div></div>';
 
   // ---- Estado general + por sede ----
   html += '<div class="grid2">';

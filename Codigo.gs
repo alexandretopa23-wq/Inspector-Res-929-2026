@@ -612,13 +612,90 @@ var FUERA_ALCANCE_929 = {
   'CHK-231':1,'CHK-232':1,'CHK-239':1,'CHK-240':1,'CHK-241':1,'CHK-242':1,'CHK-243':1,'CHK-244':1
 };
 
+/* ---------- Reparto de ítems por área responsable ----------
+   Clasificación acordada con el equipo (2026-08): cada CHK-xxx se asigna a
+   quien debe cerrar ese hallazgo, no al capítulo normativo. La mayoría de
+   capítulos cae completo en un área; los que mezclan oficios (Documentación,
+   Vaso de piscina, Canaletas/cárcamos, Drenajes, Cuarto de equipos,
+   Químicos) se resolvieron ítem por ítem. "Compartido (los 3)" es un único
+   ítem (CHK-003, el plano consolidado hidráulico+eléctrico+gas) que no se
+   puede partir entre áreas. Si se agregan ítems al checklist (nuevo CHK-xxx)
+   y no aparecen aquí, _areaDe() los manda a "Sin clasificar" para que se
+   note en el dashboard en vez de perderse en silencio dentro de otra área. */
+var AREA_ORDEN = ['Eléctrico', 'Infraestructura', 'Térmica e Hidráulica', 'Gestión de sede', 'Compartido (los 3)'];
+var ID_A_AREA = {
+  'CHK-001':'Infraestructura', 'CHK-002':'Infraestructura', 'CHK-003':'Compartido (los 3)', 'CHK-004':'Eléctrico',
+  'CHK-005':'Térmica e Hidráulica', 'CHK-006':'Térmica e Hidráulica', 'CHK-007':'Térmica e Hidráulica', 'CHK-008':'Infraestructura',
+  'CHK-009':'Infraestructura', 'CHK-010':'Eléctrico', 'CHK-011':'Infraestructura', 'CHK-012':'Térmica e Hidráulica',
+  'CHK-013':'Eléctrico', 'CHK-014':'Térmica e Hidráulica', 'CHK-015':'Eléctrico', 'CHK-016':'Térmica e Hidráulica',
+  'CHK-017':'Gestión de sede', 'CHK-018':'Térmica e Hidráulica', 'CHK-019':'Térmica e Hidráulica', 'CHK-020':'Térmica e Hidráulica',
+  'CHK-021':'Térmica e Hidráulica', 'CHK-022':'Térmica e Hidráulica', 'CHK-023':'Eléctrico', 'CHK-024':'Térmica e Hidráulica',
+  'CHK-025':'Gestión de sede', 'CHK-026':'Infraestructura', 'CHK-027':'Infraestructura', 'CHK-028':'Infraestructura',
+  'CHK-029':'Infraestructura', 'CHK-030':'Infraestructura', 'CHK-031':'Infraestructura', 'CHK-032':'Infraestructura',
+  'CHK-033':'Infraestructura', 'CHK-034':'Infraestructura', 'CHK-035':'Infraestructura', 'CHK-036':'Infraestructura',
+  'CHK-037':'Infraestructura', 'CHK-038':'Infraestructura', 'CHK-039':'Infraestructura', 'CHK-040':'Térmica e Hidráulica',
+  'CHK-041':'Térmica e Hidráulica', 'CHK-042':'Infraestructura', 'CHK-043':'Infraestructura', 'CHK-044':'Infraestructura',
+  'CHK-045':'Infraestructura', 'CHK-046':'Infraestructura', 'CHK-047':'Infraestructura', 'CHK-048':'Infraestructura',
+  'CHK-049':'Infraestructura', 'CHK-050':'Infraestructura', 'CHK-051':'Infraestructura', 'CHK-052':'Infraestructura',
+  'CHK-053':'Infraestructura', 'CHK-054':'Infraestructura', 'CHK-055':'Infraestructura', 'CHK-056':'Infraestructura',
+  'CHK-057':'Infraestructura', 'CHK-058':'Térmica e Hidráulica', 'CHK-059':'Térmica e Hidráulica', 'CHK-060':'Térmica e Hidráulica',
+  'CHK-061':'Infraestructura', 'CHK-062':'Infraestructura', 'CHK-063':'Térmica e Hidráulica', 'CHK-064':'Térmica e Hidráulica',
+  'CHK-065':'Térmica e Hidráulica', 'CHK-066':'Térmica e Hidráulica', 'CHK-067':'Térmica e Hidráulica', 'CHK-068':'Térmica e Hidráulica',
+  'CHK-069':'Térmica e Hidráulica', 'CHK-070':'Eléctrico', 'CHK-071':'Térmica e Hidráulica', 'CHK-072':'Térmica e Hidráulica',
+  'CHK-073':'Térmica e Hidráulica', 'CHK-074':'Térmica e Hidráulica', 'CHK-075':'Térmica e Hidráulica', 'CHK-076':'Térmica e Hidráulica',
+  'CHK-077':'Térmica e Hidráulica', 'CHK-078':'Térmica e Hidráulica', 'CHK-079':'Térmica e Hidráulica', 'CHK-080':'Térmica e Hidráulica',
+  'CHK-081':'Térmica e Hidráulica', 'CHK-082':'Térmica e Hidráulica', 'CHK-083':'Térmica e Hidráulica', 'CHK-084':'Térmica e Hidráulica',
+  'CHK-085':'Térmica e Hidráulica', 'CHK-086':'Térmica e Hidráulica', 'CHK-087':'Térmica e Hidráulica', 'CHK-088':'Térmica e Hidráulica',
+  'CHK-089':'Térmica e Hidráulica', 'CHK-090':'Térmica e Hidráulica', 'CHK-091':'Térmica e Hidráulica', 'CHK-092':'Térmica e Hidráulica',
+  'CHK-093':'Térmica e Hidráulica', 'CHK-094':'Térmica e Hidráulica', 'CHK-095':'Térmica e Hidráulica', 'CHK-096':'Térmica e Hidráulica',
+  'CHK-097':'Térmica e Hidráulica', 'CHK-098':'Térmica e Hidráulica', 'CHK-099':'Térmica e Hidráulica', 'CHK-100':'Térmica e Hidráulica',
+  'CHK-101':'Térmica e Hidráulica', 'CHK-102':'Térmica e Hidráulica', 'CHK-103':'Térmica e Hidráulica', 'CHK-104':'Térmica e Hidráulica',
+  'CHK-105':'Térmica e Hidráulica', 'CHK-106':'Térmica e Hidráulica', 'CHK-107':'Térmica e Hidráulica', 'CHK-108':'Térmica e Hidráulica',
+  'CHK-109':'Térmica e Hidráulica', 'CHK-110':'Térmica e Hidráulica', 'CHK-111':'Térmica e Hidráulica', 'CHK-112':'Térmica e Hidráulica',
+  'CHK-113':'Eléctrico', 'CHK-114':'Eléctrico', 'CHK-115':'Térmica e Hidráulica', 'CHK-116':'Eléctrico',
+  'CHK-117':'Eléctrico', 'CHK-118':'Eléctrico', 'CHK-119':'Eléctrico', 'CHK-120':'Eléctrico',
+  'CHK-121':'Eléctrico', 'CHK-122':'Eléctrico', 'CHK-123':'Eléctrico', 'CHK-124':'Eléctrico',
+  'CHK-125':'Térmica e Hidráulica', 'CHK-126':'Térmica e Hidráulica', 'CHK-127':'Térmica e Hidráulica', 'CHK-128':'Térmica e Hidráulica',
+  'CHK-129':'Térmica e Hidráulica', 'CHK-130':'Térmica e Hidráulica', 'CHK-131':'Térmica e Hidráulica', 'CHK-132':'Térmica e Hidráulica',
+  'CHK-133':'Eléctrico', 'CHK-134':'Eléctrico', 'CHK-135':'Eléctrico', 'CHK-136':'Eléctrico',
+  'CHK-137':'Eléctrico', 'CHK-138':'Eléctrico', 'CHK-139':'Eléctrico', 'CHK-140':'Infraestructura',
+  'CHK-141':'Térmica e Hidráulica', 'CHK-142':'Infraestructura', 'CHK-143':'Eléctrico', 'CHK-144':'Infraestructura',
+  'CHK-145':'Térmica e Hidráulica', 'CHK-146':'Térmica e Hidráulica', 'CHK-147':'Térmica e Hidráulica', 'CHK-148':'Infraestructura',
+  'CHK-149':'Infraestructura', 'CHK-150':'Térmica e Hidráulica', 'CHK-151':'Térmica e Hidráulica', 'CHK-152':'Térmica e Hidráulica',
+  'CHK-153':'Térmica e Hidráulica', 'CHK-154':'Térmica e Hidráulica', 'CHK-155':'Térmica e Hidráulica', 'CHK-156':'Térmica e Hidráulica',
+  'CHK-157':'Térmica e Hidráulica', 'CHK-158':'Térmica e Hidráulica', 'CHK-159':'Térmica e Hidráulica', 'CHK-160':'Térmica e Hidráulica',
+  'CHK-161':'Térmica e Hidráulica', 'CHK-162':'Infraestructura', 'CHK-163':'Infraestructura', 'CHK-164':'Infraestructura',
+  'CHK-165':'Infraestructura', 'CHK-166':'Infraestructura', 'CHK-167':'Infraestructura', 'CHK-168':'Infraestructura',
+  'CHK-169':'Infraestructura', 'CHK-170':'Infraestructura', 'CHK-171':'Infraestructura', 'CHK-172':'Infraestructura',
+  'CHK-173':'Infraestructura', 'CHK-174':'Infraestructura', 'CHK-175':'Gestión de sede', 'CHK-176':'Gestión de sede',
+  'CHK-177':'Gestión de sede', 'CHK-178':'Gestión de sede', 'CHK-179':'Gestión de sede', 'CHK-180':'Gestión de sede',
+  'CHK-181':'Gestión de sede', 'CHK-182':'Gestión de sede', 'CHK-183':'Gestión de sede', 'CHK-184':'Gestión de sede',
+  'CHK-185':'Gestión de sede', 'CHK-186':'Gestión de sede', 'CHK-187':'Gestión de sede', 'CHK-188':'Gestión de sede',
+  'CHK-189':'Gestión de sede', 'CHK-190':'Gestión de sede', 'CHK-191':'Gestión de sede', 'CHK-192':'Gestión de sede',
+  'CHK-193':'Gestión de sede', 'CHK-194':'Gestión de sede', 'CHK-195':'Gestión de sede', 'CHK-196':'Gestión de sede',
+  'CHK-197':'Infraestructura', 'CHK-198':'Infraestructura', 'CHK-199':'Infraestructura', 'CHK-200':'Infraestructura',
+  'CHK-201':'Infraestructura', 'CHK-202':'Infraestructura', 'CHK-203':'Infraestructura', 'CHK-204':'Gestión de sede',
+  'CHK-205':'Gestión de sede', 'CHK-206':'Gestión de sede', 'CHK-207':'Gestión de sede', 'CHK-208':'Gestión de sede',
+  'CHK-209':'Gestión de sede', 'CHK-210':'Térmica e Hidráulica', 'CHK-211':'Térmica e Hidráulica', 'CHK-212':'Térmica e Hidráulica',
+  'CHK-213':'Térmica e Hidráulica', 'CHK-214':'Térmica e Hidráulica', 'CHK-215':'Térmica e Hidráulica', 'CHK-216':'Infraestructura',
+  'CHK-217':'Infraestructura', 'CHK-218':'Infraestructura', 'CHK-219':'Infraestructura', 'CHK-220':'Infraestructura',
+  'CHK-221':'Infraestructura', 'CHK-222':'Infraestructura', 'CHK-223':'Térmica e Hidráulica', 'CHK-224':'Térmica e Hidráulica',
+  'CHK-225':'Térmica e Hidráulica', 'CHK-226':'Térmica e Hidráulica', 'CHK-227':'Térmica e Hidráulica', 'CHK-228':'Térmica e Hidráulica',
+  'CHK-229':'Térmica e Hidráulica', 'CHK-230':'Térmica e Hidráulica', 'CHK-231':'Térmica e Hidráulica', 'CHK-232':'Térmica e Hidráulica',
+  'CHK-233':'Térmica e Hidráulica', 'CHK-234':'Térmica e Hidráulica', 'CHK-235':'Térmica e Hidráulica', 'CHK-236':'Térmica e Hidráulica',
+  'CHK-237':'Térmica e Hidráulica', 'CHK-238':'Térmica e Hidráulica', 'CHK-239':'Térmica e Hidráulica', 'CHK-240':'Térmica e Hidráulica',
+  'CHK-241':'Térmica e Hidráulica', 'CHK-242':'Térmica e Hidráulica', 'CHK-243':'Térmica e Hidráulica', 'CHK-244':'Térmica e Hidráulica',
+  'CHK-245':'Gestión de sede', 'CHK-246':'Gestión de sede', 'CHK-247':'Infraestructura', 'CHK-248':'Térmica e Hidráulica'
+};
+function _areaDe(id){ return ID_A_AREA[id] || 'Sin clasificar'; }
+
 /* ---------- Métricas ejecutivas ---------- */
 function _metricas(filas){
   var m = {total:filas.length, cumple:0, noCumple:0, enProceso:0, pendiente:0, noAplica:0, fueraAlcance:0,
            cumpleEnAlcance:0, noCumpleEnAlcance:0, enProcesoEnAlcance:0, pendienteEnAlcance:0, noAplicaEnAlcance:0,
            baseEnAlcance:0, fueraDelDenominador:0,
            critico:0, alto:0, medio:0, bajo:0, vencidos:0, sinFecha:0, avanceProm:0,
-           porCapitulo:{}, criticosAltos:[]};
+           porCapitulo:{}, porArea:{}, criticosAltos:[]};
   var hoy = new Date(); hoy.setHours(0,0,0,0);
   var sumAvance=0, conAvance=0;
 
@@ -636,6 +713,15 @@ function _metricas(filas){
     m.porCapitulo[cap].total++;
     if(esFueraAlcance){ m.fueraAlcance++; m.porCapitulo[cap].fueraAlcance++; }
 
+    // Mismo acumulador que porCapitulo pero agrupado por área responsable
+    // (Eléctrico/Infraestructura/Térmica e Hidráulica/Gestión de sede), para
+    // poder repartir hallazgos entre los equipos sin reimplementar el cálculo
+    // de cumplimiento en cada lugar que lo necesite.
+    var area = _areaDe(id);
+    if(!m.porArea[area]) m.porArea[area] = {total:0, cumple:0, noCumple:0, noAplica:0, fueraAlcance:0, cumpleEnAlcance:0, otros:0, fueraDelDenominador:0};
+    m.porArea[area].total++;
+    if(esFueraAlcance) m.porArea[area].fueraAlcance++;
+
     // Los conteos brutos (cumple/noCumple/...) incluyen TODO, fuera de
     // alcance o no — Hallazgos y Plan de acción filtran directamente sobre
     // `filas`, no sobre estos contadores, así que un ítem "No cumple" fuera
@@ -645,21 +731,21 @@ function _metricas(filas){
     // el total exacto, sin asumir que solo "Cumple" puede quedar fuera del
     // alcance de la Res. 929.
     if(est==='Cumple'){
-      m.cumple++; m.porCapitulo[cap].cumple++;
-      if(!esFueraAlcance){ m.cumpleEnAlcance++; m.porCapitulo[cap].cumpleEnAlcance++; }
+      m.cumple++; m.porCapitulo[cap].cumple++; m.porArea[area].cumple++;
+      if(!esFueraAlcance){ m.cumpleEnAlcance++; m.porCapitulo[cap].cumpleEnAlcance++; m.porArea[area].cumpleEnAlcance++; }
     }
-    else if(est==='No cumple'){ m.noCumple++; m.porCapitulo[cap].noCumple++; if(!esFueraAlcance) m.noCumpleEnAlcance++; }
-    else if(est==='En proceso'){ m.enProceso++; m.porCapitulo[cap].otros++; if(!esFueraAlcance) m.enProcesoEnAlcance++; }
-    else if(est==='Pendiente'){ m.pendiente++; m.porCapitulo[cap].otros++; if(!esFueraAlcance) m.pendienteEnAlcance++; }
-    else if(est==='No aplica'){ m.noAplica++; m.porCapitulo[cap].noAplica++; if(!esFueraAlcance) m.noAplicaEnAlcance++; }
+    else if(est==='No cumple'){ m.noCumple++; m.porCapitulo[cap].noCumple++; m.porArea[area].noCumple++; if(!esFueraAlcance) m.noCumpleEnAlcance++; }
+    else if(est==='En proceso'){ m.enProceso++; m.porCapitulo[cap].otros++; m.porArea[area].otros++; if(!esFueraAlcance) m.enProcesoEnAlcance++; }
+    else if(est==='Pendiente'){ m.pendiente++; m.porCapitulo[cap].otros++; m.porArea[area].otros++; if(!esFueraAlcance) m.pendienteEnAlcance++; }
+    else if(est==='No aplica'){ m.noAplica++; m.porCapitulo[cap].noAplica++; m.porArea[area].noAplica++; if(!esFueraAlcance) m.noAplicaEnAlcance++; }
 
     // Denominador del %: un ítem sale del denominador si es "No aplica" O
     // fuera de alcance (unión, no suma) — así uno que fuera ambas cosas a la
     // vez no se resta dos veces y el % no queda inflado. Mismo criterio por
-    // capítulo, para que _tablaCapitulos y el gráfico de capítulos no
-    // repitan el bug de restar dos veces un ítem "No aplica" + fuera de
-    // alcance.
-    if(est==='No aplica' || esFueraAlcance){ m.fueraDelDenominador++; m.porCapitulo[cap].fueraDelDenominador++; }
+    // capítulo y por área, para que _tablaCapitulos/_areasDashboard y sus
+    // gráficos no repitan el bug de restar dos veces un ítem "No aplica" +
+    // fuera de alcance.
+    if(est==='No aplica' || esFueraAlcance){ m.fueraDelDenominador++; m.porCapitulo[cap].fueraDelDenominador++; m.porArea[area].fueraDelDenominador++; }
 
     if(rie==='Critico'||rie==='Crítico') m.critico++;
     else if(rie==='Alto') m.alto++;
@@ -696,6 +782,23 @@ function _capitulosDashboard(m){
     return {capitulo:cap, total:c.total, cumple:c.cumple, noCumple:c.noCumple,
              fueraAlcance:c.fueraAlcance||0, pctCumplimiento:pct};
   }).sort(function(a,b){ return a.pctCumplimiento - b.pctCumplimiento; });
+}
+
+/* ---------- Reparto de hallazgos por área responsable ----------
+   Misma mecánica que _capitulosDashboard pero sobre m.porArea, para
+   alimentar la tabla "Repartición por área" del dashboard (la que se envía
+   a Eléctrico/Infraestructura/Térmica e Hidráulica/Gestión de sede). El
+   orden es AREA_ORDEN fijo — no se ordena por % de cumplimiento como los
+   capítulos — porque esta tabla es de enrutamiento (cada área siempre debe
+   encontrarse en el mismo lugar), no un ranking de peores capítulos. */
+function _areasDashboard(m){
+  return AREA_ORDEN.filter(function(area){ return !!m.porArea[area]; }).map(function(area){
+    var c = m.porArea[area];
+    var base = c.total - c.fueraDelDenominador;
+    var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
+    return {area:area, total:c.total, cumple:c.cumple, noCumple:c.noCumple,
+             fueraAlcance:c.fueraAlcance||0, pctCumplimiento:pct};
+  });
 }
 
 /* Prioridad de riesgo para ordenar la lista de hallazgos abiertos: lo que el
@@ -771,7 +874,8 @@ function _resumenDashboard(filas){
       hallazgosNoCumple:hallazgosNoCumple, evidenciaFaltante:evidenciaFaltante,
       hallazgos:_hallazgosAbiertos(filas)
     },
-    capitulos: _capitulosDashboard(m)
+    capitulos: _capitulosDashboard(m),
+    areas: _areasDashboard(m)
   };
 }
 
@@ -864,6 +968,7 @@ function obtenerDashboard(spreadsheetId){
     sedes: sedes,
     vasos: vasos,
     capitulos: resumenGlobal.capitulos,
+    areas: resumenGlobal.areas,
     tendencia: tendencia
   };
  }catch(err){
