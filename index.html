@@ -253,7 +253,10 @@ input,textarea,select{font-family:inherit;}
 .tramoRow{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:8px;margin-bottom:8px;}
 .tramoRow.fichaAlerta{border-color:var(--r-alto);}
 .tramoRow>input[data-tramo-campo="nombre"]{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 9px;font-size:12.5px;margin-bottom:6px;}
-.tramoRowGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;}
+.tramoRowGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.tramoAyuda{font-size:10.5px;color:var(--text-faint);margin-top:5px;line-height:1.35;}
+.fichaGrupo{font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 6px;padding-top:9px;border-top:1px solid var(--border-soft);}
+.fichaGrupo:first-child{margin-top:0;padding-top:0;border-top:0;}
 .tramoRowGrid input,.tramoRowGrid select{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 6px;font-size:11.5px;}
 .tramosResultado{margin-top:6px;}
 
@@ -267,6 +270,15 @@ input,textarea,select{font-family:inherit;}
 .motorValorVacio{font-size:11px;color:var(--text-faint);font-style:italic;}
 .motorSupuestos{font-size:10px;color:var(--text-faint);margin-top:10px;padding-top:8px;border-top:1px dashed var(--border-soft);line-height:1.5;}
 .motorError{font-size:12px;color:var(--r-alto);}
+.motorVeredicto{border-radius:9px;padding:9px 11px;margin:9px 0;font-size:11.5px;line-height:1.45;border:1px solid;}
+.motorVeredicto b{display:block;font-size:12.5px;margin-bottom:2px;}
+.motorVeredicto.cumple{background:var(--c-cumple-bg);border-color:#1c4a33;color:var(--c-cumple);}
+.motorVeredicto.duda{background:var(--c-pendiente-bg);border-color:#5a4718;color:var(--c-pendiente);}
+.motorVeredicto.incumple{background:var(--c-nocumple-bg);border-color:#6b2226;color:var(--c-nocumple);}
+.motorBanda{font-family:var(--mono);font-size:11px;color:var(--text-info);}
+.motorSub{font-size:10.5px;color:var(--text-faint);margin:11px 0 1px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+.motorNota{font-size:10.5px;color:var(--text-faint);line-height:1.4;margin-top:3px;}
+.motorBadge{display:inline-block;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;background:var(--panel-high);color:var(--accent);margin-left:6px;letter-spacing:.03em;}
 
 .collapsedRow{display:flex;align-items:center;gap:10px;cursor:pointer;}
 .collapsedDot{width:9px;height:9px;border-radius:50%;flex:none;}
@@ -644,6 +656,48 @@ var FICHA_CAMPOS = {
   ]},
   filtroArea:{label:"Área filtrante",unit:"m²",type:"number",step:"0.01"},
   presionManometro:{label:"Presión leída en el manómetro del filtro",unit:"PSI",type:"number",step:"0.5"},
+  /* --- Circuito real: tanque de equilibrio, carga estática y calentadores ---
+     Todos opcionales. El motor solo pasa al modelo v2 cuando tanqueEquilibrio
+     está declarado (sí o no); mientras tanto corre el v1 legado intacto, así
+     que las inspecciones ya cerradas no cambian de resultado. */
+  tanqueEquilibrio:{label:"¿La succión arranca desde un tanque de equilibrio?",type:"select",group:"Tanque de equilibrio",options:[
+    {v:"si",l:"Sí, la bomba succiona del tanque"},
+    {v:"no",l:"No, la bomba succiona directo del vaso"}
+  ]},
+  tanqueLargo:{label:"Largo interior del tanque",unit:"m",type:"number",step:"0.1",group:"Tanque de equilibrio"},
+  tanqueAncho:{label:"Ancho interior del tanque",unit:"m",type:"number",step:"0.1",group:"Tanque de equilibrio"},
+  tanqueNivel:{label:"Altura de la lámina de agua dentro del tanque (sirve además como sumergencia de la bomba para el NPSH)",unit:"m",type:"number",step:"0.05",group:"Tanque de equilibrio"},
+  desnivelPiscinaTanque:{label:"Cuánto está la lámina del tanque POR DEBAJO de la lámina de la piscina (si el retorno descarga sobre la lámina, medir hasta la boca de retorno)",unit:"m",type:"number",step:"0.05",group:"Carga estática y circuito"},
+  tipoRetorno:{label:"¿Cómo retorna el agua a la piscina?",type:"select",group:"Carga estática y circuito",options:[
+    {v:"sumergido",l:"Boquillas sumergidas bajo la lámina"},
+    {v:"sobreLamina",l:"Descarga sobre la lámina (cascada, chorro, canal)"}
+  ]},
+  estadoTuberia:{label:"Estado de la tubería encontrado",type:"select",group:"Carga estática y circuito",options:[
+    {v:"nueva",l:"Nueva o en buen estado (C=150)"},
+    {v:"servicio",l:"Con años de servicio (C=130)"},
+    {v:"incrustada",l:"Con incrustación o estrechamiento visible (C=110)"}
+  ]},
+  calentadorN:{label:"Número de calentadores en el circuito",unit:"u",type:"number",step:"1",group:"Calentadores"},
+  calentadorArreglo:{label:"¿Cómo están conectados entre sí?",type:"select",group:"Calentadores",options:[
+    {v:"serie",l:"En serie (el caudal pasa por todos, uno tras otro)"},
+    {v:"paralelo",l:"En paralelo (el caudal se reparte entre ellos)"}
+  ]},
+  calentadorTipo:{label:"Tipo de calentador",type:"select",group:"Calentadores",options:[
+    {v:"gas",l:"Caldera / calentador a gas con intercambiador"},
+    {v:"bombaCalor",l:"Bomba de calor"},
+    {v:"placas",l:"Intercambiador de placas"}
+  ]},
+  tempAgua:{label:"Temperatura del agua encontrada (si no se declara se asume 30 °C por ser vaso climatizado)",unit:"°C",type:"number",step:"0.5",group:"Carga estática y circuito"},
+  /* --- Contraste: lo medido y lo que dice la ficha de entrega de obra ---
+     caudalDiseno/tiempoRecircDiseno/areaDiseno se capturan UNA vez por vaso;
+     no cambian entre visitas. La brecha contra el modelo es justamente el
+     hallazgo que pide CHK-078 ("caudal real verificado frente al diseño"). */
+  caudalMedido:{label:"Caudal medido con caudalímetro, si hay instrumento en sitio",unit:"m³/h",type:"number",step:"0.1",group:"Contraste con medición y diseño"},
+  caudalDiseno:{label:"Caudal de recirculación según la ficha de entrega de obra",unit:"m³/h",type:"number",step:"0.1",group:"Contraste con medición y diseño"},
+  tiempoRecircDiseno:{label:"Tiempo de recirculación según la ficha de entrega de obra",unit:"h",type:"number",step:"0.1",group:"Contraste con medición y diseño"},
+  areaDiseno:{label:"Área del espejo de agua según la ficha de diseño, si se conoce",unit:"m²",type:"number",step:"0.1"},
+  volumenManual:{label:"Volumen del vaso declarado directamente, si se conoce con certeza (reemplaza el cálculo por geometría)",unit:"m³",type:"number",step:"0.5"},
+  alturaManometro:{label:"Altura del manómetro del filtro sobre la lámina del tanque (o del vaso si no hay tanque)",unit:"m",type:"number",step:"0.1"},
   duchasEncontradas:{label:"Duchas encontradas en sitio",unit:"u",type:"number",step:"1"},
   inodoroHEncontrados:{label:"Inodoros para hombres encontrados",unit:"u",type:"number",step:"1"},
   inodoroMEncontrados:{label:"Inodoros para mujeres encontrados",unit:"u",type:"number",step:"1"},
@@ -652,13 +706,22 @@ var FICHA_CAMPOS = {
   lavamanosEncontrados:{label:"Lavamanos encontrados en sitio",unit:"u",type:"number",step:"1"}
 };
 var ITEM_FICHA_CAMPOS = {
-  "CHK-044":["profMax","profMin","profIntermedia"],
-  "CHK-204":["largo","ancho","areaManual"],
+  "CHK-044":["profMax","profMin","profIntermedia","volumenManual"],
+  "CHK-204":["largo","ancho","areaManual","areaDiseno"],
   "CHK-079":["tipoUso","cubierta"],
   "CHK-074":["bombaHP","bombaHz","bombaFamilia","bombaVelocidadVS"],
-  "CHK-078":["desnivelSuccionDescarga"],
+  "CHK-078":["desnivelPiscinaTanque","tipoRetorno","estadoTuberia","tempAgua",
+             "calentadorN","calentadorArreglo","calentadorTipo",
+             "caudalMedido","caudalDiseno","tiempoRecircDiseno","desnivelSuccionDescarga"],
+  /* El tanque de compensación tiene su propio ítem en el capítulo 11 y su
+     propio requisito cuantitativo (Numeral 10.5: capacidad mínima del 10% del
+     volumen del vaso o 60 L/m² de lámina). Las dimensiones se capturan ahí,
+     que es donde el checklist ya pregunta por su "capacidad operativa" —
+     no en CHK-078. El motor las lee desde sess.ficha sin importar dónde se
+     hayan diligenciado, porque la ficha es fuente única. */
+  "CHK-102":["tanqueEquilibrio","tanqueLargo","tanqueAncho","tanqueNivel"],
   "CHK-083":["filtroTipo","filtroArea"],
-  "CHK-084":["presionManometro"],
+  "CHK-084":["presionManometro","alturaManometro"],
   "CHK-197":["inodoroHEncontrados","inodoroMEncontrados","orinalesEncontrados","vestieresEncontrados"],
   "CHK-198":["duchasEncontradas"],
   "CHK-199":["lavamanosEncontrados"]
@@ -943,10 +1006,12 @@ function encontrarPuntoOperacion(curvaBomba, funcSistema, qMax){
   return null;
 }
 
-/* Ensambla bomba (referencia Pentair o curva manual) + afinidad por Hz +
-   curva del sistema, y calcula el resultado completo. Devuelve {error:'..'}
-   si falta algún dato de la ficha; nunca lanza excepción. */
-function calcularHidraulica(ficha){
+/* Ensambla la curva de la bomba (referencia Pentair o curva manual medida en
+   campo) aplicando la afinidad por Hz que corresponda. La comparten el modelo
+   v1 y el v2: el origen de la curva no cambió entre versiones, lo que cambió
+   es cómo se construye la curva del SISTEMA contra la que se cruza.
+   Devuelve {curva:...} o {error:'...'}; nunca lanza excepción. */
+function resolverCurvaBomba(ficha){
   var origenCurva;
   if(ficha.bombaFamilia==='manual'){
     var hzMedicion = ficha.curvaManualHz, hzOperacion = ficha.bombaHz;
@@ -976,6 +1041,22 @@ function calcularHidraulica(ficha){
   } else {
     return {error:'Selecciona el origen de la curva de la bomba en el ítem CHK-074.'};
   }
+  return {curva:origenCurva};
+}
+
+/* ===== MODELO v1 — LEGADO, CONGELADO =====
+   Es el que produjo los resultados de las inspecciones ya cerradas, así que
+   no se toca ni se corrige: si se modificara, un informe ya firmado podría
+   cambiar de conclusión al reabrirlo. Sigue corriendo tal cual para toda
+   ficha que no tenga declarado el tanque de compensación (ítem CHK-102), que
+   es el interruptor que habilita el v2. Sus dos limitaciones conocidas —la
+   lectura del manómetro sumada como si fuera pérdida del filtro, y la
+   longitud equivalente única de 30·D por accesorio— quedan documentadas aquí
+   y corregidas únicamente en el v2. */
+function calcularHidraulicaV1(ficha){
+  var rc = resolverCurvaBomba(ficha);
+  if(rc.error) return {error:rc.error};
+  var origenCurva = rc.curva;
 
   var funcSistema = construirCurvaSistema(ficha);
   if(!funcSistema) return {error:'Faltan los diámetros de tubería de succión y descarga (ítem CHK-078).'};
@@ -1007,6 +1088,7 @@ function calcularHidraulica(ficha){
   var rotacionesDia = tiempoRecirc ? 24/tiempoRecirc : null;
 
   return {
+    modelo: 'v1',
     origen: origenCurva.label,
     caudal: op.q, cabezal: op.h,
     vSuccion: vSuccion, vDescarga: vDescarga, vFiltracion: vFiltracion,
@@ -1019,6 +1101,427 @@ function calcularHidraulica(ficha){
         : (ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'/'+(100-ficha.tuberiaPctSuccion)+' succión-descarga (modelo legado, elegido en campo)' : '50/50 succión-descarga (modelo legado, por defecto)'),
       conversionPsi:'1 PSI = 0.703 m c.a.'}
   };
+}
+
+/* ============ MOTOR HIDRÁULICO v2 ============
+   Corrige tres cosas del v1 y agrega las que el circuito real de estas sedes
+   exige (tanque de compensación, vasos climatizados con varios calentadores,
+   tubería que recorre el cuarto de máquinas a distintos niveles):
+
+   1) CARGA ESTÁTICA. Con succión desde tanque de compensación abierto a la
+      atmósfera y retorno sumergido en el vaso, la carga estática es SOLO la
+      diferencia entre las dos láminas de agua. El sube-y-baja de la tubería
+      entre filtros y calentadores se cancela: es conducto cerrado y lleno, lo
+      que el agua gana subiendo lo devuelve bajando. La cota del eje de la
+      bomba tampoco entra al caudal — solo al NPSH.
+   2) MANÓMETRO. El v1 sumaba la lectura del manómetro como si fuera la
+      pérdida del filtro. No lo es: es la presión remanente en ese punto, y ya
+      contiene dentro filtro + calentadores + retorno + estática. Sumarla a
+      las pérdidas calculadas contaba doble el circuito y deprimía el caudal.
+      Acá sale de la curva de sistema y pasa a ser verificación independiente.
+   3) ACCESORIOS. Longitud equivalente única de 30·D para todo (v1) → método K
+      de Crane TP-410 con dos familias, que es lo que separa un codo de una
+      válvula multipuerto (K de 1.0 contra 5.0). */
+
+/* Altitud por sede: entra al NPSH vía presión atmosférica. A 2.600 m se
+   pierden ~2.8 m de columna de agua contra el nivel del mar, que es margen de
+   succión que simplemente no existe acá. No se pide como campo porque se
+   deduce de la sede; las sedes sin altitud confirmada usan el valor por
+   defecto y el resultado lo declara como asumido. */
+var ALTITUD_SEDE = {
+  "CENTRO MAYOR":2600, "CUR":2600, "MOFLI":2600, "CALLE 94":2600,
+  "CARRERA 60":2600, "CALLE 220":2600, "SUBA":2600,
+  "CAJICA":2558, "FUSAGASUGA":1728, "JARDIN GIRARDOT":289
+};
+var ALTITUD_DEFECTO = 2600;
+var TEMP_AGUA_DEFECTO = 30; // °C — todos los vasos evaluados son climatizados
+
+/* K por accesorio (Crane TP-410). Dos familias en vez de veinte: en un cuarto
+   de máquinas de piscina lo que domina la pérdida son las válvulas
+   multipuerto, los check y la canastilla del prefiltro, no los codos. */
+var K_ACCESORIO = {normal:1.0, alta:5.0};
+/* C de Hazen-Williams según lo que el inspector encuentre. El v1 asumía
+   siempre 150 (PVC nuevo) en instalaciones con años de servicio. */
+var C_HW_ESTADO = {nueva:150, servicio:130, incrustada:110};
+/* Pérdida de referencia por calentador a su caudal nominal. Son valores de
+   catálogo típicos, declarados como supuesto — el fabricante manda si hay
+   ficha del equipo. Escalan con Q². */
+var DP_CALENTADOR_REF = {
+  gas:{dp:2.0, q:25, label:'caldera o calentador a gas con intercambiador'},
+  bombaCalor:{dp:1.0, q:20, label:'bomba de calor'},
+  placas:{dp:2.5, q:25, label:'intercambiador de placas'}
+};
+var NSS_ASUMIDO = 8000; // velocidad específica de succión conservadora (HI)
+var RPM_VS = {1:3000, 2:2200, 3:1400, 4:3450};
+
+/* Banda de incertidumbre: en vez de un número puntual que aparenta exactitud
+   de instrumento, se corre el modelo tres veces moviendo los supuestos dentro
+   de su incertidumbre documentada (±10-20% en K, ×2-5 en rugosidad según
+   edad, ±15-25% combinado en caída de presión — Crane TP-410). */
+var ESCENARIOS_BANDA = [
+  {id:'conservador', kMul:1.3, dpMul:1.3, cMul:0.87},
+  {id:'nominal',     kMul:1.0, dpMul:1.0, cMul:1.0},
+  {id:'optimista',   kMul:0.8, dpMul:0.8, cMul:1.0}
+];
+
+function altitudDeSede(sede){
+  if(sede && ALTITUD_SEDE[sede]!=null) return {m:ALTITUD_SEDE[sede], asumida:false};
+  return {m:ALTITUD_DEFECTO, asumida:true};
+}
+function presionAtmosfericaKpa(altitudM){
+  return 101.325*Math.pow(1-2.25577e-5*(altitudM||0), 5.25588);
+}
+/* Antoine para agua entre 1 y 100 °C (coeficientes NIST, P en mmHg). A 30 °C
+   la presión de vapor casi duplica la de 20 °C, y eso se descuenta directo
+   del margen de succión en un vaso climatizado. */
+function presionVaporAguaKpa(tC){
+  var t = (tC!=null && isFinite(tC)) ? tC : TEMP_AGUA_DEFECTO;
+  return Math.pow(10, 8.07131 - 1730.63/(233.426+t)) * 0.133322;
+}
+function kpaAMetros(kpa){ return kpa*1000/9810; }
+
+function cHazenV2(ficha, cMul){
+  var base = C_HW_ESTADO[ficha.estadoTuberia] || 150;
+  return Math.min(150, base*(cMul||1));
+}
+function sumaKTramo(t, kMul){
+  var k = (t.accesorios||0)*K_ACCESORIO.normal + (t.accesoriosAlta||0)*K_ACCESORIO.alta;
+  return k*(kMul||1);
+}
+/* hf del tramo = Hazen-Williams para la tubería recta + ΣK·v²/2g para los
+   accesorios. Mezclar HW en la recta con el método K en los accesorios es
+   práctica estándar y evita tener que estimar el factor de fricción. */
+function hfTramoV2(qM3h, t, C, kMul){
+  var n = (t.nLineas>0) ? t.nLineas : 1;
+  var qM3s = (qM3h/n)/3600;
+  var recta = hazenWilliamsHf(qM3s, t.diametro, t.longitud||0, 0, C);
+  var v = vTramo(qM3h, t);
+  return recta + sumaKTramo(t, kMul)*v*v/(2*9.81);
+}
+
+/* Los calentadores en SERIE suman su pérdida completa uno tras otro; en
+   PARALELO cada uno ve Q/N y la pérdida cae con el cuadrado. Por eso el
+   arreglo pesa muchísimo más que la cantidad: seis en serie estrangulan el
+   circuito, seis en paralelo casi no se sienten. */
+function dpCalentadores(qM3h, ficha, dpMul){
+  var n = ficha.calentadorN;
+  if(!(n>0)) return 0;
+  var ref = DP_CALENTADOR_REF[ficha.calentadorTipo] || DP_CALENTADOR_REF.gas;
+  var paralelo = (ficha.calentadorArreglo==='paralelo');
+  var nSerie = paralelo ? 1 : n;
+  var nRamas = paralelo ? n : 1;
+  var rel = (qM3h/nRamas)/ref.q;
+  return nSerie * ref.dp * rel*rel * (dpMul||1);
+}
+
+function cargaEstaticaV2(ficha){
+  if(ficha.tanqueEquilibrio==='si'){
+    var d = ficha.desnivelPiscinaTanque;
+    return (d!=null && isFinite(d)) ? d : 0;
+  }
+  var l = ficha.desnivelSuccionDescarga;
+  return (l!=null && isFinite(l)) ? l : 0;
+}
+
+/* Si el vaso ya tiene tramos cargados se usan tal cual. Si solo tiene el
+   modelo legado de dos diámetros, se sintetizan dos tramos equivalentes para
+   que la inspección igual pueda correr en v2 sin volver a levantar el
+   cuarto de máquinas — el conteo legado de accesorios entra como familia
+   "normal" (K=1.0), que es su lectura más razonable. */
+function tramosParaV2(ficha){
+  var t = tramosValidos(ficha);
+  if(t.length) return t;
+  var dS = ficha.tuberiaSuccionDiam, dD = ficha.tuberiaDescargaDiam;
+  if(!(dS>0) || !(dD>0)) return [];
+  var L = ficha.tuberiaLongitud||0, nAcc = ficha.tuberiaAccesorios||0;
+  var pct = (ficha.tuberiaPctSuccion!=null && ficha.tuberiaPctSuccion>=0 && ficha.tuberiaPctSuccion<=100)
+    ? ficha.tuberiaPctSuccion/100 : 0.5;
+  return [
+    {nombre:'Succión (convertido del modelo legado)', diametro:dS, longitud:L*pct,
+     accesorios:nAcc*pct, accesoriosAlta:0, lado:'succion', nLineas:1},
+    {nombre:'Descarga (convertido del modelo legado)', diametro:dD, longitud:L*(1-pct),
+     accesorios:nAcc*(1-pct), accesoriosAlta:0, lado:'presion', nLineas:1}
+  ];
+}
+
+function curvaSistemaV2(ficha, esc, tramos){
+  var C = cHazenV2(ficha, esc.cMul);
+  var Hgeo = cargaEstaticaV2(ficha);
+  return function(qM3h){
+    var hf = tramos.reduce(function(a,t){ return a + hfTramoV2(qM3h, t, C, esc.kMul); }, 0);
+    return hf + dpCalentadores(qM3h, ficha, esc.dpMul) + Hgeo;
+  };
+}
+function hfSuccionV2(qM3h, ficha, esc, tramos){
+  var C = cHazenV2(ficha, esc.cMul);
+  return tramos.filter(function(t){ return t.lado==='succion'; })
+    .reduce(function(a,t){ return a + hfTramoV2(qM3h, t, C, esc.kMul); }, 0);
+}
+
+/* Volumen del vaso. profIntermedia se captura desde CHK-044 pero el v1 la
+   ignoraba por completo: acá entra como promedio de tres zonas asumiendo que
+   cada profundidad gobierna un tercio de la superficie — supuesto declarado,
+   no silencioso. volumenManual lo sobrescribe todo cuando el inspector tiene
+   el dato cierto, igual que areaManual hace con la geometría. */
+function volumenVasoV2(ficha){
+  var area = ficha.areaManual || ((ficha.largo>0 && ficha.ancho>0) ? ficha.largo*ficha.ancho : null);
+  if(ficha.volumenManual>0){
+    return {v:ficha.volumenManual, area:area,
+      nota:'volumen declarado directamente en campo (reemplaza el cálculo por geometría)'};
+  }
+  if(!(area>0)) return {v:null, area:null, nota:null};
+  var pMax=ficha.profMax, pMin=ficha.profMin, pInt=ficha.profIntermedia, prof, nota;
+  if(pMax>0 && pMin>0 && pInt>0){
+    prof = (pMin+pInt+pMax)/3;
+    nota = 'profundidad media = promedio de las tres profundidades declaradas (mínima, intermedia y máxima), asumiendo que cada una gobierna un tercio de la superficie';
+  } else if(pMax>0 && pMin>0){
+    prof = (pMax+pMin)/2;
+    nota = 'profundidad media = promedio de mínima y máxima (supone fondo de pendiente uniforme de punta a punta)';
+  } else {
+    prof = pMax || pMin || null;
+    nota = (prof!=null) ? 'profundidad única declarada' : null;
+  }
+  if(!(prof>0)) return {v:null, area:area, nota:null};
+  return {v:area*prof, area:area, nota:nota};
+}
+function volumenTanque(ficha){
+  if(ficha.tanqueEquilibrio!=='si') return null;
+  var l=ficha.tanqueLargo, a=ficha.tanqueAncho, h=ficha.tanqueNivel;
+  return (l>0 && a>0 && h>0) ? l*a*h : null;
+}
+
+/* Numeral 10.5: el tanque de compensación debe tener capacidad "mínimo del
+   10% del volumen del agua o 60 L/m² de lámina de agua". Los dos criterios NO
+   son equivalentes (se igualan solo a 0.6 m de profundidad media), y la norma
+   los ofrece con "o", así que se evalúan ambos y solo se declara incumplido
+   cuando falla contra los dos — no se fuerza el criterio más exigente para no
+   generar hallazgos que la norma no sostiene. Este chequeo le da respaldo
+   cuantitativo a CHK-102, que hoy pregunta por "capacidad operativa" sin
+   ninguna cifra contra la cual medirla. */
+function capacidadTanqueNorma(ficha, vVaso, area){
+  if(ficha.tanqueEquilibrio!=='si') return null;
+  var vT = volumenTanque(ficha);
+  if(vT==null || !(vVaso>0)) return null;
+  var porVolumen = 0.10*vVaso;
+  var porArea = (area>0) ? area*0.060 : null; // 60 L/m² = 0.060 m³/m²
+  var cumpleVol = vT >= porVolumen;
+  var cumpleArea = (porArea!=null) ? (vT >= porArea) : null;
+  var clase;
+  if(cumpleVol && (cumpleArea===null || cumpleArea)) clase='cumple';
+  else if(cumpleVol || cumpleArea) clase='parcial';
+  else clase='incumple';
+  return {volumen:vT, porVolumen:porVolumen, porArea:porArea,
+    cumpleVol:cumpleVol, cumpleArea:cumpleArea, clase:clase};
+}
+
+function rpmEstimado(ficha){
+  if(ficha.bombaFamilia==='superflo_vs') return RPM_VS[ficha.bombaVelocidadVS] || null;
+  var hz = (ficha.bombaHz>0) ? ficha.bombaHz : 60;
+  return 3450*hz/60;
+}
+
+/* NPSH disponible. La configuración de estas sedes es la favorable —bomba
+   inundada, succión al fondo del tanque y en el eje— así que casi siempre da
+   holgado. El valor del chequeo está en el caso degradado: si la canastilla
+   del prefiltro se colmata, hf_succión se dispara y el margen se acaba.
+   NPSHr se ESTIMA por velocidad específica de succión: es una referencia, no
+   un dato de fábrica, y así queda declarado. */
+function npshV2(ficha, sede, qOp, hfSucc){
+  var sumergencia = (ficha.tanqueEquilibrio==='si' && ficha.tanqueNivel>0) ? ficha.tanqueNivel : null;
+  if(sumergencia==null) return null;
+  var alt = altitudDeSede(sede);
+  var patm = presionAtmosfericaKpa(alt.m);
+  var temp = (ficha.tempAgua!=null && isFinite(ficha.tempAgua)) ? ficha.tempAgua : TEMP_AGUA_DEFECTO;
+  var pvap = presionVaporAguaKpa(temp);
+  var npsha = kpaAMetros(patm-pvap) + sumergencia - (hfSucc||0);
+  var rpm = rpmEstimado(ficha);
+  var npshr = (qOp>0 && rpm>0) ? Math.pow(rpm*Math.sqrt(qOp)/NSS_ASUMIDO, 4/3) : null;
+  return {npsha:npsha, npshr:npshr, margen:(npshr!=null ? npsha-npshr : null),
+    altitud:alt.m, altitudAsumida:alt.asumida,
+    temp:temp, tempAsumida:(ficha.tempAgua==null),
+    sumergencia:sumergencia, hfSuccion:hfSucc};
+}
+
+/* Verificación cruzada por manómetro: con la lectura que YA se captura en
+   CHK-084 se despeja el cabezal que la bomba está entregando y se lee el
+   caudal sobre su propia curva. Es un segundo estimado independiente del
+   primero: si los dos coinciden hay confianza real; si divergen, algún dato
+   está mal declarado y el motor lo dice en vez de entregar un número firme. */
+function caudalPorManometro(origenCurva, ficha, esc, tramos){
+  var p = ficha.presionManometro;
+  if(!(p>0)) return null;
+  var pM = p*0.703; // PSI → m c.a.
+  var alturaMan = (ficha.alturaManometro!=null && isFinite(ficha.alturaManometro)) ? ficha.alturaManometro : 0;
+  var g = function(q){ return pM + alturaMan + hfSuccionV2(q, ficha, esc, tramos); };
+  var op = encontrarPuntoOperacion(origenCurva, g, origenCurva.qMax);
+  return op ? op.q : null;
+}
+
+/* Veredicto de tres estados sobre la banda, no sobre el punto: si la banda
+   entera cumple o entera incumple hay conclusión; si la cruza, el modelo NO
+   decide y exige el caudalímetro. Eso es lo que separa esta herramienta de
+   una que finge exactitud de instrumento. */
+function veredictoBanda(clave, vLo, vHi, ficha){
+  var a = evaluarResultadoHidraulico(clave, vLo, ficha);
+  var b = evaluarResultadoHidraulico(clave, vHi, ficha);
+  if(!a || !b) return null;
+  if(!a.alerta && !b.alerta) return {clase:'cumple'};
+  if(a.alerta && b.alerta) return {clase:'incumple', msg:a.msg||b.msg};
+  return {clase:'duda', msg:(a.alerta?a.msg:b.msg)};
+}
+
+function derivadosDeCaudal(q, ficha, tramos){
+  var detalle = tramos.map(function(t){
+    return {nombre:t.nombre||'', diametro:t.diametro, lado:t.lado||'presion',
+      nLineas:(t.nLineas>0?t.nLineas:1), v:vTramo(q,t)};
+  });
+  var vS = detalle.filter(function(t){return t.lado==='succion';}).map(function(t){return t.v;});
+  var vD = detalle.filter(function(t){return t.lado!=='succion';}).map(function(t){return t.v;});
+  return {
+    tramos: detalle,
+    vSuccion: vS.length ? Math.max.apply(null,vS) : null,
+    vDescarga: vD.length ? Math.max.apply(null,vD) : null,
+    vFiltracion: ficha.filtroArea>0 ? q/ficha.filtroArea : null
+  };
+}
+
+function calcularHidraulicaV2(ficha, sede){
+  var rc = resolverCurvaBomba(ficha);
+  if(rc.error) return {error:rc.error};
+  var origenCurva = rc.curva;
+  var tramos = tramosParaV2(ficha);
+  if(!tramos.length) return {error:'Carga al menos un tramo de tubería con su diámetro (ítem CHK-078) para correr el modelo v2.'};
+
+  var escNominal = ESCENARIOS_BANDA.filter(function(e){return e.id==='nominal';})[0];
+  var caudales = {};
+  ESCENARIOS_BANDA.forEach(function(esc){
+    var op = encontrarPuntoOperacion(origenCurva, curvaSistemaV2(ficha,esc,tramos), origenCurva.qMax);
+    caudales[esc.id] = op ? op.q : null;
+  });
+  if(caudales.nominal==null){
+    return {error:'No se encontró punto de operación: la bomba no alcanza a vencer la pérdida calculada del circuito. Revisa diámetros, longitudes y sobre todo el arreglo de los calentadores (en serie la pérdida se multiplica).'};
+  }
+  var qNominal = caudales.nominal;
+  var qMin = (caudales.conservador!=null) ? caudales.conservador : qNominal;
+  var qMax = (caudales.optimista!=null) ? caudales.optimista : qNominal;
+
+  /* El caudal medido manda: si hay caudalímetro, el modelo se degrada a
+     contraste y todas las derivadas se recalculan sobre el dato real. */
+  var medido = (ficha.caudalMedido>0) ? ficha.caudalMedido : null;
+  var qEfectivo = medido!=null ? medido : qNominal;
+  var fuente = medido!=null ? 'medido' : 'modelo';
+
+  var der = derivadosDeCaudal(qEfectivo, ficha, tramos);
+  var derLo = derivadosDeCaudal(qMin, ficha, tramos);
+  var derHi = derivadosDeCaudal(qMax, ficha, tramos);
+  var cabezal = origenCurva.evalH(qEfectivo);
+
+  var vol = volumenVasoV2(ficha);
+  var vTanque = volumenTanque(ficha);
+  var vSistema = (vol.v!=null) ? vol.v + (vTanque||0) : null;
+
+  /* Tiempo de recirculación NORMATIVO: sobre el volumen del vaso. El Numeral
+     10.5 dimensiona el tanque de compensación como un porcentaje "del volumen
+     del agua", así que ese volumen de referencia no puede incluir al tanque
+     mismo — sería circular. Sumarle el tanque acá generaría incumplimientos
+     falsos contra la Tabla 1 en todas las sedes que lo tienen.
+     El tiempo de renovación del SISTEMA se reporta aparte: es la lectura
+     sanitaria real, porque el agua que vuelve al vaso viene mezclada con el
+     inventario del tanque. No genera hallazgo por sí solo. */
+  var tRecirc = (vol.v!=null && qEfectivo>0) ? vol.v/qEfectivo : null;
+  var tSistema = (vSistema!=null && qEfectivo>0) ? vSistema/qEfectivo : null;
+  var tRecircLo = (vol.v!=null && qMax>0) ? vol.v/qMax : null;  // más caudal → menos tiempo
+  var tRecircHi = (vol.v!=null && qMin>0) ? vol.v/qMin : null;
+
+  var hfSucc = hfSuccionV2(qEfectivo, ficha, escNominal, tramos);
+  var npsh = npshV2(ficha, sede, qEfectivo, hfSucc);
+  var qManometro = caudalPorManometro(origenCurva, ficha, escNominal, tramos);
+  var cruce = null;
+  if(qManometro!=null && qNominal>0){
+    var desv = (qManometro-qNominal)/qNominal*100;
+    cruce = {caudal:qManometro, desviacionPct:desv, coherente:Math.abs(desv)<=25};
+  }
+
+  /* Contraste con la ficha de entrega de obra. El volumen implícito
+     (Q_diseño × t_diseño) permite deducir qué convención usó el proveedor en
+     vez de asumirla: si cuadra con el vaso usó el criterio normativo, si
+     cuadra con vaso+tanque incluyó el tanque. Sin eso, el contraste generaría
+     alarmas que son de criterio, no de realidad. */
+  var diseno = null;
+  if(ficha.caudalDiseno>0){
+    diseno = {caudal:ficha.caudalDiseno, tiempo:ficha.tiempoRecircDiseno||null};
+    diseno.desviacionPct = (qEfectivo-ficha.caudalDiseno)/ficha.caudalDiseno*100;
+    var r = qEfectivo/ficha.caudalDiseno;
+    diseno.clase = r>=1.15 ? 'sobre' : (r>=0.90 ? 'conforme' : (r>=0.70 ? 'moderada' : 'severa'));
+    if(ficha.tiempoRecircDiseno>0){
+      diseno.volumenImplicito = ficha.caudalDiseno*ficha.tiempoRecircDiseno;
+      var dv = vol.v!=null ? Math.abs(diseno.volumenImplicito-vol.v)/vol.v : null;
+      var ds = vSistema!=null ? Math.abs(diseno.volumenImplicito-vSistema)/vSistema : null;
+      if(dv!=null && dv<=0.10) diseno.convencion='vaso';
+      else if(ds!=null && ds<=0.10) diseno.convencion='vasoMasTanque';
+      else diseno.convencion='noCuadra';
+    }
+  }
+
+  var areaContraste = null;
+  if(ficha.areaDiseno>0 && vol.area>0){
+    var dA = (vol.area-ficha.areaDiseno)/ficha.areaDiseno*100;
+    areaContraste = {medida:vol.area, diseno:ficha.areaDiseno, desviacionPct:dA,
+      clase: Math.abs(dA)<=5 ? 'normal' : (Math.abs(dA)<=15 ? 'criterio' : 'alerta')};
+  }
+
+  var refCal = DP_CALENTADOR_REF[ficha.calentadorTipo] || DP_CALENTADOR_REF.gas;
+  var alt = altitudDeSede(sede);
+  return {
+    modelo: 'v2',
+    origen: origenCurva.label,
+    caudal: qEfectivo, fuenteCaudal: fuente,
+    caudalNominal: qNominal, caudalMin: qMin, caudalMax: qMax,
+    cabezal: cabezal,
+    vSuccion: der.vSuccion, vDescarga: der.vDescarga, vFiltracion: der.vFiltracion,
+    tramos: der.tramos,
+    volumen: vol.v, volumenNota: vol.nota, area: vol.area,
+    volumenTanque: vTanque, volumenSistema: vSistema,
+    tiempoRecirc: tRecirc, tiempoRenovacionSistema: tSistema,
+    rotacionesDia: tRecirc ? 24/tRecirc : null,
+    veredictos: {
+      tiempoRecirc: veredictoBanda('tiempoRecirc', tRecircLo, tRecircHi, ficha),
+      vFiltracion: veredictoBanda('vFiltracion', derLo.vFiltracion, derHi.vFiltracion, ficha)
+    },
+    npsh: npsh, cruceManometro: cruce, diseno: diseno, areaContraste: areaContraste,
+    tanqueNorma: capacidadTanqueNorma(ficha, vol.v, vol.area),
+    supuestos: {
+      C: cHazenV2(ficha, 1),
+      estadoTuberia: ficha.estadoTuberia || 'no declarado (se asume tubería nueva, C=150)',
+      kAccesorios: 'método K de Crane TP-410 — accesorio normal K='+K_ACCESORIO.normal+', alta pérdida K='+K_ACCESORIO.alta,
+      Hgeo: (ficha.tanqueEquilibrio==='si'
+        ? cargaEstaticaV2(ficha)+' m c.a. = diferencia entre la lámina de la piscina y la del tanque de compensación. El recorrido de la tubería por los distintos niveles del cuarto de máquinas NO suma carga estática: es conducto cerrado y lleno, se cancela.'
+        : cargaEstaticaV2(ficha)+' m c.a. (desnivel succión-descarga declarado; sin tanque de compensación)'),
+      retorno: ficha.tipoRetorno==='sobreLamina'
+        ? 'retorno descarga SOBRE la lámina: la carga estática se mide hasta la boca de retorno'
+        : 'retorno sumergido bajo la lámina',
+      calentadores: (ficha.calentadorN>0
+        ? ficha.calentadorN+' × '+refCal.label+' en '+(ficha.calentadorArreglo==='paralelo'?'paralelo':'serie')+', ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h, escalado con Q²'
+        : 'sin calentadores declarados'),
+      manometro: 'la lectura del manómetro NO se suma a la curva del sistema (eso contaba doble el circuito en el modelo v1); se usa como verificación cruzada independiente',
+      altitud: alt.m+' m.s.n.m.'+(alt.asumida?' (asumida, sede sin altitud confirmada)':' (según sede)'),
+      npshr: 'NPSHr estimado por velocidad específica de succión Nss='+NSS_ASUMIDO+' (referencia conservadora, no dato de fábrica)',
+      volumen: vol.nota || 'sin datos suficientes de geometría',
+      banda: 'banda de incertidumbre: K ×0.8-1.3, ΔP de calentadores ×0.8-1.3, C de Hazen-Williams hasta -13%'
+    }
+  };
+}
+
+/* Despachador. El interruptor es tanqueEquilibrio (ítem CHK-102): mientras no
+   esté declarado, la ficha corre por el v1 legado exactamente como siempre.
+   Ninguna inspección ya cerrada cambia de resultado por sí sola — el
+   motorResultado guardado solo se toca si el inspector vuelve a presionar
+   "Recalcular", y el resultado trae la versión con la que se produjo. */
+function calcularHidraulica(ficha, sede){
+  if(ficha.tanqueEquilibrio==='si' || ficha.tanqueEquilibrio==='no'){
+    return calcularHidraulicaV2(ficha, sede);
+  }
+  return calcularHidraulicaV1(ficha);
 }
 
 /* Umbral normativo para cada resultado calculado — mismo mecanismo visual
@@ -1815,9 +2318,17 @@ function fichaBloqueHtml(it){
   if(!campos || !campos.length) return '';
   var ficha = getFicha(state.session);
   var html = '<div class="fichaBloque"><div class="fichaBloqueLbl">📐 Ficha técnica del vaso — dato requerido para este ítem</div>';
+  /* Los ítems que concentran muchos campos (CHK-078 lleva todo el circuito)
+     se separan por subtítulo para que el bloque siga siendo legible en campo
+     desde un teléfono, en vez de una lista corrida de doce inputs. */
+  var grupoActual = null;
   campos.forEach(function(key){
     var c = FICHA_CAMPOS[key];
     if(!c) return;
+    if(c.group && c.group!==grupoActual){
+      html += '<div class="fichaGrupo">'+esc(c.group)+'</div>';
+      grupoActual = c.group;
+    }
     var val = ficha[key];
     if(c.type==='select'){
       html += '<div class="fieldSm"><label>'+esc(c.label)+'</label><select data-ficha="'+key+'">'+
@@ -1874,8 +2385,18 @@ function curvaManualHtml(ficha){
    longitud, accesorios y lado hidráulico (succión = antes de la bomba,
    presión = después). nLineas es el número de líneas IGUALES en paralelo
    dentro de ese tramo (p.ej. 3 filtros de 4" en paralelo reciben Q/3 cada
-   uno) — por defecto 1 si no se declara. Se guarda en
-   ficha.tuberiaTramos = [{nombre,diametro,longitud,accesorios,lado,nLineas}]. */
+   uno) — por defecto 1 si no se declara.
+
+   Los accesorios se cuentan en DOS familias porque su pérdida difiere en un
+   orden de magnitud (Crane TP-410): los normales (codos, tees, válvulas de
+   paso abiertas) pesan K≈1.0, mientras que la válvula multipuerto del filtro,
+   los check y la canastilla del prefiltro pesan K≈5.0. El modelo v1 los
+   trataba a todos igual con una longitud equivalente única, que es la
+   simplificación que más desviaba el resultado en un cuarto de máquinas de
+   piscina —justamente donde abundan las multipuerto y los check—.
+
+   Se guarda en ficha.tuberiaTramos =
+   [{nombre,diametro,longitud,accesorios,accesoriosAlta,lado,nLineas}]. */
 function tramosHtml(ficha){
   var tramos = (ficha.tuberiaTramos && ficha.tuberiaTramos.length) ? ficha.tuberiaTramos : [{},{}];
   var html = '<div class="tramosWrap">'+
@@ -1891,12 +2412,16 @@ function tramosHtml(ficha){
           '<option value="succion"'+(t&&t.lado==='succion'?' selected':'')+'>Succión</option>'+
         '</select>'+
         '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="longitud" placeholder="Long. m" value="'+(t&&t.longitud!=null?t.longitud:'')+'">'+
-        '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="accesorios" placeholder="Accesorios" value="'+(t&&t.accesorios!=null?t.accesorios:'')+'">'+
+        '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="accesorios" placeholder="Acces. normales" value="'+(t&&t.accesorios!=null?t.accesorios:'')+'">'+
+        '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="accesoriosAlta" placeholder="Acces. alta pérdida" value="'+(t&&t.accesoriosAlta!=null?t.accesoriosAlta:'')+'">'+
         '<input type="number" step="1" min="1" data-tramo-idx="'+i+'" data-tramo-campo="nLineas" placeholder="Líneas paralelas" value="'+(t&&t.nLineas!=null?t.nLineas:'')+'">'+
       '</div>'+
       (alerta ? '<div class="fichaAlertaMsg">⚠ Supera el máximo de 8 pulgadas de diámetro permitido (Numeral 10.1).</div>' : '')+
     '</div>';
   });
+  html += '<div class="tramoAyuda"><b>Normales</b> (K=1.0): codos, tees, uniones, válvulas de bola o compuerta abiertas. '+
+    '<b>Alta pérdida</b> (K=5.0): válvula multipuerto del filtro, válvulas check, canastilla o prefiltro, válvulas parcialmente cerradas. '+
+    'Separarlos importa: una multipuerto pierde del orden de cinco codos.</div>';
   html += '<button type="button" class="btn2" data-action="agregarTramo" style="margin-top:6px;">+ Agregar tramo</button>';
   html += '</div>';
   return html;
@@ -1918,7 +2443,14 @@ function motorHtml(){
     '<div class="motorResultado'+(previo?'':' hidden')+'" data-motor-resultado>'+resultadoHtml+'</div>'+
   '</div>';
 }
+/* El resultado guardado trae la versión del modelo con la que se produjo, así
+   que una inspección vieja se sigue pintando con el lector del v1 aunque la
+   app ya tenga el v2 cargado. */
 function renderResultadoHidraulico(res, ficha){
+  if(res.error) return '<div class="motorError">⚠ '+esc(res.error)+'</div>';
+  return (res.modelo==='v2') ? renderResultadoV2(res, ficha) : renderResultadoV1(res, ficha);
+}
+function renderResultadoV1(res, ficha){
   if(res.error){
     return '<div class="motorError">⚠ '+esc(res.error)+'</div>';
   }
@@ -1957,6 +2489,181 @@ function renderResultadoHidraulico(res, ficha){
     ' · reparto de tubería='+esc(res.supuestos.repartoLongitud)+
     ' · '+esc(res.supuestos.conversionPsi)+
     '. Estimación de apoyo, no reemplaza medición directa con caudalímetro.</div>';
+  html += '<div class="motorNota">Este resultado se produjo con el <b>modelo v1</b>. Para pasar al v2 —que corrige la carga estática con tanque de compensación, deja de contar dos veces la lectura del manómetro y diferencia los accesorios por tipo— declara el tanque de compensación en el ítem CHK-102 y vuelve a calcular.</div>';
+  return html;
+}
+
+/* ============ LECTOR DEL MODELO v2 ============ */
+function renderResultadoV2(res, ficha){
+  function num(v, d, u){ return (v==null||isNaN(v)) ? '<span class="motorValorVacio">— sin dato —</span>' : (v.toFixed(d)+(u?' '+u:'')); }
+  function fila(label, valor, unidad, dec, clave){
+    if(valor==null || isNaN(valor)) return '<div class="motorFila"><span>'+esc(label)+'</span><span class="motorValorVacio">— no calculable con los datos actuales —</span></div>';
+    var est = evaluarResultadoHidraulico(clave, valor, ficha);
+    var cls = (est && est.alerta) ? 'motorValor alerta' : 'motorValor';
+    var h = '<div class="motorFila"><span>'+esc(label)+'</span><span class="'+cls+'">'+valor.toFixed(dec)+' '+unidad+'</span></div>';
+    if(est && est.alerta) h += '<div class="fichaAlertaMsg">⚠ '+esc(est.msg)+'</div>';
+    return h;
+  }
+  var VERED = {
+    cumple:{cls:'cumple', txt:'✓ Cumple con holgura',
+      det:'Toda la banda de incertidumbre queda dentro de norma. Se puede concluir sin medición.'},
+    duda:{cls:'duda', txt:'⚠ Zona de duda — se requiere caudalímetro',
+      det:'La banda cruza el límite normativo. El modelo no alcanza para decidir: este vaso necesita medición directa antes de sostener o descartar el hallazgo.'},
+    incumple:{cls:'incumple', txt:'✕ Incumple con holgura',
+      det:'Toda la banda queda fuera de norma. El hallazgo se sostiene sin necesidad de medir.'}
+  };
+  function veredicto(v, etiqueta){
+    if(!v || !VERED[v.clase]) return '';
+    var t = VERED[v.clase];
+    return '<div class="motorVeredicto '+t.cls+'"><b>'+esc(etiqueta)+': '+t.txt+'</b>'+esc(t.det)+
+      (v.msg && v.clase!=='cumple' ? ' <i>'+esc(v.msg)+'</i>' : '')+'</div>';
+  }
+
+  var html = '<div class="motorOrigen">Curva usada: '+esc(res.origen)+
+    (res.ts ? ' · calculado '+fmtDate(res.ts) : '')+
+    '<span class="motorBadge">MODELO v2</span></div>';
+
+  /* El caudal se presenta primero como banda, no como punto: un valor único
+     con dos decimales transmite una exactitud que el método no tiene. */
+  html += '<div class="motorSub">Caudal en el punto de operación</div>';
+  if(res.fuenteCaudal==='medido'){
+    html += '<div class="motorFila"><span>Caudal <b>medido con caudalímetro</b> (manda sobre el modelo)</span>'+
+      '<span class="motorValor">'+res.caudal.toFixed(2)+' m³/h</span></div>';
+    html += '<div class="motorNota">El modelo estimó '+num(res.caudalNominal,2,'m³/h')+
+      ' (banda '+num(res.caudalMin,1)+'–'+num(res.caudalMax,1)+'). '+
+      'Todas las velocidades y tiempos de abajo están calculados sobre el dato medido, no sobre la estimación.</div>';
+  } else {
+    html += '<div class="motorFila"><span>Estimado por el modelo (banda de incertidumbre)</span>'+
+      '<span class="motorBanda">'+num(res.caudalMin,1)+' – '+num(res.caudalMax,1)+' m³/h</span></div>';
+    html += '<div class="motorFila"><span>Valor nominal usado para las derivadas</span>'+
+      '<span class="motorValor">'+num(res.caudalNominal,2,'m³/h')+'</span></div>';
+  }
+  html += fila('Cabezal en el punto de operación', res.cabezal, 'm c.a.', 2, 'cabezal');
+
+  /* Verificación cruzada: segundo estimado independiente a partir del
+     manómetro, con los datos que ya se capturan. */
+  if(res.cruceManometro){
+    var c = res.cruceManometro;
+    html += '<div class="motorSub">Verificación cruzada con el manómetro</div>';
+    html += '<div class="motorFila"><span>Caudal despejado desde la lectura del manómetro</span>'+
+      '<span class="'+(c.coherente?'motorValor':'motorValor alerta')+'">'+c.caudal.toFixed(2)+' m³/h</span></div>';
+    html += '<div class="motorNota">'+(c.coherente
+      ? 'Coincide con el modelo dentro de '+Math.abs(c.desviacionPct).toFixed(0)+'%: dos estimados independientes que concuerdan, la confianza en el resultado es alta.'
+      : '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. Alguno de los datos declarados no corresponde: revisa diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro sobre la lámina, o si la curva de bomba seleccionada es realmente la instalada.')+'</div>';
+  }
+
+  /* Contraste contra la ficha de entrega de obra: la brecha ES el hallazgo
+     que pide CHK-078, no un error del modelo. */
+  if(res.diseno){
+    var d = res.diseno;
+    var DCLASE = {
+      conforme:{cls:'cumple', t:'Circuito conforme a lo entregado'},
+      moderada:{cls:'duda', t:'Degradación moderada del circuito'},
+      severa:{cls:'incumple', t:'Degradación severa, o el circuito ya no es el de la ficha'},
+      sobre:{cls:'duda', t:'Por encima del diseño — la ficha no corresponde al circuito actual'}
+    }[d.clase];
+    html += '<div class="motorSub">Contraste con la ficha de entrega de obra</div>';
+    html += '<div class="motorFila"><span>Caudal de diseño declarado</span><span class="motorValor">'+d.caudal.toFixed(2)+' m³/h</span></div>';
+    html += '<div class="motorFila"><span>Desviación del caudal actual frente al diseño</span>'+
+      '<span class="'+(d.clase==='conforme'?'motorValor':'motorValor alerta')+'">'+(d.desviacionPct>=0?'+':'')+d.desviacionPct.toFixed(1)+' %</span></div>';
+    if(DCLASE) html += '<div class="motorVeredicto '+DCLASE.cls+'"><b>'+esc(DCLASE.t)+'</b>La ficha de obra es la referencia de lo que el circuito <i>debía</i> entregar, no una medición del estado actual. La brecha es evidencia de cómo evolucionó la instalación.</div>';
+    if(d.volumenImplicito!=null){
+      var CONV = {
+        vaso:'El volumen implícito de la ficha ('+d.volumenImplicito.toFixed(1)+' m³) cuadra con el volumen del vaso: el proveedor usó el criterio normativo.',
+        vasoMasTanque:'El volumen implícito de la ficha ('+d.volumenImplicito.toFixed(1)+' m³) cuadra con vaso + tanque: el proveedor incluyó el tanque de compensación en su cálculo. Sus tiempos no son comparables directamente con los normativos.',
+        noCuadra:'⚠ El volumen implícito de la ficha ('+d.volumenImplicito.toFixed(1)+' m³) no cuadra ni con el vaso ni con vaso + tanque. O la piscina fue modificada, o la ficha no corresponde a este vaso.'
+      }[d.convencion];
+      if(CONV) html += '<div class="motorNota">'+esc(CONV)+'</div>';
+    }
+  }
+
+  html += '<div class="motorSub">Velocidades</div>';
+  html += fila('Velocidad en succión (peor tramo)', res.vSuccion, 'm/s', 2, 'vSuccion');
+  html += fila('Velocidad en descarga/retorno (peor tramo)', res.vDescarga, 'm/s', 2, 'vDescarga');
+  if(res.tramos && res.tramos.length){
+    res.tramos.forEach(function(t){
+      var limite = t.lado==='succion' ? 1.8 : 2.4;
+      var al = t.v > limite;
+      html += '<div class="motorFila"><span>'+esc(t.nombre||'(sin nombre)')+' — Ø'+t.diametro+'" · '+
+        (t.lado==='succion'?'succión':'presión')+(t.nLineas>1?' · '+t.nLineas+' líneas':'')+'</span>'+
+        '<span class="'+(al?'motorValor alerta':'motorValor')+'">'+t.v.toFixed(2)+' m/s</span></div>';
+      if(al) html += '<div class="fichaAlertaMsg">⚠ Supera '+limite+' m/s ('+(t.lado==='succion'?'succión':'presión')+', Numeral 10.1).</div>';
+    });
+  }
+  html += fila('Velocidad de filtración', res.vFiltracion, 'm³/h/m²', 1, 'vFiltracion');
+  html += veredicto(res.veredictos && res.veredictos.vFiltracion, 'Velocidad de filtración');
+
+  html += '<div class="motorSub">Volumen y recirculación</div>';
+  html += fila('Volumen del vaso', res.volumen, 'm³', 1, null);
+  if(res.volumenTanque!=null){
+    html += fila('Volumen del tanque de compensación', res.volumenTanque, 'm³', 1, null);
+    html += fila('Volumen total en circulación (vaso + tanque)', res.volumenSistema, 'm³', 1, null);
+  }
+  html += fila('Tiempo de recirculación normativo (Tabla 1)', res.tiempoRecirc, 'h', 2, 'tiempoRecirc');
+  html += veredicto(res.veredictos && res.veredictos.tiempoRecirc, 'Tiempo de recirculación');
+  if(res.tiempoRenovacionSistema!=null && res.volumenTanque!=null){
+    html += fila('Renovación real del sistema (vaso + tanque)', res.tiempoRenovacionSistema, 'h', 2, null);
+    html += '<div class="motorNota">El tiempo normativo se calcula sobre el volumen del vaso, que es la base que usa la Tabla 1 — el Numeral 10.5 dimensiona el tanque como un porcentaje "del volumen del agua", así que ese volumen de referencia no puede incluirse a sí mismo. La renovación del sistema se muestra aparte porque es la lectura sanitaria real: el agua que retorna al vaso viene mezclada con el inventario del tanque. <b>No genera hallazgo por sí sola.</b></div>';
+  }
+  html += fila('Rotaciones estimadas por día', res.rotacionesDia, 'veces/día', 1, null);
+
+  /* Capacidad mínima del tanque — Numeral 10.5. Le da respaldo numérico a
+     CHK-102, que hoy pregunta por "capacidad operativa" sin cifra. */
+  if(res.tanqueNorma){
+    var tn = res.tanqueNorma;
+    html += '<div class="motorSub">Capacidad del tanque de compensación (Numeral 10.5)</div>';
+    html += '<div class="motorFila"><span>Capacidad exigida por volumen (10% del vaso)</span><span class="motorBanda">'+tn.porVolumen.toFixed(2)+' m³</span></div>';
+    if(tn.porArea!=null) html += '<div class="motorFila"><span>Capacidad exigida por lámina (60 L/m²)</span><span class="motorBanda">'+tn.porArea.toFixed(2)+' m³</span></div>';
+    var TCL = {
+      cumple:{cls:'cumple', t:'Cumple la capacidad mínima'},
+      parcial:{cls:'duda', t:'Cumple solo uno de los dos criterios'},
+      incumple:{cls:'incumple', t:'No alcanza la capacidad mínima por ninguno de los dos criterios'}
+    }[tn.clase];
+    if(TCL) html += '<div class="motorVeredicto '+TCL.cls+'"><b>'+esc(TCL.t)+' — '+tn.volumen.toFixed(2)+' m³ instalados</b>'+
+      (tn.clase==='parcial' ? 'La norma ofrece los dos criterios con "o", así que cumplir uno basta; queda como observación, no como incumplimiento.' : 'Contrastar contra el ítem CHK-102.')+'</div>';
+  }
+
+  if(res.npsh){
+    var n = res.npsh;
+    html += '<div class="motorSub">Riesgo de cavitación (NPSH)</div>';
+    html += '<div class="motorFila"><span>NPSH disponible</span><span class="motorValor">'+n.npsha.toFixed(2)+' m</span></div>';
+    if(n.npshr!=null){
+      html += '<div class="motorFila"><span>NPSH requerido (estimado)</span><span class="motorBanda">'+n.npshr.toFixed(2)+' m</span></div>';
+      var margenOk = n.margen>=1.0;
+      html += '<div class="motorFila"><span>Margen</span><span class="'+(margenOk?'motorValor':'motorValor alerta')+'">'+n.margen.toFixed(2)+' m</span></div>';
+      if(!margenOk) html += '<div class="fichaAlertaMsg">⚠ Margen por debajo de 1.0 m. Revisa el estado de la canastilla del prefiltro: si está colmatada, la pérdida en succión sube y la bomba entra en cavitación.</div>';
+    }
+    html += '<div class="motorNota">Calculado a '+n.altitud+' m.s.n.m.'+(n.altitudAsumida?' (altitud asumida — sede sin dato confirmado)':'')+
+      ' y '+n.temp.toFixed(1)+' °C'+(n.tempAsumida?' (temperatura asumida por ser vaso climatizado)':'')+
+      '. La altitud descuenta cerca de '+(10.33-kpaAMetros(presionAtmosfericaKpa(n.altitud))).toFixed(1)+' m de margen frente al nivel del mar. NPSHr es una estimación por velocidad específica, no dato de fábrica.</div>';
+  }
+
+  if(res.areaContraste){
+    var a = res.areaContraste;
+    var ACL = {
+      normal:'Coincide con la ficha dentro del 5%: diferencia normal de medición.',
+      criterio:'Diferencia atribuible al criterio de medición (esquinas redondeadas, escalinatas, rebosadero, o área de proyecto contra espejo de agua real). No es hallazgo.',
+      alerta:'⚠ Diferencia superior al 15%: posible modificación del vaso, o la ficha no corresponde a esta piscina.'
+    }[a.clase];
+    html += '<div class="motorSub">Área medida contra ficha de diseño</div>';
+    html += '<div class="motorFila"><span>Medida en campo '+a.medida.toFixed(1)+' m² · ficha '+a.diseno.toFixed(1)+' m²</span>'+
+      '<span class="'+(a.clase==='alerta'?'motorValor alerta':'motorValor')+'">'+(a.desviacionPct>=0?'+':'')+a.desviacionPct.toFixed(1)+' %</span></div>';
+    html += '<div class="motorNota">'+esc(ACL)+' Manda tu medición: lo que hay hoy es lo que mediste.</div>';
+  }
+
+  var s = res.supuestos;
+  html += '<div class="motorSupuestos"><b>Memoria de cálculo — supuestos declarados</b><br>'+
+    '· Hazen-Williams C='+s.C+' — '+esc(s.estadoTuberia)+'<br>'+
+    '· Accesorios: '+esc(s.kAccesorios)+'<br>'+
+    '· Carga estática: '+esc(s.Hgeo)+'<br>'+
+    '· Retorno: '+esc(s.retorno)+'<br>'+
+    '· Calentadores: '+esc(s.calentadores)+'<br>'+
+    '· Manómetro: '+esc(s.manometro)+'<br>'+
+    '· Altitud: '+esc(s.altitud)+'<br>'+
+    '· '+esc(s.npshr)+'<br>'+
+    '· Volumen: '+esc(s.volumen)+'<br>'+
+    '· '+esc(s.banda)+'<br>'+
+    'Estimación de apoyo a la decisión del inspector. La exactitud de un caudalímetro no se alcanza por modelación: cuando el veredicto queda en zona de duda, la medición directa es indispensable.</div>';
   return html;
 }
 
@@ -2016,7 +2723,8 @@ function abrirFichaModal(){
     filas += tramos.map(function(t){
       var nombre = t.nombre || '(sin nombre)';
       var detalle = 'Ø'+(t.diametro!=null?t.diametro:'—')+' pulg · '+(LADO_LABEL[t.lado]||'Presión / descarga')+
-        ' · '+(t.longitud!=null?t.longitud:'—')+' m · '+(t.accesorios!=null?t.accesorios:'—')+' accesorios'+
+        ' · '+(t.longitud!=null?t.longitud:'—')+' m · '+(t.accesorios!=null?t.accesorios:'—')+' acces. normales'+
+        ' · '+(t.accesoriosAlta!=null?t.accesoriosAlta:'—')+' de alta pérdida'+
         (t.nLineas>1?' · '+t.nLineas+' líneas en paralelo':'');
       return '<tr><td>Tramo — '+esc(nombre)+'</td><td>'+esc(detalle)+'</td><td class="mono" style="white-space:nowrap;">CHK-078</td></tr>';
     }).join('');
@@ -2683,7 +3391,7 @@ function wireSingleItem(itemEl, it){
     btnCalcular.onclick = function(e){
       e.stopPropagation();
       var ficha = getFicha(sess);
-      var res = calcularHidraulica(ficha);
+      var res = calcularHidraulica(ficha, sess.meta && sess.meta.sede);
       if(!res.error) res.ts = Date.now();
       ficha.motorResultado = res; // persiste: sobrevive a colapsar/expandir y a recargar la página
       saveSession(sess);

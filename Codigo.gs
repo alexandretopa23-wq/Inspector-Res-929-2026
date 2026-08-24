@@ -106,6 +106,29 @@ var BOMBA_VELOCIDAD_VS_LABEL = {
 var FILTRO_TIPO_LABEL = {
   arena:'Arena / medio granular', cartucho:'Cartucho', de:'Tierra de diatomeas (D.E.)'
 };
+/* Selects del modelo hidráulico v2 (circuito con tanque de compensación). */
+var TANQUE_LABEL = {
+  si:'Sí, la bomba succiona desde el tanque de compensación',
+  no:'No, la bomba succiona directo del vaso'
+};
+var RETORNO_LABEL = {
+  sumergido:'Boquillas sumergidas bajo la lámina',
+  sobreLamina:'Descarga sobre la lámina (cascada, chorro o canal)'
+};
+var ESTADO_TUBERIA_LABEL = {
+  nueva:'Nueva o en buen estado (C=150)',
+  servicio:'Con años de servicio (C=130)',
+  incrustada:'Con incrustación o estrechamiento visible (C=110)'
+};
+var CALENTADOR_TIPO_LABEL = {
+  gas:'Caldera o calentador a gas con intercambiador',
+  bombaCalor:'Bomba de calor',
+  placas:'Intercambiador de placas'
+};
+var CALENTADOR_ARREGLO_LABEL = {
+  serie:'En serie (el caudal pasa por todos, uno tras otro)',
+  paralelo:'En paralelo (el caudal se reparte entre ellos)'
+};
 
 /* ============================================================================
    0. ACCESO A LA HOJA — por gid, no por nombre de pestaña
@@ -549,7 +572,12 @@ function _obtenerFicha(sede, piscina, fecha){
 /* ============================================================================
    4. GENERADOR DE INFORME POR VASO (Google Doc → PDF)
    ============================================================================ */
-function generarInformeVaso(sede, piscina, fecha){
+/* Genera el informe de un vaso. Si `area` viene con un valor de AREA_ORDEN,
+   el informe sale segmentado: solo lleva los ítems que le corresponden a ese
+   equipo (más CHK-003, el plano consolidado, que es compartido por las tres
+   áreas técnicas), y el % de cumplimiento se recalcula sobre ese subconjunto.
+   Sin `area` el comportamiento es el de siempre: informe completo del vaso. */
+function generarInformeVaso(sede, piscina, fecha, area){
   var sh = _hojaDatos();
   var last = sh.getLastRow();
   if(last<2) return {ok:false, error:'La hoja no tiene datos aún'};
@@ -561,29 +589,38 @@ function generarInformeVaso(sede, piscina, fecha){
   });
   if(!filas.length) return {ok:false, error:'Sin registros para ese vaso y fecha'};
 
+  if(area){
+    filas = _filasDeArea(filas, area);
+    if(!filas.length) return {ok:false, error:'Sin ítems del área '+area+' para ese vaso y fecha'};
+  }
+
   var m = _metricas(filas);
   var fotos = _indiceFotos(sede, piscina, fecha);
   var ficha = _obtenerFicha(sede, piscina, fecha);
 
-  var doc  = DocumentApp.create('Informe_Inspeccion_'+sede+'_'+piscina+'_'+fecha);
+  var sufijo = area ? '_'+_slugArea(area) : '';
+  var doc  = DocumentApp.create('Informe_Inspeccion_'+sede+'_'+piscina+'_'+fecha+sufijo);
   var body = doc.getBody();
   body.setPageWidth(595).setPageHeight(842); // A4 en puntos
   body.clear();
   _configurarEstilosDoc(body);
 
-  _portada(body, sede, piscina, fecha, filas[0][COL.responsable-1], m);
-  _objetivo(body);
+  _portada(body, sede, piscina, fecha, filas[0][COL.responsable-1], m, area);
+  _objetivo(body, area);
   _tableroKPI(body, m);
   _tablaCapitulos(body, m);
   _hallazgosConFotos(body, filas, fotos);
   _planAccion(body, filas);
-  _conclusion(body, m, sede, piscina);
+  _conclusion(body, m, sede, piscina, area);
   _responsabilidades(body, filas[0][COL.responsable-1]);
   _anexoFotografico(body, filas, fotos);
   // Los Anexos A-D solo salen si el inspector diligenció la ficha técnica
   // en la PWA para este vaso+fecha (botón "📐 Ficha") — un informe sin
   // ficha se genera igual, simplemente sin estas 4 secciones finales.
-  if(ficha){
+  // Los Anexos A-D son de dimensionamiento hidráulico: en los informes
+  // segmentados solo tienen sentido para Térmica e Hidráulica. El informe
+  // completo (sin área) los sigue trayendo como siempre.
+  if(ficha && (!area || area==='Térmica e Hidráulica')){
     _anexoFichaEscenario(body, ficha);
     _anexoFichaHidraulica(body, ficha);
     _anexoDimensionamiento(body, ficha);
@@ -592,10 +629,32 @@ function generarInformeVaso(sede, piscina, fecha){
 
   doc.saveAndClose();
 
-  var carpeta = _carpetaRuta([RAIZ_DRIVE, sede, piscina, fecha]);
+  // Los informes por área quedan en una subcarpeta propia por área, para que
+  // cada interesado reciba un link de carpeta con solo lo suyo.
+  var ruta = [RAIZ_DRIVE, sede, piscina, fecha];
+  if(area) ruta.push('AREA_'+_slugArea(area));
+  var carpeta = _carpetaRuta(ruta);
   var pdf = carpeta.createFile(DriveApp.getFileById(doc.getId()).getAs('application/pdf'))
-                   .setName('Informe_'+sede+'_'+piscina+'_'+fecha+'.pdf');
-  return {ok:true, docUrl:doc.getUrl(), pdfUrl:pdf.getUrl(), metricas:m};
+                   .setName('Informe_'+sede+'_'+piscina+'_'+fecha+sufijo+'.pdf');
+  return {ok:true, area:area||null, docUrl:doc.getUrl(), pdfUrl:pdf.getUrl(), metricas:m};
+}
+
+/* Genera de una vez los informes segmentados de un vaso: uno por cada área
+   que tenga ítems diligenciados. Devuelve la lista de resultados (las áreas
+   sin ítems simplemente no producen informe, no son un error). */
+function generarInformesPorArea(sede, piscina, fecha){
+  var res = [];
+  // "Sin clasificar" va al final para que un CHK nuevo sin área asignada no
+  // quede sin informe (se perdería para todos los interesados); si no hay
+  // ítems así, simplemente no se genera ese documento.
+  AREA_ORDEN.concat(['Sin clasificar']).forEach(function(area){
+    // "Compartido (los 3)" no genera informe propio: sus ítems ya viajan
+    // dentro de los tres informes técnicos.
+    if(area==='Compartido (los 3)') return;
+    var r = generarInformeVaso(sede, piscina, fecha, area);
+    if(r.ok) res.push(r);
+  });
+  return res;
 }
 
 /* Ítems que NO tienen numeral de anclaje en la Res. 929 (pH, cloro,
@@ -668,7 +727,7 @@ var ID_A_AREA = {
   'CHK-165':'Infraestructura', 'CHK-166':'Infraestructura', 'CHK-167':'Infraestructura', 'CHK-168':'Infraestructura',
   'CHK-169':'Infraestructura', 'CHK-170':'Infraestructura', 'CHK-171':'Infraestructura', 'CHK-172':'Infraestructura',
   'CHK-173':'Infraestructura', 'CHK-174':'Infraestructura', 'CHK-175':'Gestión de sede', 'CHK-176':'Gestión de sede',
-  'CHK-177':'Gestión de sede', 'CHK-178':'Gestión de sede', 'CHK-179':'Gestión de sede', 'CHK-180':'Gestión de sede',
+  'CHK-177':'Gestión de sede', 'CHK-178':'Infraestructura', 'CHK-179':'Gestión de sede', 'CHK-180':'Gestión de sede',
   'CHK-181':'Gestión de sede', 'CHK-182':'Gestión de sede', 'CHK-183':'Gestión de sede', 'CHK-184':'Gestión de sede',
   'CHK-185':'Gestión de sede', 'CHK-186':'Gestión de sede', 'CHK-187':'Gestión de sede', 'CHK-188':'Gestión de sede',
   'CHK-189':'Gestión de sede', 'CHK-190':'Gestión de sede', 'CHK-191':'Gestión de sede', 'CHK-192':'Gestión de sede',
@@ -688,6 +747,31 @@ var ID_A_AREA = {
   'CHK-245':'Gestión de sede', 'CHK-246':'Gestión de sede', 'CHK-247':'Infraestructura', 'CHK-248':'Térmica e Hidráulica'
 };
 function _areaDe(id){ return ID_A_AREA[id] || 'Sin clasificar'; }
+
+/* Áreas técnicas que además cargan con los ítems marcados "Compartido (los
+   3)" (hoy solo CHK-003, el plano consolidado). Gestión de sede no entra:
+   ese plano no es su responsabilidad. */
+var AREAS_CON_COMPARTIDOS = {'Eléctrico':1, 'Infraestructura':1, 'Térmica e Hidráulica':1};
+
+/* Filtra las filas de un vaso dejando solo las del área pedida. Un ítem
+   compartido aparece en los tres informes técnicos a propósito: es un
+   entregable que las tres áreas deben coordinar, y omitirlo en dos de los
+   tres informes lo haría desaparecer de la conversación. */
+function _filasDeArea(filas, area){
+  return filas.filter(function(f){
+    var a = _areaDe(String(f[COL.id-1]));
+    if(a===area) return true;
+    return a==='Compartido (los 3)' && !!AREAS_CON_COMPARTIDOS[area];
+  });
+}
+
+/* Nombre de área apto para nombres de archivo y carpetas de Drive. */
+function _slugArea(area){
+  return String(area)
+    .replace(/[áÁ]/g,'a').replace(/[éÉ]/g,'e').replace(/[íÍ]/g,'i')
+    .replace(/[óÓ]/g,'o').replace(/[úÚ]/g,'u').replace(/[ñÑ]/g,'n')
+    .replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'').toUpperCase();
+}
 
 /* ---------- Métricas ejecutivas ---------- */
 function _metricas(filas){
@@ -1000,7 +1084,7 @@ function _indiceFotos(sede, piscina, fecha){
 }
 
 /* ---------- Secciones del documento ---------- */
-function _portada(body, sede, piscina, fecha, responsable, m){
+function _portada(body, sede, piscina, fecha, responsable, m, area){
   // Encabezado: título+subtítulo a la izquierda y ficha de metadatos
   // compacta a la derecha, en la misma fila — igual que el header del
   // mockup de Stitch. DocumentApp no tiene flex/grid, así que el layout de
@@ -1017,14 +1101,24 @@ function _portada(body, sede, piscina, fecha, responsable, m){
          .setSpacingBefore(0).setSpacingAfter(2);
   colTitulo.appendParagraph('Resolución 929 de 2026')
     .setFontSize(10.5).setBold(false).setForegroundColor(C_TITULO);
+  // En los informes segmentados el área va bajo el título y también en la
+  // ficha de metadatos, para que no haya duda de a quién le corresponde el
+  // documento cuando circula suelto por correo.
+  if(area){
+    colTitulo.appendParagraph('Informe por área responsable · ' + area)
+      .setFontSize(9.5).setBold(true).setForegroundColor(C_ENCABEZADO)
+      .setSpacingBefore(3);
+  }
 
-  var metaCard = _tarjetaEnCelda(colMeta, C_FONDO);
-  var metaTabla = metaCard.appendTable([
+  var metaFilas = [
     ['SEDE', String(sede)],
     ['VASO', String(piscina)],
     ['FECHA', String(fecha)],
     ['RESPONSABLE', String(responsable||'—')]
-  ]);
+  ];
+  if(area) metaFilas.splice(3, 0, ['ÁREA', String(area)]);
+  var metaCard = _tarjetaEnCelda(colMeta, C_FONDO);
+  var metaTabla = metaCard.appendTable(metaFilas);
   metaTabla.setBorderWidth(0);
   for(var r=0;r<metaTabla.getNumRows();r++){
     var fila = metaTabla.getRow(r);
@@ -1219,7 +1313,7 @@ function _nota(contenedor, txt){
     .setSpacingAfter(8);
 }
 
-function _objetivo(body){
+function _objetivo(body, area){
   _h1(body, '1. Objetivo');
   body.appendParagraph(
     'Verificar el cumplimiento de los criterios técnicos constructivos y de seguridad ' +
@@ -1228,6 +1322,17 @@ function _objetivo(body){
     'los hallazgos por nivel de riesgo y establecer el plan de acción con responsables y ' +
     'fechas de cierre.'
   ).setForegroundColor(C_TITULO);
+
+  // Aclaración de alcance: sin ella, un lector que compara dos informes
+  // segmentados del mismo vaso ve dos porcentajes distintos y asume error.
+  if(area){
+    _nota(body,
+      'Alcance de este documento: únicamente los ítems del checklist cuya responsabilidad de ' +
+      'cierre corresponde al área de ' + area + '. Los porcentajes, conteos y gráficas de este ' +
+      'informe se calculan sobre ese subconjunto, por lo que no coinciden con el cumplimiento ' +
+      'global del vaso ni con el de los informes de las demás áreas. Los ítems marcados como ' +
+      'compartidos entre las tres áreas técnicas se incluyen también en los informes de las otras dos.');
+  }
 }
 
 function _tableroKPI(body, m){
@@ -1470,23 +1575,55 @@ function _anexoFichaHidraulica(body, ficha){
         .setForegroundColor(C_TITULO).setItalic(true);
     return;
   }
+  var esV2 = (r.modelo === 'v2');
+
   _h2(body, 'B.1 Punto de operación');
-  _tarjetaDatos(body, [
+  var filasB1 = [
+    ['Modelo de cálculo', esV2
+      ? 'v2 — circuito con tanque de compensación, calentadores y método K por accesorio'
+      : 'v1 (legado)'],
     ['Curva de bomba usada', String(r.origen||'—')],
     ['Fecha del cálculo', r.ts ? Utilities.formatDate(new Date(r.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '—'],
-    ['Caudal en el punto de operación', r.caudal!=null ? r.caudal.toFixed(2)+' m³/h' : '— sin dato —'],
-    ['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : '— sin dato —']
-  ], {pctEtiqueta:0.45});
+    ['Caudal en el punto de operación', r.caudal!=null ? r.caudal.toFixed(2)+' m³/h' : '— sin dato —']
+  ];
+  if(esV2){
+    filasB1.push(['Origen del caudal', r.fuenteCaudal==='medido'
+      ? 'MEDIDO con caudalímetro en sitio (manda sobre la estimación)'
+      : 'Estimado por el modelo']);
+    if(r.caudalMin!=null && r.caudalMax!=null){
+      filasB1.push(['Banda de incertidumbre del modelo', r.caudalMin.toFixed(1)+' – '+r.caudalMax.toFixed(1)+' m³/h']);
+    }
+  }
+  filasB1.push(['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : '— sin dato —']);
+  _tarjetaDatos(body, filasB1, {pctEtiqueta:0.45});
 
   _h2(body, 'B.2 Velocidades y recirculación');
-  _tarjetaDatos(body, [
+  var filasB2 = [
     ['Velocidad en succión', r.vSuccion!=null ? r.vSuccion.toFixed(2)+' m/s' : '— sin dato —'],
     ['Velocidad en descarga/retorno', r.vDescarga!=null ? r.vDescarga.toFixed(2)+' m/s' : '— sin dato —'],
     ['Velocidad de filtración', r.vFiltracion!=null ? r.vFiltracion.toFixed(1)+' m³/h/m²' : '— sin dato —'],
-    ['Volumen estimado del vaso', r.volumen!=null ? r.volumen.toFixed(1)+' m³' : '— sin dato —'],
-    ['Tiempo de recirculación', r.tiempoRecirc!=null ? r.tiempoRecirc.toFixed(2)+' h' : '— sin dato —'],
-    ['Rotaciones estimadas por día', r.rotacionesDia!=null ? r.rotacionesDia.toFixed(1) : '— sin dato —']
-  ], {mono:true, pctEtiqueta:0.45});
+    ['Volumen estimado del vaso', r.volumen!=null ? r.volumen.toFixed(1)+' m³' : '— sin dato —']
+  ];
+  if(esV2 && r.volumenTanque!=null){
+    filasB2.push(['Volumen del tanque de compensación', r.volumenTanque.toFixed(1)+' m³']);
+    filasB2.push(['Volumen total en circulación', r.volumenSistema!=null ? r.volumenSistema.toFixed(1)+' m³' : '— sin dato —']);
+  }
+  filasB2.push(['Tiempo de recirculación normativo', r.tiempoRecirc!=null ? r.tiempoRecirc.toFixed(2)+' h' : '— sin dato —']);
+  if(esV2 && r.tiempoRenovacionSistema!=null && r.volumenTanque!=null){
+    filasB2.push(['Renovación real del sistema (vaso + tanque)', r.tiempoRenovacionSistema.toFixed(2)+' h']);
+  }
+  filasB2.push(['Rotaciones estimadas por día', r.rotacionesDia!=null ? r.rotacionesDia.toFixed(1) : '— sin dato —']);
+  _tarjetaDatos(body, filasB2, {mono:true, pctEtiqueta:0.45});
+
+  if(esV2 && r.tiempoRenovacionSistema!=null && r.volumenTanque!=null){
+    _nota(body,
+      'El tiempo de recirculación normativo se calcula sobre el volumen del vaso, que es la base ' +
+      'de la Tabla No. 1: el Numeral 10.5 dimensiona el tanque de compensación como un porcentaje ' +
+      '"del volumen del agua", de modo que ese volumen de referencia no puede incluirse a sí mismo. ' +
+      'La renovación del sistema se reporta por separado como lectura sanitaria complementaria — el ' +
+      'agua que retorna al vaso viene mezclada con el inventario del tanque — y no constituye ' +
+      'incumplimiento por sí sola.');
+  }
 
   if(r.tramos && r.tramos.length){
     _h2(body, 'B.3 Detalle de velocidad por tramo');
@@ -1512,6 +1649,100 @@ function _anexoFichaHidraulica(body, ficha){
       tTramoV.getRow(i).getCell(5).getChild(0).asParagraph().setBold(true).setForegroundColor(col);
     }
   }
+  /* Secciones exclusivas del modelo v2. Un informe generado a partir de una
+     inspección v1 no las incluye: no hay dato con qué llenarlas y no se
+     inventa nada. */
+  if(esV2){
+    var VEREDICTO_TXT = {
+      cumple:   'CUMPLE CON HOLGURA — toda la banda de incertidumbre queda dentro de norma; la conclusión se sostiene sin medición directa.',
+      duda:     'ZONA DE DUDA — la banda cruza el límite normativo. El modelo no alcanza para concluir: este vaso requiere medición con caudalímetro.',
+      incumple: 'INCUMPLE CON HOLGURA — toda la banda queda fuera de norma; el hallazgo se sostiene sin medición directa.'
+    };
+    var v = r.veredictos || {};
+    if(v.tiempoRecirc || v.vFiltracion){
+      _h2(body, 'B.4 Veredicto sobre la banda de incertidumbre');
+      var filasV = [];
+      if(v.tiempoRecirc) filasV.push(['Tiempo de recirculación', VEREDICTO_TXT[v.tiempoRecirc.clase] || '—']);
+      if(v.vFiltracion)  filasV.push(['Velocidad de filtración', VEREDICTO_TXT[v.vFiltracion.clase] || '—']);
+      _tarjetaDatos(body, filasV, {pctEtiqueta:0.30});
+    }
+
+    if(r.cruceManometro || r.diseno){
+      _h2(body, 'B.5 Verificación cruzada y contraste con el diseño');
+      var filasX = [];
+      if(r.cruceManometro){
+        filasX.push(['Caudal despejado desde el manómetro', r.cruceManometro.caudal.toFixed(2)+' m³/h']);
+        filasX.push(['Desviación frente al modelo',
+          (r.cruceManometro.desviacionPct>=0?'+':'')+r.cruceManometro.desviacionPct.toFixed(1)+' % — '+
+          (r.cruceManometro.coherente
+            ? 'dos estimados independientes que concuerdan; la confianza en el resultado es alta'
+            : 'divergencia alta: revisar diámetros, longitudes, accesorios de alta pérdida, altura del manómetro o la curva de bomba seleccionada')]);
+      }
+      if(r.diseno){
+        var DIS = {
+          conforme: 'Circuito conforme a lo entregado en obra',
+          moderada: 'Degradación moderada del circuito frente al diseño',
+          severa:   'Degradación severa, o el circuito ya no corresponde al de la ficha de obra',
+          sobre:    'Por encima del diseño: la ficha de obra no corresponde al circuito actual'
+        };
+        filasX.push(['Caudal según ficha de entrega de obra', r.diseno.caudal.toFixed(2)+' m³/h']);
+        filasX.push(['Desviación del caudal actual frente al diseño',
+          (r.diseno.desviacionPct>=0?'+':'')+r.diseno.desviacionPct.toFixed(1)+' % — '+(DIS[r.diseno.clase]||'—')]);
+        if(r.diseno.volumenImplicito!=null){
+          var CONV = {
+            vaso:          'cuadra con el volumen del vaso: el proveedor usó el criterio normativo',
+            vasoMasTanque: 'cuadra con vaso + tanque: el proveedor incluyó el tanque de compensación, sus tiempos no son directamente comparables con los normativos',
+            noCuadra:      'no cuadra ni con el vaso ni con vaso + tanque: o la piscina fue modificada, o la ficha no corresponde a este vaso'
+          };
+          filasX.push(['Volumen implícito de la ficha de obra',
+            r.diseno.volumenImplicito.toFixed(1)+' m³ — '+(CONV[r.diseno.convencion]||'—')]);
+        }
+      }
+      _tarjetaDatos(body, filasX, {pctEtiqueta:0.38});
+      _nota(body,
+        'La ficha de entrega de obra es la referencia de lo que el circuito debía entregar al ser ' +
+        'recibido, no una medición de su estado actual. La brecha entre ambos valores es evidencia ' +
+        'de la evolución de la instalación (equipos sustituidos, desgaste de bomba, tubería con ' +
+        'incrustación) y constituye por sí misma el contenido del ítem CHK-078.');
+    }
+
+    if(r.tanqueNorma){
+      _h2(body, 'B.6 Capacidad del tanque de compensación (Numeral 10.5)');
+      var TQ = {
+        cumple:   'Cumple la capacidad mínima exigida',
+        parcial:  'Cumple uno de los dos criterios. La norma los ofrece con "o", de modo que cumplir uno basta; se deja como observación, no como incumplimiento',
+        incumple: 'No alcanza la capacidad mínima por ninguno de los dos criterios'
+      };
+      var filasT = [
+        ['Capacidad instalada', r.tanqueNorma.volumen.toFixed(2)+' m³'],
+        ['Exigido por volumen (10% del vaso)', r.tanqueNorma.porVolumen.toFixed(2)+' m³']
+      ];
+      if(r.tanqueNorma.porArea!=null){
+        filasT.push(['Exigido por lámina (60 L/m²)', r.tanqueNorma.porArea.toFixed(2)+' m³']);
+      }
+      filasT.push(['Resultado', TQ[r.tanqueNorma.clase] || '—']);
+      _tarjetaDatos(body, filasT, {mono:true, pctEtiqueta:0.38});
+    }
+
+    if(r.npsh){
+      _h2(body, 'B.7 Riesgo de cavitación (NPSH)');
+      var filasN = [
+        ['NPSH disponible', r.npsh.npsha.toFixed(2)+' m'],
+        ['NPSH requerido (estimado)', r.npsh.npshr!=null ? r.npsh.npshr.toFixed(2)+' m' : '— sin dato —'],
+        ['Margen', r.npsh.margen!=null ? r.npsh.margen.toFixed(2)+' m' : '— sin dato —'],
+        ['Altitud de cálculo', r.npsh.altitud+' m.s.n.m.'+(r.npsh.altitudAsumida?' (asumida)':' (según sede)')],
+        ['Temperatura del agua', r.npsh.temp.toFixed(1)+' °C'+(r.npsh.tempAsumida?' (asumida por vaso climatizado)':'')],
+        ['Sumergencia disponible', r.npsh.sumergencia.toFixed(2)+' m']
+      ];
+      _tarjetaDatos(body, filasN, {mono:true, pctEtiqueta:0.38});
+      _nota(body,
+        'La configuración de succión inundada desde el tanque de compensación es la favorable. ' +
+        'El chequeo cobra valor en el caso degradado: si la canastilla del prefiltro se colmata, la ' +
+        'pérdida en succión aumenta y el margen se consume. El NPSH requerido es una estimación por ' +
+        'velocidad específica de succión, no un dato de fábrica del equipo.');
+    }
+  }
+
   _nota(body,
     'Límites normativos de referencia: succión ≤ 1.8 m/s, descarga ≤ 2.4 m/s (Numeral 10.1); ' +
     'filtración 20-40 m³/h/m² (50 en uso restringido, Numeral 10.2); tiempo de recirculación ' +
@@ -1589,7 +1820,7 @@ function _anexoMemoriaCalculo(body, ficha){
   _h2(body, 'D.2 Datos de tubería y filtro');
   var tramosValidos = (ficha.tuberiaTramos||[]).filter(function(t){ return t && t.diametro>0; });
   if(tramosValidos.length){
-    var filasTramos = [['Tramo','Ø (pulg)','Lado','Longitud (m)','Accesorios','Líneas paralelas']];
+    var filasTramos = [['Tramo','Ø (pulg)','Lado','Long. (m)','Acces. normales','Acces. alta pérdida','Líneas']];
     tramosValidos.forEach(function(t){
       filasTramos.push([
         t.nombre || '(sin nombre)',
@@ -1597,11 +1828,12 @@ function _anexoMemoriaCalculo(body, ficha){
         t.lado==='succion' ? 'Succión' : 'Presión',
         t.longitud!=null ? String(t.longitud) : '—',
         t.accesorios!=null ? String(t.accesorios) : '—',
+        t.accesoriosAlta!=null ? String(t.accesoriosAlta) : '—',
         String(t.nLineas>0 ? t.nLineas : 1)
       ]);
     });
     var tTramos = body.appendTable(filasTramos);
-    _estiloTabla(tTramos, true, [125, 60, 65, 85, 80, 90]);
+    _estiloTabla(tTramos, true, [110, 52, 58, 60, 78, 85, 62]);
   } else {
     _tarjetaDatos(body, [
       ['Diámetro de succión', ficha.tuberiaSuccionDiam!=null ? ficha.tuberiaSuccionDiam+' pulg' : '—'],
@@ -1612,23 +1844,73 @@ function _anexoMemoriaCalculo(body, ficha){
     ], {mono:true, pctEtiqueta:0.45});
   }
   body.appendParagraph('').setFontSize(4);
-  _tarjetaDatos(body, [
-    ['Desnivel succión-descarga', ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m' : '—'],
-    ['Tipo de filtro', FILTRO_TIPO_LABEL[ficha.filtroTipo] || '—'],
-    ['Área filtrante', ficha.filtroArea!=null ? ficha.filtroArea+' m²' : '—'],
-    ['Presión de manómetro del filtro', ficha.presionManometro!=null ? ficha.presionManometro+' PSI' : '—']
-  ], {mono:true, pctEtiqueta:0.45});
+  var filasCircuito = [];
+  if(ficha.tanqueEquilibrio){
+    filasCircuito.push(['Tanque de compensación', TANQUE_LABEL[ficha.tanqueEquilibrio] || '—']);
+  }
+  if(ficha.tanqueEquilibrio==='si'){
+    filasCircuito.push(['Dimensiones del tanque',
+      (ficha.tanqueLargo!=null && ficha.tanqueAncho!=null && ficha.tanqueNivel!=null)
+        ? ficha.tanqueLargo+' × '+ficha.tanqueAncho+' m, lámina '+ficha.tanqueNivel+' m'
+        : '— sin dato —']);
+    filasCircuito.push(['Desnivel lámina piscina - lámina tanque',
+      ficha.desnivelPiscinaTanque!=null ? ficha.desnivelPiscinaTanque+' m' : '— sin dato —']);
+  } else {
+    filasCircuito.push(['Desnivel succión-descarga', ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m' : '—']);
+  }
+  if(ficha.tipoRetorno)    filasCircuito.push(['Tipo de retorno al vaso', RETORNO_LABEL[ficha.tipoRetorno] || '—']);
+  if(ficha.estadoTuberia)  filasCircuito.push(['Estado de la tubería', ESTADO_TUBERIA_LABEL[ficha.estadoTuberia] || '—']);
+  if(ficha.calentadorN!=null){
+    filasCircuito.push(['Calentadores', ficha.calentadorN+' × '+(CALENTADOR_TIPO_LABEL[ficha.calentadorTipo]||'tipo sin declarar')]);
+    filasCircuito.push(['Arreglo de calentadores', CALENTADOR_ARREGLO_LABEL[ficha.calentadorArreglo] || '— sin declarar —']);
+  }
+  if(ficha.tempAgua!=null) filasCircuito.push(['Temperatura del agua', ficha.tempAgua+' °C']);
+  filasCircuito.push(['Tipo de filtro', FILTRO_TIPO_LABEL[ficha.filtroTipo] || '—']);
+  filasCircuito.push(['Área filtrante', ficha.filtroArea!=null ? ficha.filtroArea+' m²' : '—']);
+  filasCircuito.push(['Presión de manómetro del filtro', ficha.presionManometro!=null ? ficha.presionManometro+' PSI' : '—']);
+  if(ficha.alturaManometro!=null){
+    filasCircuito.push(['Altura del manómetro sobre la lámina', ficha.alturaManometro+' m']);
+  }
+  if(ficha.caudalMedido!=null) filasCircuito.push(['Caudal medido con caudalímetro', ficha.caudalMedido+' m³/h']);
+  if(ficha.caudalDiseno!=null) filasCircuito.push(['Caudal según ficha de entrega de obra', ficha.caudalDiseno+' m³/h']);
+  if(ficha.tiempoRecircDiseno!=null) filasCircuito.push(['Tiempo de recirculación de diseño', ficha.tiempoRecircDiseno+' h']);
+  _tarjetaDatos(body, filasCircuito, {mono:true, pctEtiqueta:0.45});
 
   var sup = (ficha.motorResultado && ficha.motorResultado.supuestos) || null;
   if(sup){
     _h2(body, 'D.3 Supuestos del cálculo hidráulico');
-    _tarjetaDatos(body, [
-      ['Coeficiente de Hazen-Williams (C)', String(sup.C)],
-      ['Longitud equivalente de accesorios', String(sup.LeqPorAccesorio)],
-      ['Carga estática asumida', String(sup.Hgeo)],
-      ['Reparto de tubería succión/descarga', String(sup.repartoLongitud)],
-      ['Conversión de presión', String(sup.conversionPsi)]
-    ], {mono:true, pctEtiqueta:0.45});
+    var esV2mem = (ficha.motorResultado.modelo === 'v2');
+    if(esV2mem){
+      _tarjetaDatos(body, [
+        ['Modelo de cálculo', 'v2'],
+        ['Coeficiente de Hazen-Williams (C)', String(sup.C)+' — '+String(sup.estadoTuberia)],
+        ['Pérdida por accesorios', String(sup.kAccesorios)],
+        ['Carga estática', String(sup.Hgeo)],
+        ['Retorno al vaso', String(sup.retorno)],
+        ['Calentadores', String(sup.calentadores)],
+        ['Uso de la lectura del manómetro', String(sup.manometro)],
+        ['Altitud para el cálculo de NPSH', String(sup.altitud)],
+        ['NPSH requerido', String(sup.npshr)],
+        ['Volumen del vaso', String(sup.volumen)],
+        ['Banda de incertidumbre', String(sup.banda)]
+      ], {mono:true, pctEtiqueta:0.38});
+      _nota(body,
+        'El modelo v2 corrige tres puntos del v1: la carga estática con tanque de compensación es ' +
+        'únicamente la diferencia entre las dos láminas de agua (el recorrido de la tubería por los ' +
+        'distintos niveles del cuarto de máquinas se cancela por tratarse de conducto cerrado y lleno); ' +
+        'la lectura del manómetro deja de sumarse a la curva del sistema, porque hacerlo contaba dos ' +
+        'veces el circuito aguas abajo; y los accesorios pasan de una longitud equivalente única a ' +
+        'coeficientes K diferenciados por tipo.');
+    } else {
+      _tarjetaDatos(body, [
+        ['Modelo de cálculo', 'v1 (legado)'],
+        ['Coeficiente de Hazen-Williams (C)', String(sup.C)],
+        ['Longitud equivalente de accesorios', String(sup.LeqPorAccesorio)],
+        ['Carga estática asumida', String(sup.Hgeo)],
+        ['Reparto de tubería succión/descarga', String(sup.repartoLongitud)],
+        ['Conversión de presión', String(sup.conversionPsi)]
+      ], {mono:true, pctEtiqueta:0.45});
+    }
   }
 
   if(ficha.aforoResultado && !ficha.aforoResultado.error){
@@ -1671,11 +1953,15 @@ function _planAccion(body, filas){
   }
 }
 
-function _conclusion(body, m, sede, piscina){
+function _conclusion(body, m, sede, piscina, area){
   _h1(body, '6. Conclusión');
-  var txt = 'El vaso ' + piscina + ' de la sede ' + sede + ' presenta un cumplimiento global del ' +
-    m.pctCumplimiento + '% frente a los criterios de la Resolución 929 de 2026, con ' +
-    m.noCumple + ' ítem(s) en estado No cumple y ' + (m.critico + m.alto) +
+  var txt = area
+    ? ('Los ítems a cargo del área de ' + area + ' en el vaso ' + piscina + ' de la sede ' + sede +
+       ' presentan un cumplimiento del ' + m.pctCumplimiento + '% frente a los criterios de la ' +
+       'Resolución 929 de 2026, con ')
+    : ('El vaso ' + piscina + ' de la sede ' + sede + ' presenta un cumplimiento global del ' +
+    m.pctCumplimiento + '% frente a los criterios de la Resolución 929 de 2026, con ');
+  txt += m.noCumple + ' ítem(s) en estado No cumple y ' + (m.critico + m.alto) +
     ' hallazgo(s) clasificados en riesgo crítico o alto. ';
   if(m.vencidos>0) txt += 'Se registran ' + m.vencidos + ' hallazgo(s) con fecha compromiso vencida, ' +
     'lo que constituye la desviación de gestión más relevante del período. ';
@@ -1847,12 +2133,116 @@ function _insertarImagenCentrada(body, blob, width){
    5. MENÚ EN LA HOJA — generar informes sin salir de Sheets
    ============================================================================ */
 function onOpen(){
-  SpreadsheetApp.getUi()
-    .createMenu('Inspección piscinas')
+  var ui = SpreadsheetApp.getUi();
+  // Submenús con un ítem fijo por área: Apps Script no permite pasarle
+  // argumentos a un addItem, así que cada área necesita su propia función
+  // envoltorio (menuVasoArea_* / menuSedeArea_*).
+  var vasoPorArea = ui.createMenu('Generar informe del vaso por ÁREA');
+  vasoPorArea.addItem('Todas las áreas', 'menuGenerarInformesPorArea');
+  AREA_ORDEN.concat(['Sin clasificar']).forEach(function(area){
+    if(area==='Compartido (los 3)') return;  // sus ítems viajan dentro de las 3 áreas técnicas
+    vasoPorArea.addItem(area, 'menuVasoArea_'+_slugArea(area));
+  });
+
+  // Se generan de a un área por corrida a propósito — hacer las cuatro
+  // áreas de todos los vasos de una sede grande se pasa del límite de
+  // 6 minutos de ejecución de Apps Script.
+  var sedePorArea = ui.createMenu('Generar informe de sede por ÁREA');
+  AREA_ORDEN.concat(['Sin clasificar']).forEach(function(area){
+    if(area==='Compartido (los 3)') return;
+    sedePorArea.addItem(area, 'menuSedeArea_'+_slugArea(area));
+  });
+
+  ui.createMenu('Inspección piscinas')
     .addItem('Generar informe del vaso seleccionado', 'menuGenerarInforme')
     .addItem('Generar informes de toda la sede', 'menuGenerarSede')
+    .addSeparator()
+    .addSubMenu(vasoPorArea)
+    .addSubMenu(sedePorArea)
     .addToUi();
 }
+
+/* Para cada piscina de una sede, la fecha de inspección más reciente
+   registrada en la hoja. "Toda la sede" no puede depender de que todos los
+   vasos compartan la misma fecha de la fila seleccionada — cada vaso se
+   inspecciona en su propio día — así que cada uno se reporta con su último
+   dato disponible. _fechaStr ya normaliza a 'yyyy-MM-dd', por eso alcanza
+   con comparar los strings. */
+function _vasosSedeUltimaFecha(sede){
+  var sh = _hojaDatos();
+  var last = sh.getLastRow();
+  var datos = last>=2 ? sh.getRange(2,1,last-1,TOTAL_COLS).getValues() : [];
+  var ultima = {};
+  datos.forEach(function(f){
+    if(String(f[COL.sede-1])!==sede) return;
+    var pi = String(f[COL.piscina-1]);
+    var fecha = _fechaStr(f[COL.fecha-1]);
+    if(!ultima[pi] || fecha > ultima[pi]) ultima[pi] = fecha;
+  });
+  return ultima; // {piscina: 'yyyy-MM-dd'}
+}
+
+/* Genera, para TODOS los vasos de una sede (cada uno en su fecha más
+   reciente), el informe de una sola área. Es el flujo de entrega: se corre
+   una vez por cada interesado y se le pasa el link de su carpeta. */
+function _menuSedeArea(area){
+  var ui = SpreadsheetApp.getUi();
+  var sh = _hojaDatos();
+  var fila = SpreadsheetApp.getActiveSheet().getActiveRange().getRow();
+  if(fila<2){ ui.alert('Selecciona una fila de datos, para identificar la sede.'); return; }
+  var v = sh.getRange(fila,1,1,TOTAL_COLS).getValues()[0];
+  var sede = String(v[COL.sede-1]);
+
+  var ultima = _vasosSedeUltimaFecha(sede);
+  var lista = Object.keys(ultima);
+  if(!lista.length){ ui.alert('No hay vasos registrados para la sede '+sede+'.'); return; }
+
+  var ok = [], sinItems = [];
+  lista.forEach(function(pi){
+    var r = generarInformeVaso(sede, pi, ultima[pi], area);
+    if(r.ok) ok.push(pi+' ('+ultima[pi]+') — '+r.metricas.pctCumplimiento+'%'+chr10()+r.pdfUrl);
+    else sinItems.push(pi+' ('+ultima[pi]+')');
+  });
+
+  var msg = 'Área: '+area+chr10()+'Sede: '+sede+chr10()+chr10();
+  msg += ok.length ? ('Informes generados ('+ok.length+'):'+chr10()+chr10()+ok.join(chr10()+chr10()))
+                   : 'No se generó ningún informe: ningún vaso tiene ítems de esta área.';
+  if(sinItems.length) msg += chr10()+chr10()+'Sin ítems de esta área: '+sinItems.join(', ');
+  msg += chr10()+chr10()+'Carpeta: '+RAIZ_DRIVE+'/'+sede+'/<vaso>/<fecha>/AREA_'+_slugArea(area)+'/';
+  ui.alert(msg);
+}
+
+/* Salto de línea para los alert(): más legible que escaparlo en cada
+   concatenación. */
+function chr10(){ return String.fromCharCode(10); }
+
+/* Envoltorios del submenú de sede. Si se agrega un área a AREA_ORDEN hay
+   que añadir aquí su función con el nombre que produce _slugArea(), o el
+   ítem del menú quedará apuntando a una función inexistente. */
+function menuSedeArea_ELECTRICO(){ _menuSedeArea('Eléctrico'); }
+function menuSedeArea_INFRAESTRUCTURA(){ _menuSedeArea('Infraestructura'); }
+function menuSedeArea_TERMICA_E_HIDRAULICA(){ _menuSedeArea('Térmica e Hidráulica'); }
+function menuSedeArea_GESTION_DE_SEDE(){ _menuSedeArea('Gestión de sede'); }
+function menuSedeArea_SIN_CLASIFICAR(){ _menuSedeArea('Sin clasificar'); }
+
+/* Informe de una sola área para el vaso de la fila seleccionada (su propio
+   sede+piscina+fecha, sin ambigüedad porque viene de una fila concreta). */
+function _menuVasoArea(area){
+  var ui = SpreadsheetApp.getUi();
+  var sh = _hojaDatos();
+  var fila = SpreadsheetApp.getActiveSheet().getActiveRange().getRow();
+  if(fila<2){ ui.alert('Selecciona una fila de datos.'); return; }
+  var v = sh.getRange(fila,1,1,TOTAL_COLS).getValues()[0];
+  var r = generarInformeVaso(String(v[COL.sede-1]), String(v[COL.piscina-1]), _fechaStr(v[COL.fecha-1]), area);
+  ui.alert(r.ok ? ('Informe generado ('+area+', '+r.metricas.pctCumplimiento+'%):'+chr10()+r.pdfUrl) : 'Error: '+r.error);
+}
+
+/* Envoltorios del submenú de vaso. Mismo criterio que menuSedeArea_*. */
+function menuVasoArea_ELECTRICO(){ _menuVasoArea('Eléctrico'); }
+function menuVasoArea_INFRAESTRUCTURA(){ _menuVasoArea('Infraestructura'); }
+function menuVasoArea_TERMICA_E_HIDRAULICA(){ _menuVasoArea('Térmica e Hidráulica'); }
+function menuVasoArea_GESTION_DE_SEDE(){ _menuVasoArea('Gestión de sede'); }
+function menuVasoArea_SIN_CLASIFICAR(){ _menuVasoArea('Sin clasificar'); }
 
 function menuGenerarInforme(){
   var sh = _hojaDatos();
@@ -1863,23 +2253,36 @@ function menuGenerarInforme(){
   SpreadsheetApp.getUi().alert(res.ok ? 'Informe generado:\n'+res.pdfUrl : 'Error: '+res.error);
 }
 
+/* Un informe por cada área responsable del vaso de la fila seleccionada
+   ("Todas las áreas" del submenú "Generar informe del vaso por ÁREA").
+   Es lo que se le entrega a cada equipo (eléctrico, T&H, infraestructura,
+   gestión de sede) en vez del informe completo del vaso. */
+function menuGenerarInformesPorArea(){
+  var sh = _hojaDatos();
+  var fila = SpreadsheetApp.getActiveSheet().getActiveRange().getRow();
+  if(fila<2){ SpreadsheetApp.getUi().alert('Selecciona una fila de datos.'); return; }
+  var v = sh.getRange(fila,1,1,TOTAL_COLS).getValues()[0];
+  var res = generarInformesPorArea(String(v[COL.sede-1]), String(v[COL.piscina-1]), _fechaStr(v[COL.fecha-1]));
+  if(!res.length){ SpreadsheetApp.getUi().alert('No se generó ningún informe: el vaso no tiene ítems clasificados por área.'); return; }
+  var detalle = res.map(function(r){ return r.area+' — '+r.metricas.pctCumplimiento+'%\n'+r.pdfUrl; }).join('\n\n');
+  SpreadsheetApp.getUi().alert('Informes por área generados ('+res.length+'):\n\n'+detalle);
+}
+
+/* Genera el informe completo (sin segmentar por área) de todos los vasos de
+   la sede, cada uno en su fecha de inspección más reciente. */
 function menuGenerarSede(){
   var sh = _hojaDatos();
   var fila = SpreadsheetApp.getActiveSheet().getActiveRange().getRow();
+  if(fila<2){ SpreadsheetApp.getUi().alert('Selecciona una fila de datos, para identificar la sede.'); return; }
   var v = sh.getRange(fila,1,1,TOTAL_COLS).getValues()[0];
-  var sede = String(v[COL.sede-1]), fecha = _fechaStr(v[COL.fecha-1]);
-  var last = sh.getLastRow();
-  var datos = last>=2 ? sh.getRange(2,1,last-1,TOTAL_COLS).getValues() : [];
-  var vasos = {};
-  datos.forEach(function(f){
-    if(String(f[COL.sede-1])===sede && _fechaStr(f[COL.fecha-1])===fecha){
-      vasos[String(f[COL.piscina-1])] = true;
-    }
-  });
+  var sede = String(v[COL.sede-1]);
+  var ultima = _vasosSedeUltimaFecha(sede);
+  var lista = Object.keys(ultima);
+  if(!lista.length){ SpreadsheetApp.getUi().alert('No hay vasos registrados para la sede '+sede+'.'); return; }
   var urls = [];
-  Object.keys(vasos).forEach(function(p){
-    var r = generarInformeVaso(sede, p, fecha);
-    if(r.ok) urls.push(p+': '+r.pdfUrl);
+  lista.forEach(function(p){
+    var r = generarInformeVaso(sede, p, ultima[p]);
+    if(r.ok) urls.push(p+' ('+ultima[p]+'): '+r.pdfUrl);
   });
   SpreadsheetApp.getUi().alert('Informes generados ('+urls.length+'):\n\n'+urls.join('\n'));
 }
