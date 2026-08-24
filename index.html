@@ -636,6 +636,9 @@ var FICHA_CAMPOS = {
     {v:"superflo",l:"Pentair SuperFlo (velocidad única)"},
     {v:"superflo_vs",l:"Pentair SuperFlo VS 2.2 HP (velocidad seleccionable — dato de fábrica)"},
     {v:"eq",l:"Pentair EQ Series (comercial)"},
+    {v:"intelliflo_vs",l:"Pentair IntelliFlo VS+SVRS 3 HP (velocidad seleccionable — dato de fábrica)"},
+    {v:"whisperflo_vst",l:"Pentair WhisperFlo VST 2 HP (velocidad seleccionable — dato de fábrica)"},
+    {v:"whisperflo_xf",l:"Pentair WhisperFloXF 3 HP (velocidad única — dato de fábrica)"},
     {v:"manual",l:"Cargar curva real de la bomba (mínimo 4 puntos Q-H)"}
   ]},
   curvaManualHz:{label:"Frecuencia (Hz) a la que se midió la curva manual",unit:"Hz",type:"number",step:"1",placeholder:"60"},
@@ -643,6 +646,19 @@ var FICHA_CAMPOS = {
     {v:"1",l:"Velocidad 1 — 3000 RPM"},
     {v:"2",l:"Velocidad 2 — 2200 RPM"},
     {v:"3",l:"Velocidad 3 — 1400 RPM"},
+    {v:"4",l:"Velocidad 4 / máxima — 3450 RPM"}
+  ]},
+  bombaVelocidadIntelliflo:{label:"Velocidad en la que se encontró configurada la bomba IntelliFlo VS+SVRS",type:"select",options:[
+    {v:"1",l:"Velocidad 1 — 1100 RPM"},
+    {v:"2",l:"Velocidad 2 — 1500 RPM"},
+    {v:"3",l:"Velocidad 3 — 2350 RPM"},
+    {v:"4",l:"Velocidad 4 — 3110 RPM"},
+    {v:"5",l:"Velocidad 5 / máxima — 3450 RPM"}
+  ]},
+  bombaVelocidadWhisperVST:{label:"Velocidad en la que se encontró configurada la bomba WhisperFlo VST",type:"select",options:[
+    {v:"1",l:"Velocidad 1 — 1400 RPM"},
+    {v:"2",l:"Velocidad 2 — 2200 RPM"},
+    {v:"3",l:"Velocidad 3 — 3000 RPM"},
     {v:"4",l:"Velocidad 4 / máxima — 3450 RPM"}
   ]},
   tuberiaSuccionDiam:{label:"Diámetro tubería de succión (legado, solo si no hay tramos cargados)",unit:"pulg",type:"number",step:"0.5"},
@@ -709,7 +725,7 @@ var ITEM_FICHA_CAMPOS = {
   "CHK-044":["profMax","profMin","profIntermedia","volumenManual"],
   "CHK-204":["largo","ancho","areaManual","areaDiseno"],
   "CHK-079":["tipoUso","cubierta"],
-  "CHK-074":["bombaHP","bombaHz","bombaFamilia","bombaVelocidadVS"],
+  "CHK-074":["bombaHP","bombaHz","bombaFamilia","bombaVelocidadVS","bombaVelocidadIntelliflo","bombaVelocidadWhisperVST"],
   "CHK-078":["desnivelPiscinaTanque","tipoRetorno","estadoTuberia","tempAgua",
              "calentadorN","calentadorArreglo","calentadorTipo",
              "caudalMedido","caudalDiseno","tiempoRecircDiseno","desnivelSuccionDescarga"],
@@ -798,11 +814,17 @@ var CURVAS_PENTAIR = {
   ]},
   eq_1500:{label:"Pentair EQK1500 15 HP (dato de fábrica)",hp:15,curva:[
     {q:0,h:34.14},{q:62.46,h:30.48},{q:134.00,h:24.38},{q:147.63,h:21.34},{q:157.85,h:18.29},{q:170.34,h:12.19},{q:181.70,h:6.10},{q:186.25,h:0}
+  ]},
+  // WhisperFloXF 3 HP, velocidad única — dato de fábrica (mismo origen que
+  // las curvas EQ de arriba: tabla numérica del fabricante, no gráfico inferido).
+  whisperflo_xf_3:{label:"Pentair WhisperFloXF 3 HP (dato de fábrica)",hp:3,curva:[
+    {q:11.36,h:30.48},{q:19.76,h:27.43},{q:35.20,h:18.29},{q:43.61,h:12.19},{q:47.24,h:9.14},{q:51.10,h:6.10}
   ]}
 };
 function seleccionarCurvaPentair(familia, hp){
   var candidatas = Object.keys(CURVAS_PENTAIR).filter(function(k){
     if(familia==='eq') return k.indexOf('eq_')===0;
+    if(familia==='whisperflo_xf') return k.indexOf('whisperflo_xf_')===0;
     return k.indexOf('superflo_')===0;
   });
   if(!candidatas.length) return null;
@@ -831,6 +853,43 @@ var CURVAS_PENTAIR_VS = {
   ]},
   4:{label:"SuperFlo VS 2.2 HP — Velocidad 4 / máxima, 3450 RPM (dato de fábrica)",hp:2.2,curva:[
     {q:0,h:33.53},{q:6.81,h:33.53},{q:9.09,h:29.57},{q:11.36,h:25.60},{q:16.81,h:0}
+  ]}
+};
+
+/* IntelliFlo VS+SVRS 3 HP: igual que la SuperFlo VS, se opera a una de sus
+   velocidades fijas seleccionables desde el controlador — cada una con su
+   propia curva de fábrica, no pasa por afinidadPorHz. */
+var CURVAS_PENTAIR_INTELLIFLO = {
+  1:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 1, 1100 RPM (dato de fábrica)",hp:3,curva:[
+    {q:0,h:3.05},{q:4.54,h:2.90},{q:6.81,h:2.74},{q:9.09,h:2.13},{q:11.36,h:1.52}
+  ]},
+  2:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 2, 1500 RPM (dato de fábrica)",hp:3,curva:[
+    {q:0,h:6.04},{q:4.54,h:5.49},{q:11.36,h:4.27},{q:14.08,h:3.05},{q:15.90,h:2.13}
+  ]},
+  3:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 3, 2350 RPM (dato de fábrica)",hp:3,curva:[
+    {q:0,h:13.72},{q:13.63,h:11.89},{q:22.71,h:7.92},{q:24.98,h:6.71},{q:26.12,h:5.49}
+  ]},
+  4:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 4, 3110 RPM (dato de fábrica)",hp:3,curva:[
+    {q:0,h:24.08},{q:22.71,h:17.37},{q:31.80,h:11.28},{q:34.07,h:9.75}
+  ]},
+  5:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 5 / máxima, 3450 RPM (dato de fábrica)",hp:3,curva:[
+    {q:0,h:29.57},{q:16.81,h:27.43},{q:23.39,h:24.38},{q:28.16,h:21.34},{q:31.80,h:18.29},{q:38.61,h:11.89}
+  ]}
+};
+
+/* WhisperFlo VST 2 HP: misma lógica de velocidad fija seleccionable. */
+var CURVAS_PENTAIR_WHISPERFLO_VST = {
+  1:{label:"WhisperFlo VST 2 HP — Velocidad 1, 1400 RPM (dato de fábrica)",hp:2,curva:[
+    {q:0,h:4.57},{q:7.95,h:3.66},{q:10.22,h:3.05},{q:13.63,h:1.52},{q:15.22,h:0.91}
+  ]},
+  2:{label:"WhisperFlo VST 2 HP — Velocidad 2, 2200 RPM (dato de fábrica)",hp:2,curva:[
+    {q:0,h:10.67},{q:9.77,h:9.75},{q:12.04,h:9.14},{q:17.49,h:6.10},{q:19.99,h:4.57},{q:21.58,h:3.66}
+  ]},
+  3:{label:"WhisperFlo VST 2 HP — Velocidad 3, 3000 RPM (dato de fábrica)",hp:2,curva:[
+    {q:0,h:19.81},{q:12.95,h:18.29},{q:18.85,h:15.24},{q:23.39,h:12.19},{q:26.57,h:9.14},{q:27.48,h:7.92}
+  ]},
+  4:{label:"WhisperFlo VST 2 HP — Velocidad 4 / máxima, 3450 RPM (dato de fábrica)",hp:2,curva:[
+    {q:0,h:26.52},{q:19.31,h:22.86},{q:23.62,h:19.81},{q:27.26,h:16.76},{q:30.21,h:13.72},{q:32.02,h:11.58}
   ]}
 };
 
@@ -1031,6 +1090,18 @@ function resolverCurvaBomba(ficha){
     var ajusteVS = ajustarCurvaCuadratica(refVS.curva);
     if(!ajusteVS) return {error:'No se pudo ajustar la curva de referencia.'};
     origenCurva = {evalH:ajusteVS.evalH, qMax:ajusteVS.qMax, label:refVS.label};
+  } else if(ficha.bombaFamilia==='intelliflo_vs'){
+    var refIF = CURVAS_PENTAIR_INTELLIFLO[ficha.bombaVelocidadIntelliflo];
+    if(!refIF) return {error:'Selecciona la velocidad en la que se encontró la bomba IntelliFlo VS+SVRS (ítem CHK-074).'};
+    var ajusteIF = ajustarCurvaCuadratica(refIF.curva);
+    if(!ajusteIF) return {error:'No se pudo ajustar la curva de referencia.'};
+    origenCurva = {evalH:ajusteIF.evalH, qMax:ajusteIF.qMax, label:refIF.label};
+  } else if(ficha.bombaFamilia==='whisperflo_vst'){
+    var refWV = CURVAS_PENTAIR_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST];
+    if(!refWV) return {error:'Selecciona la velocidad en la que se encontró la bomba WhisperFlo VST (ítem CHK-074).'};
+    var ajusteWV = ajustarCurvaCuadratica(refWV.curva);
+    if(!ajusteWV) return {error:'No se pudo ajustar la curva de referencia.'};
+    origenCurva = {evalH:ajusteWV.evalH, qMax:ajusteWV.qMax, label:refWV.label};
   } else if(ficha.bombaFamilia){
     var ref = seleccionarCurvaPentair(ficha.bombaFamilia, ficha.bombaHP);
     if(!ref) return {error:'Selecciona la familia de la bomba en la ficha técnica.'};
@@ -1153,6 +1224,8 @@ var DP_CALENTADOR_REF = {
 };
 var NSS_ASUMIDO = 8000; // velocidad específica de succión conservadora (HI)
 var RPM_VS = {1:3000, 2:2200, 3:1400, 4:3450};
+var RPM_INTELLIFLO = {1:1100, 2:1500, 3:2350, 4:3110, 5:3450};
+var RPM_WHISPERFLO_VST = {1:1400, 2:2200, 3:3000, 4:3450};
 
 /* Banda de incertidumbre: en vez de un número puntual que aparenta exactitud
    de instrumento, se corre el modelo tres veces moviendo los supuestos dentro
@@ -1316,6 +1389,8 @@ function capacidadTanqueNorma(ficha, vVaso, area){
 
 function rpmEstimado(ficha){
   if(ficha.bombaFamilia==='superflo_vs') return RPM_VS[ficha.bombaVelocidadVS] || null;
+  if(ficha.bombaFamilia==='intelliflo_vs') return RPM_INTELLIFLO[ficha.bombaVelocidadIntelliflo] || null;
+  if(ficha.bombaFamilia==='whisperflo_vst') return RPM_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST] || null;
   var hz = (ficha.bombaHz>0) ? ficha.bombaHz : 60;
   return 3450*hz/60;
 }
@@ -2330,6 +2405,12 @@ function fichaBloqueHtml(it){
        completo y usa desnivelPiscinaTanque en su lugar. Mostrar los dos a la
        vez sugiere que ambos cuentan, cuando uno queda muerto — se oculta. */
     if(key==='desnivelSuccionDescarga' && ficha.tanqueEquilibrio==='si') return;
+    /* Los tres selectores de velocidad solo aplican a su propia familia de
+       bomba multivelocidad — mostrar los tres siempre confundiría al
+       inspector sobre cuál diligenciar. */
+    if(key==='bombaVelocidadVS' && ficha.bombaFamilia!=='superflo_vs') return;
+    if(key==='bombaVelocidadIntelliflo' && ficha.bombaFamilia!=='intelliflo_vs') return;
+    if(key==='bombaVelocidadWhisperVST' && ficha.bombaFamilia!=='whisperflo_vst') return;
     if(c.group && c.group!==grupoActual){
       html += '<div class="fichaGrupo">'+esc(c.group)+'</div>';
       grupoActual = c.group;
