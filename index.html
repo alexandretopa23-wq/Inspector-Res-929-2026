@@ -650,7 +650,7 @@ var FICHA_CAMPOS = {
   tuberiaLongitud:{label:"Longitud total de tubería (legado, solo si no hay tramos cargados)",unit:"m",type:"number",step:"1"},
   tuberiaAccesorios:{label:"Número de accesorios (legado, solo si no hay tramos cargados)",unit:"u",type:"number",step:"1"},
   tuberiaPctSuccion:{label:"% succión del total (legado, solo si no hay tramos cargados)",unit:"%",type:"number",step:"5",placeholder:"50"},
-  desnivelSuccionDescarga:{label:"Desnivel entre el nivel de succión (espejo de agua) y el punto de descarga/retorno a la piscina",unit:"m",type:"number",step:"0.1"},
+  desnivelSuccionDescarga:{label:"Solo si NO hay tanque de equilibrio — desnivel entre el nivel de succión (espejo de agua de la piscina) y el punto de descarga/retorno",unit:"m",type:"number",step:"0.1"},
   filtroTipo:{label:"Tipo de filtro",type:"select",options:[
     {v:"arena",l:"Arena / medio granular"},{v:"cartucho",l:"Cartucho"},{v:"de",l:"Tierra de diatomeas (D.E.)"}
   ]},
@@ -2325,6 +2325,11 @@ function fichaBloqueHtml(it){
   campos.forEach(function(key){
     var c = FICHA_CAMPOS[key];
     if(!c) return;
+    /* desnivelSuccionDescarga es el campo legado (sin tanque de equilibrio):
+       en cuanto se declara tanqueEquilibrio="si" el motor v2 lo ignora por
+       completo y usa desnivelPiscinaTanque en su lugar. Mostrar los dos a la
+       vez sugiere que ambos cuentan, cuando uno queda muerto — se oculta. */
+    if(key==='desnivelSuccionDescarga' && ficha.tanqueEquilibrio==='si') return;
     if(c.group && c.group!==grupoActual){
       html += '<div class="fichaGrupo">'+esc(c.group)+'</div>';
       grupoActual = c.group;
@@ -3317,6 +3322,21 @@ function wireSingleItem(itemEl, it){
         pintarMiniaturas(itemEl);
       } else {
         refrescarAlertasFicha(itemEl, sess);
+        /* tanqueEquilibrio vive en la tarjeta de CHK-102, pero condiciona un
+           campo de la tarjeta de CHK-078 (desnivelSuccionDescarga se oculta
+           cuando hay tanque). Si esa otra tarjeta ya está expandida y visible
+           en el DOM, se repinta también — así el inspector no ve un campo
+           muerto colgado hasta que reabra la tarjeta. */
+        if(key==='tanqueEquilibrio'){
+          var otroEl = document.querySelector('.item[data-id="CHK-078"]');
+          var otroIt = ITEMS.find(function(x){return x.id==='CHK-078';});
+          if(otroEl && otroIt && !otroEl.classList.contains('collapsed')){
+            var otroResp = sess.responses['CHK-078'] || {};
+            otroEl.innerHTML = renderItemFull(otroIt, otroResp, CIERRA_ITEM_ESTADOS.indexOf(otroResp.estado)>=0);
+            wireSingleItem(otroEl, otroIt);
+            pintarMiniaturas(otroEl);
+          }
+        }
       }
       maybeAutoSyncFicha();
     });
