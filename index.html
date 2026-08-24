@@ -3466,9 +3466,17 @@ function wireSingleItem(itemEl, it){
       saveSession(sess);
       updateSavedLabel();
       if(campo==='diametro'){
-        itemEl.innerHTML = renderItemFull(it, getResp(), CIERRA_ITEM_ESTADOS.indexOf(getResp().estado)>=0);
-        wireSingleItem(itemEl, it);
-        pintarMiniaturas(itemEl);
+        var row = inp.closest('.tramoRow');
+        if(row){
+          var alerta = parseFloat(inp.value) > 8;
+          row.classList.toggle('fichaAlerta', alerta);
+          var msg = row.querySelector('.fichaAlertaMsg');
+          if(alerta && !msg){
+            row.insertAdjacentHTML('beforeend', '<div class="fichaAlertaMsg">⚠ Supera el máximo de 8 pulgadas de diámetro permitido (Numeral 10.1).</div>');
+          } else if(!alerta && msg){
+            msg.remove();
+          }
+        }
       }
       maybeAutoSyncFicha();
     });
