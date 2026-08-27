@@ -25,19 +25,26 @@ var COLUMNAS_ESPERADAS = [
 
 /* Paleta corporativa — alineada al diseño "Industrial Integrity" de la PWA
    (index.html/dashboard.html) y al mockup de Stitch para el informe: slate
-   oscuro para texto/encabezados, azul para "conforme", coral para
-   hallazgos, ámbar para en proceso, gris para pendiente/no aplica. Los
-   nombres de las constantes se mantienen (C_TITULO, C_ACENTO, etc.) porque
-   los usan ~20 funciones de anexos más abajo — solo cambian los valores. */
+   oscuro para texto/encabezados, azul para "conforme", ámbar para riesgo
+   medio o en proceso, gris para pendiente/no aplica. El texto nunca va en
+   rojo: ni en las tablas del checklist ni en las fichas técnicas ni en las
+   notas, para que el informe se lea como un documento técnico y no como una
+   alarma. La severidad se distingue por peso tipográfico (negrita + slate
+   oscuro) y por la palabra misma ("Crítico", "No cumple"), no por el color.
+   Los nombres de las constantes se mantienen (C_TITULO, C_CRITICO, etc.)
+   porque los usan ~20 funciones de anexos más abajo — solo cambian los
+   valores. */
 var C_ENCABEZADO='#0F172A',      // slate-900 — títulos H1/portada
     C_TITULO='#475569',          // slate-600 — texto secundario/H2
-    C_ACENTO='#DC2626',          // rojo-600 — texto de alerta (crítico/no cumple)
+    C_CRITICO='#1E293B',         // slate-800, negrita — texto de severidad alta (crítico/no cumple), sin rojo
     C_CELDA='#E2E8F0',           // slate-200 — bordes y filas alternas
     C_FONDO='#F8FAFC',           // slate-50 — filas pares
     C_OK='#2563EB';              // azul-600 — texto "conforme" (coherente con la app)
 
 /* Colores de relleno para gráficas e insignias (más saturados que los de
-   texto de arriba, pensados para áreas de color, no para letras). */
+   texto de arriba, pensados para áreas de color, no para letras. El rojo
+   de aquí es de gráfica, no de texto, y por eso queda fuera de la regla
+   de "sin rojo" que aplica a las tablas y fichas). */
 var C_FILL_CUMPLE='#3B82F6', C_FILL_NOCUMPLE='#F87171', C_FILL_PROCESO='#F59E0B',
     C_FILL_PENDIENTE='#94A3B8', C_FILL_NOAPLICA='#CBD5E1',
     C_HEADER_TABLA='#F1F5F9';    // slate-100 — fondo de encabezado de tabla
@@ -651,12 +658,21 @@ function generarInformeVaso(sede, piscina, fecha, area){
   // Los Anexos A-D son de dimensionamiento hidráulico: en los informes
   // segmentados solo tienen sentido para Térmica e Hidráulica. El informe
   // completo (sin área) los sigue trayendo como siempre.
-  if(ficha && (!area || area==='Térmica e Hidráulica')){
+  var conFichaTecnica = !!(ficha && (!area || area==='Térmica e Hidráulica'));
+  if(conFichaTecnica){
     _anexoFichaEscenario(body, ficha);
     _anexoFichaHidraulica(body, ficha);
     _anexoDimensionamiento(body, ficha);
     _anexoMemoriaCalculo(body, ficha);
   }
+  // Las referencias normativas y técnicas van siempre, incluso sin ficha:
+  // la Resolución 929 (y la 234, cuando hay ítems fuera de su alcance) se
+  // citan por nombre desde el Objetivo en adelante. Crane Co. y el
+  // Hydraulic Institute solo entran si el modelo v2 llegó a imprimirse
+  // (Anexo B, secciones B.6/B.7, y Anexo D.3), porque son la fuente de esos
+  // dos criterios concretos y no de nada más en el documento.
+  var conCriteriosV2 = conFichaTecnica && ficha.motorResultado && ficha.motorResultado.modelo==='v2';
+  _referencias(body, conCriteriosV2, conFichaTecnica ? 13 : 9);
 
   doc.saveAndClose();
 
@@ -1223,7 +1239,7 @@ function _portada(body, sede, piscina, fecha, responsable, m, area){
     ['No aplica', String(m.noAplica), '—']
   ]);
   _estiloTabla(distTabla, true, [230, 125, 120]);
-  var coloresFila = [null, C_OK, C_ACENTO, C_AMBAR, C_TITULO, C_TITULO];
+  var coloresFila = [null, C_OK, C_CRITICO, C_AMBAR, C_TITULO, C_TITULO];
   for(var rr=1; rr<distTabla.getNumRows(); rr++){
     if(!coloresFila[rr]) continue;
     distTabla.getRow(rr).getCell(0).getChild(0).asParagraph().setForegroundColor(coloresFila[rr]).setBold(true);
@@ -1276,13 +1292,24 @@ function _tarjetaEnCelda(celdaPadre, fondo){
 /* Color semántico de un porcentaje de cumplimiento — mismo umbral que
    _semaforo(), centralizado para no repetir el ternario en cada sección. */
 function _colorPct(pct){
-  return pct>=85 ? C_OK : (pct>=70 ? C_AMBAR : C_ACENTO);
+  return pct>=85 ? C_OK : (pct>=70 ? C_AMBAR : C_CRITICO);
 }
 /* Color semántico de un nivel de riesgo (acepta "Critico" y "Crítico"). */
 function _colorRiesgo(riesgo){
   var r = String(riesgo||'');
-  if(r==='Critico'||r==='Crítico'||r==='Alto') return C_ACENTO;
+  if(r==='Critico'||r==='Crítico'||r==='Alto') return C_CRITICO;
   if(r==='Medio') return C_AMBAR;
+  return C_TITULO;
+}
+/* Color semántico del estado de un ítem. Antes la columna "Estado" de la
+   tarjeta de hallazgo se pintaba siempre igual sin mirar el valor real
+   (todo quedaba en rojo, tanto "No cumple" como "En proceso"); ahora sigue
+   la misma escala de severidad que el resto del informe. */
+function _colorEstado(estado){
+  var e = String(estado||'');
+  if(e==='No cumple') return C_CRITICO;
+  if(e==='En proceso' || e==='Pendiente') return C_AMBAR;
+  if(e==='Cumple') return C_OK;
   return C_TITULO;
 }
 
@@ -1400,10 +1427,10 @@ function _tableroKPI(body, m){
     m.fueraAlcance>0 ? (m.baseEnAlcance+' en alcance 929') : 'Todos en alcance 929', C_ENCABEZADO);
   _tarjetaKPI(kpis[1], 'Riesgo crítico', m.critico,
     m.critico>0 ? 'Atención inmediata' : 'Sin críticos',
-    m.critico>0 ? C_ACENTO : C_OK);
+    m.critico>0 ? C_CRITICO : C_OK);
   _tarjetaKPI(kpis[2], 'Hallazgos vencidos', m.vencidos,
     m.vencidos>0 ? 'Fuera de plazo' : 'Al día',
-    m.vencidos>0 ? C_ACENTO : C_OK);
+    m.vencidos>0 ? C_CRITICO : C_OK);
   _tarjetaKPI(kpis[3], 'Avance de cierre', m.avanceProm+'%',
     'Promedio de los hallazgos abiertos', _colorPct(m.avanceProm));
   body.appendParagraph('').setFontSize(6);
@@ -1423,7 +1450,7 @@ function _tableroKPI(body, m){
   for(var i=1;i<t.getNumRows();i++){
     var lectura = t.getRow(i).getCell(2).getText();
     if(/ATENCIÓN|Prioritario|Fuera de plazo|Asignar fecha/.test(lectura)){
-      t.getRow(i).getCell(2).getChild(0).asParagraph().setForegroundColor(C_ACENTO).setBold(true);
+      t.getRow(i).getCell(2).getChild(0).asParagraph().setForegroundColor(C_CRITICO).setBold(true);
     }
   }
 }
@@ -1511,8 +1538,8 @@ function _hallazgosConFotos(body, filas, fotos){
       ['Fecha compromiso', _fechaStr(f[COL.fechaCompromiso-1])||'—'],
       ['% avance', String(f[COL.avance-1]!==''?f[COL.avance-1]+'%':'—')]
     ]);
-    _colorValorFila(t, 2, C_ACENTO);              // Estado
-    _colorValorFila(t, 3, _colorRiesgo(riesgo));  // Nivel de riesgo
+    _colorValorFila(t, 2, _colorEstado(String(f[COL.estado-1])));  // Estado
+    _colorValorFila(t, 3, _colorRiesgo(riesgo));                    // Nivel de riesgo
     body.appendParagraph('').setFontSize(8);
   });
 
@@ -1575,7 +1602,7 @@ function _anexoFotografico(body, filas, fotos){
       .setFontSize(9).setBold(true).setFontFamily(FUENTE_MONO).setForegroundColor(C_ENCABEZADO);
     cabNombre.getChild(0).asParagraph()
       .setFontSize(11).setBold(true).setForegroundColor(C_ENCABEZADO);
-    _colorValorFila(t, 2, esConforme ? C_OK : C_ACENTO);
+    _colorValorFila(t, 2, esConforme ? C_OK : C_CRITICO);
 
     var fi = fotos[itemId];
     _insertarFotos(body, fi.actual, 'Fotografía del estado actual');
@@ -1707,9 +1734,9 @@ function _anexoFichaHidraulica(body, ficha){
      de datos más. */
   if(esV2 && r.alertaCalentador){
     body.appendParagraph('CAUDAL POR ENCIMA DEL MÁXIMO DE FÁBRICA DEL CALENTADOR')
-        .setFontSize(9).setBold(true).setForegroundColor(C_ACENTO).setSpacingBefore(8).setSpacingAfter(2);
+        .setFontSize(9).setBold(true).setForegroundColor(C_CRITICO).setSpacingBefore(8).setSpacingAfter(2);
     body.appendParagraph(String(r.alertaCalentador))
-        .setFontSize(8.5).setForegroundColor(C_ACENTO).setSpacingAfter(8);
+        .setFontSize(8.5).setForegroundColor(C_CRITICO).setSpacingAfter(8);
   }
 
   if(esV2 && r.tiempoRenovacionSistema!=null && r.volumenTanque!=null){
@@ -1741,7 +1768,7 @@ function _anexoFichaHidraulica(body, ficha){
     var tTramoV = body.appendTable(filasTramoV);
     _estiloTabla(tTramoV, true, [135, 60, 65, 50, 90, 105]);
     for(var i=1;i<tTramoV.getNumRows();i++){
-      var col = excede[i] ? C_ACENTO : C_OK;
+      var col = excede[i] ? C_CRITICO : C_OK;
       tTramoV.getRow(i).getCell(4).getChild(0).asParagraph().setFontFamily(FUENTE_MONO).setBold(true).setForegroundColor(col);
       tTramoV.getRow(i).getCell(5).getChild(0).asParagraph().setBold(true).setForegroundColor(col);
     }
@@ -1898,7 +1925,7 @@ function _anexoDimensionamiento(body, ficha){
   var t = body.appendTable(datos);
   _estiloTabla(t, true, [125, 130, 80, 85, 85]);
   for(var i=1;i<t.getNumRows();i++){
-    var col = estados[i]==='ok' ? C_OK : (estados[i]==='falta' ? C_ACENTO : C_AMBAR);
+    var col = estados[i]==='ok' ? C_OK : (estados[i]==='falta' ? C_CRITICO : C_AMBAR);
     t.getRow(i).getCell(4).getChild(0).asParagraph().setBold(true).setForegroundColor(col);
   }
 }
@@ -2010,13 +2037,13 @@ function _anexoMemoriaCalculo(body, ficha){
       _tarjetaDatos(body, [
         ['Modelo de cálculo', 'v2'],
         ['Coeficiente de Hazen-Williams (C)', String(sup.C)+' (estado de la tubería: '+String(sup.estadoTuberia)+')'],
-        ['Pérdida por accesorios', String(sup.kAccesorios)],
+        ['Pérdida por accesorios', String(sup.kAccesorios)+' (Crane Co., 2022).'],
         ['Carga estática', String(sup.Hgeo)],
         ['Retorno al vaso', String(sup.retorno)],
         ['Calentadores', String(sup.calentadores)],
         ['Uso de la lectura del manómetro', String(sup.manometro)],
         ['Altitud para el cálculo de NPSH', String(sup.altitud)],
-        ['NPSH requerido', String(sup.npshr)],
+        ['NPSH requerido', String(sup.npshr)+' (Hydraulic Institute, 2017).'],
         ['Volumen del vaso', String(sup.volumen)],
         ['Banda de incertidumbre', String(sup.banda)]
       ], {mono:true, pctEtiqueta:0.38});
@@ -2051,6 +2078,46 @@ function _anexoMemoriaCalculo(body, ficha){
       'sobre el 100% del aforo para cada elemento, aunque en campo puede repartirse por género ' +
       'según la composición real de bañistas.');
   }
+}
+
+/* ---------- Referencias (formato APA, 7.ª edición) ----------
+   Toda fuente que el informe cita por nombre en el cuerpo del texto queda
+   aquí con su ficha completa. La Resolución 929 se cita siempre, porque
+   sostiene el objetivo y el % de cumplimiento de cualquier informe; la 234
+   también, porque el tablero ejecutivo la nombra en la fila "Fuera del
+   alcance de la Res. 929", que sale en todo informe, tenga o no ítems
+   fuera de alcance. Crane Co. y el Hydraulic Institute solo entran cuando
+   el Anexo B/D del modelo v2 llegó a citarlos (`incluirTecnicas`): son la
+   fuente del método K por accesorio y del criterio de NPSH, y no aparecen
+   en ningún otro lugar del informe. `numero` es el consecutivo de sección:
+   13 si el informe trae Anexos A-D, 9 si no los trae (sin ficha técnica no
+   hay secciones 9-12 que numerar). */
+function _referencias(body, incluirTecnicas, numero){
+  body.appendPageBreak();
+  _h1(body, numero+'. Referencias');
+  var refs = [
+    'Ministerio de Salud y Protección Social. (2026, 12 de mayo). Resolución 0929 de 2026, ' +
+      'por la cual se adoptan los criterios técnicos constructivos y de seguridad para los ' +
+      'establecimientos e inmuebles con piscinas y estructuras similares, y se dictan otras ' +
+      'disposiciones. Diario Oficial. https://www.minsalud.gov.co/sites/rid/Lists/' +
+      'BibliotecaDigital/RIDE/DE/DIJ/resolucion-0929-de-2026.pdf',
+    'Ministerio de Salud y Protección Social. (2026, febrero). Resolución 234 de 2026, ' +
+      'por la cual se establecen los parámetros de calidad del agua y las condiciones ' +
+      'sanitarias para piscinas y estructuras similares. Diario Oficial.'
+  ];
+  if(incluirTecnicas){
+    refs.push('Crane Co. (2022). Flow of fluids through valves, fittings, and pipe (Technical Paper No. 410).');
+    refs.push('Hydraulic Institute. (2017). Rotodynamic pumps: Guideline for NPSH margin (ANSI/HI 9.6.1-2017).');
+  }
+  // Orden alfabético por autor, como pide APA, y con sangría francesa: la
+  // segunda línea de cada referencia entra 0.5" respecto a la primera.
+  refs.sort();
+  refs.forEach(function(r){
+    body.appendParagraph(r)
+        .setFontSize(9.5).setForegroundColor(C_TITULO)
+        .setIndentFirstLine(0).setIndentStart(36)
+        .setLineSpacing(1.5).setSpacingAfter(10);
+  });
 }
 
 function _planAccion(body, filas){
