@@ -96,12 +96,34 @@ var TIPO_USO_LABEL = {
 var BOMBA_FAMILIA_LABEL = {
   superflo:'Pentair SuperFlo, velocidad única',
   superflo_vs:'Pentair SuperFlo VS 2.2 HP, velocidad seleccionable (dato de fábrica)',
-  eq:'Pentair EQ Series comercial',
+  eq:'Pentair EQ Series comercial (curva de fábrica)',
+  intelliflo_vs:'Pentair IntelliFlo VS+SVRS 3 HP, velocidad seleccionable (dato de fábrica)',
+  whisperflo_vst:'Pentair WhisperFlo VST 2 HP, velocidad seleccionable (dato de fábrica)',
+  whisperflo_xf:'Pentair WhisperFloXF 3 HP, velocidad única (dato de fábrica)',
   manual:'Curva real medida en campo (mínimo 4 puntos Q-H)'
 };
+/* Un mapa de velocidades por familia de bomba de velocidad variable: cada
+   fabricante rotula sus preselecciones con RPM distintas, así que la ficha
+   guarda el índice y el informe traduce con el mapa de SU familia. */
 var BOMBA_VELOCIDAD_VS_LABEL = {
-  '1':'Velocidad 1 — 3000 RPM', '2':'Velocidad 2 — 2200 RPM',
-  '3':'Velocidad 3 — 1400 RPM', '4':'Velocidad 4 / máxima — 3450 RPM'
+  '1':'Velocidad 1 (3000 RPM)', '2':'Velocidad 2 (2200 RPM)',
+  '3':'Velocidad 3 (1400 RPM)', '4':'Velocidad 4 o máxima (3450 RPM)'
+};
+var BOMBA_VELOCIDAD_INTELLIFLO_LABEL = {
+  '1':'Velocidad 1 (1100 RPM)', '2':'Velocidad 2 (1500 RPM)',
+  '3':'Velocidad 3 (2350 RPM)', '4':'Velocidad 4 (3110 RPM)',
+  '5':'Velocidad 5 o máxima (3450 RPM)'
+};
+var BOMBA_VELOCIDAD_WHISPER_VST_LABEL = {
+  '1':'Velocidad 1 (1400 RPM)', '2':'Velocidad 2 (2200 RPM)',
+  '3':'Velocidad 3 (3000 RPM)', '4':'Velocidad 4 o máxima (3450 RPM)'
+};
+/* Familias de velocidad variable → mapa de rótulos y campo de la ficha donde
+   quedó guardada la selección. Evita repetir el mismo if/else en D.1. */
+var BOMBA_VELOCIDAD_POR_FAMILIA = {
+  superflo_vs:    {campo:'bombaVelocidadVS',           labels:BOMBA_VELOCIDAD_VS_LABEL},
+  intelliflo_vs:  {campo:'bombaVelocidadIntelliflo',   labels:BOMBA_VELOCIDAD_INTELLIFLO_LABEL},
+  whisperflo_vst: {campo:'bombaVelocidadWhisperVST',   labels:BOMBA_VELOCIDAD_WHISPER_VST_LABEL}
 };
 var FILTRO_TIPO_LABEL = {
   arena:'Arena / medio granular', cartucho:'Cartucho', de:'Tierra de diatomeas (D.E.)'
@@ -128,6 +150,15 @@ var CALENTADOR_TIPO_LABEL = {
 var CALENTADOR_ARREGLO_LABEL = {
   serie:'En serie (el caudal pasa por todos, uno tras otro)',
   paralelo:'En paralelo (el caudal se reparte entre ellos)'
+};
+/* Acople del calentador al circuito principal (motor v2.1). Es el dato que
+   decide si el bloque de calentadores suma ΔP a la curva del sistema: con
+   bomba inyectora propia no lo hace, con bypass en línea lo hace con techo,
+   y en línea directa lo hace sin techo. */
+var CALENTADOR_ACOPLE_LABEL = {
+  bypass_linea:'Derivación con válvula de estrangulamiento en la línea principal (tipo Pentair ETi 400)',
+  inyector:'Derivación con bomba inyectora propia del calentador (tipo Raypak XTherm P), desacoplada de la línea principal',
+  linea:'En línea directa, sin bypass (todo el caudal del circuito pasa por el intercambiador)'
 };
 
 /* ============================================================================
@@ -210,7 +241,7 @@ function _diagnosticarHoja(spreadsheetId){
   r.hojaGid = sh.getSheetId();
   r.gidEsperado = GID_DATOS;
   if(sh.getSheetId() !== GID_DATOS){
-    r.avisos.push('La pestaña usada no coincide con el GID configurado en el script (GID_DATOS='+GID_DATOS+') — se cayó a la primera pestaña como respaldo. Si esto es intencional (moviste/renombraste la pestaña), está bien; si no, revisa que la pestaña "'+sh.getName()+'" sea realmente la de datos.');
+    r.avisos.push('La pestaña usada no coincide con el GID configurado en el script (GID_DATOS='+GID_DATOS+'), así que se cayó a la primera pestaña como respaldo. Si esto es intencional (moviste/renombraste la pestaña), está bien; si no, revisa que la pestaña "'+sh.getName()+'" sea realmente la de datos.');
   }
 
   var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
@@ -218,7 +249,7 @@ function _diagnosticarHoja(spreadsheetId){
   r.columnas = lastCol;
 
   if(lastRow < 1){
-    r.ok=false; r.errores.push('La pestaña está completamente vacía — ni siquiera tiene fila de encabezado.');
+    r.ok=false; r.errores.push('La pestaña está completamente vacía: ni siquiera tiene fila de encabezado.');
     return r;
   }
   if(lastCol !== TOTAL_COLS){
@@ -234,12 +265,12 @@ function _diagnosticarHoja(spreadsheetId){
   });
   if(difs.length){
     r.ok=false;
-    r.errores.push('El encabezado no coincide con la estructura de 22 columnas en '+difs.length+' columna(s) — por eso el dashboard puede leer datos en el campo equivocado o simplemente no cargar.');
+    r.errores.push('El encabezado no coincide con la estructura de 22 columnas en '+difs.length+' columna(s). Por eso el dashboard puede leer datos en el campo equivocado o simplemente no cargar.');
     r.diferenciasEncabezado = difs;
   }
 
   if(r.filas === 0){
-    r.avisos.push('El encabezado está correcto pero todavía no hay filas de datos — es normal si aún no se ha sincronizado ninguna inspección desde la app.');
+    r.avisos.push('El encabezado está correcto pero todavía no hay filas de datos, algo normal si aún no se ha sincronizado ninguna inspección desde la app.');
   } else if(!difs.length){
     var datos = sh.getRange(2,1,Math.min(lastRow-1, 5000),TOTAL_COLS).getValues();
     var sedesUnicas = {}, fechaMin=null, fechaMax=null, filasSinFecha=0, filasSinSede=0;
@@ -293,7 +324,7 @@ function obtenerHojaAnclada(){
     return {ok:true, anclada:true, spreadsheetId:id, spreadsheetNombre:ss.getName()};
   }catch(err){
     return {ok:true, anclada:true, spreadsheetId:id, spreadsheetNombre:null,
-      aviso:'La hoja anclada ('+id+') ya no es accesible para la cuenta del script — la app está cayendo al respaldo mientras tanto.'};
+      aviso:'La hoja anclada ('+id+') ya no es accesible para la cuenta del script, así que la app está cayendo al respaldo mientras tanto.'};
   }
 }
 
@@ -1162,7 +1193,26 @@ function _portada(body, sede, piscina, fecha, responsable, m, area){
   var pDistTitulo = distCard.getChild(0).asParagraph();
   pDistTitulo.setText('DISTRIBUCIÓN DE HALLAZGOS');
   pDistTitulo.setFontSize(8).setBold(true).setForegroundColor(C_TITULO);
-  _insertarImagenCentrada(distCard, _chartDistribucionEstados(m), 300);
+  // Barra apilada al 100% en vez de la torta: con cinco estados, dos de
+  // ellos casi siempre en 0, la torta gastaba media pagina para mostrar un
+  // reparto que en una barra se lee de un vistazo y a ancho completo. Ademas
+  // sale vectorial, alineada con la tabla de conteos que va justo debajo.
+  var anchoTarjeta = ANCHO_UTIL - 24;
+  _barraApilada(distCard, [
+    {valor:m.cumple,    color:C_FILL_CUMPLE},
+    {valor:m.noCumple,  color:C_FILL_NOCUMPLE},
+    {valor:m.enProceso, color:C_FILL_PROCESO},
+    {valor:m.pendiente, color:C_FILL_PENDIENTE},
+    {valor:m.noAplica,  color:C_FILL_NOAPLICA}
+  ], anchoTarjeta, 16);
+  _chipsLeyenda(distCard, [
+    {etiqueta:'Cumple',     valor:m.cumple,    color:C_FILL_CUMPLE},
+    {etiqueta:'No cumple',  valor:m.noCumple,  color:C_FILL_NOCUMPLE},
+    {etiqueta:'En proceso', valor:m.enProceso, color:C_FILL_PROCESO},
+    {etiqueta:'Pendiente',  valor:m.pendiente, color:C_FILL_PENDIENTE},
+    {etiqueta:'No aplica',  valor:m.noAplica,  color:C_FILL_NOAPLICA}
+  ], anchoTarjeta);
+  distCard.appendParagraph('').setFontSize(5);
 
   var distTabla = distCard.appendTable([
     ['Estado','Cantidad','%'],
@@ -1340,11 +1390,28 @@ function _tableroKPI(body, m){
   // "Resumen ejecutivo" de la portada (_portada) — esta sección cubre los
   // indicadores de gestión que no caben en esa tarjeta compacta, sin
   // repetir la misma gráfica dos veces en el informe.
-  _h1(body, '2. Tablero ejecutivo — indicadores de gestión');
+  _h1(body, '2. Tablero ejecutivo de indicadores de gestión');
+
+  // Las cuatro cifras que decide un gerente de un vistazo van arriba como
+  // tarjetas; la tabla de abajo queda para el detalle y la columna de
+  // lectura. Antes las ocho filas pesaban igual y ninguna resaltaba.
+  var kpis = _filaColumnas(body, [126, 126, 126, 127]);
+  _tarjetaKPI(kpis[0], 'Ítems evaluados', m.total,
+    m.fueraAlcance>0 ? (m.baseEnAlcance+' en alcance 929') : 'Todos en alcance 929', C_ENCABEZADO);
+  _tarjetaKPI(kpis[1], 'Riesgo crítico', m.critico,
+    m.critico>0 ? 'Atención inmediata' : 'Sin críticos',
+    m.critico>0 ? C_ACENTO : C_OK);
+  _tarjetaKPI(kpis[2], 'Hallazgos vencidos', m.vencidos,
+    m.vencidos>0 ? 'Fuera de plazo' : 'Al día',
+    m.vencidos>0 ? C_ACENTO : C_OK);
+  _tarjetaKPI(kpis[3], 'Avance de cierre', m.avanceProm+'%',
+    'Promedio de los hallazgos abiertos', _colorPct(m.avanceProm));
+  body.appendParagraph('').setFontSize(6);
+
   var t = body.appendTable([
     ['Indicador','Valor','Lectura'],
     ['Ítems evaluados', String(m.total), '—'],
-    ['Fuera del alcance de la Res. 929', String(m.fueraAlcance), 'Excluido del cálculo — dominio de la Res. 234'],
+    ['Fuera del alcance de la Res. 929', String(m.fueraAlcance), 'Excluido del cálculo: es dominio de la Res. 234'],
     ['Riesgo crítico', String(m.critico), m.critico>0?'ATENCIÓN INMEDIATA':'Sin críticos'],
     ['Riesgo alto', String(m.alto), m.alto>0?'Prioritario':'—'],
     ['Hallazgos vencidos', String(m.vencidos), m.vencidos>0?'Fuera de plazo':'Al día'],
@@ -1370,7 +1437,13 @@ function _semaforo(pct){
 function _tablaCapitulos(body, m){
   _h1(body, '3. Cumplimiento por capítulo normativo');
 
-  _insertarImagenCentrada(body, _chartCapitulos(m), ANCHO_UTIL);
+  _barrasCapitulos(body, m);
+  _chipsLeyenda(body, [
+    {etiqueta:'≥ 85% conforme',  valor:'', color:C_FILL_CUMPLE},
+    {etiqueta:'70-84% deficiente', valor:'', color:C_FILL_PROCESO},
+    {etiqueta:'< 70% crítico',    valor:'', color:C_FILL_NOCUMPLE},
+    {etiqueta:'Faltante',          valor:'', color:C_CELDA}
+  ], ANCHO_UTIL);
   body.appendParagraph('').setFontSize(6);
 
   var datos = [['Capítulo','Ítems','Cumple','No cumple','Fuera de alcance','% cumplimiento (Res. 929)']];
@@ -1401,7 +1474,7 @@ function _hallazgosConFotos(body, filas, fotos){
   _h1(body, '4. Hallazgos');
   _nota(body,
     'La evidencia fotográfica de cada ítem, incluidos los de esta sección, se presenta ' +
-    'de forma consolidada en el Anexo técnico — Registro fotográfico (sección 8).');
+    'de forma consolidada en el anexo de registro fotográfico (sección 8).');
   var conHallazgo = filas.filter(function(f){
     var est = String(f[COL.estado-1]||'');
     return est==='No cumple' || est==='En proceso' || est==='Pendiente';
@@ -1460,7 +1533,7 @@ function _hallazgosConFotos(body, filas, fotos){
    narrativa de riesgo/acción/responsable, no un registro fotográfico). */
 function _anexoFotografico(body, filas, fotos){
   body.appendPageBreak();
-  _h1(body, '8. Anexo técnico — Registro fotográfico');
+  _h1(body, '8. Anexo técnico: registro fotográfico');
   _nota(body,
     'Evidencia fotográfica de los ítems verificados, en orden de ítem, con la fecha de ' +
     'inspección y la observación o hallazgo correspondiente según el estado registrado.');
@@ -1505,8 +1578,8 @@ function _anexoFotografico(body, filas, fotos){
     _colorValorFila(t, 2, esConforme ? C_OK : C_ACENTO);
 
     var fi = fotos[itemId];
-    _insertarFotos(body, fi.actual, 'Fotografía — estado actual');
-    _insertarFotos(body, fi.cierre, 'Fotografía — cierre');
+    _insertarFotos(body, fi.actual, 'Fotografía del estado actual');
+    _insertarFotos(body, fi.cierre, 'Fotografía de cierre');
     body.appendParagraph('').setFontSize(8);
   });
 }
@@ -1546,29 +1619,32 @@ function _insertarFotos(body, archivos, rotulo){
    documenta lo que el inspector vio en pantalla, no una versión distinta. */
 function _anexoFichaEscenario(body, ficha){
   body.appendPageBreak();
-  _h1(body, '9. Anexo técnico A — Ficha del escenario');
+  _h1(body, '9. Anexo técnico A: ficha del escenario');
   var area = ficha.areaManual || ((ficha.largo && ficha.ancho) ? (ficha.largo*ficha.ancho) : null);
   _h2(body, 'A.1 Geometría del vaso');
   _tarjetaDatos(body, [
     ['Largo del espejo de agua', ficha.largo!=null ? ficha.largo+' m' : '—'],
     ['Ancho del espejo de agua', ficha.ancho!=null ? ficha.ancho+' m' : '—'],
     ['Área directa (si forma irregular)', ficha.areaManual!=null ? ficha.areaManual+' m²' : '—'],
-    ['Área usada en los cálculos', area!=null ? area.toFixed(1)+' m²' : '— sin dato —'],
+    ['Área usada en los cálculos', area!=null ? area.toFixed(1)+' m²' : 'Sin dato'],
     ['Profundidad máxima', ficha.profMax!=null ? ficha.profMax+' m' : '—'],
     ['Profundidad mínima', ficha.profMin!=null ? ficha.profMin+' m' : '—'],
-    ['Profundidad intermedia', ficha.profIntermedia!=null ? ficha.profIntermedia+' m' : '—']
+    ['Profundidad intermedia', ficha.profIntermedia!=null ? ficha.profIntermedia+' m' : '—'],
+    ['Área según ficha de diseño', ficha.areaDiseno!=null ? ficha.areaDiseno+' m²' : '—'],
+    ['Volumen declarado en campo', ficha.volumenManual!=null
+      ? ficha.volumenManual+' m³ (reemplaza el cálculo por geometría)' : 'Se calcula por geometría']
   ], {mono:true, pctEtiqueta:0.45});
 
   _h2(body, 'A.2 Clasificación de uso');
   _tarjetaDatos(body, [
-    ['Tipo de uso del estanque', TIPO_USO_LABEL[ficha.tipoUso] || '— sin dato —'],
-    ['¿Bajo cubierta / recinto cerrado?', ficha.cubierta==='si' ? 'Sí' : (ficha.cubierta==='no' ? 'No' : '— sin dato —')]
+    ['Tipo de uso del estanque', TIPO_USO_LABEL[ficha.tipoUso] || 'Sin dato'],
+    ['¿Bajo cubierta / recinto cerrado?', ficha.cubierta==='si' ? 'Sí' : (ficha.cubierta==='no' ? 'No' : 'Sin dato')]
   ], {pctEtiqueta:0.45});
 }
 
 function _anexoFichaHidraulica(body, ficha){
   body.appendPageBreak();
-  _h1(body, '10. Anexo técnico B — Ficha hidráulica');
+  _h1(body, '10. Anexo técnico B: ficha hidráulica');
   var r = ficha.motorResultado;
   if(!r || r.error){
     body.appendParagraph(r && r.error ? ('Sin resultado válido: '+r.error) : 'No se calculó el caudal y las velocidades para este vaso en la PWA.')
@@ -1580,49 +1656,70 @@ function _anexoFichaHidraulica(body, ficha){
   _h2(body, 'B.1 Punto de operación');
   var filasB1 = [
     ['Modelo de cálculo', esV2
-      ? 'v2 — circuito con tanque de compensación, calentadores y método K por accesorio'
+      ? 'v2, circuito con tanque de compensación, calentadores y método K por accesorio'
       : 'v1 (legado)'],
     ['Curva de bomba usada', String(r.origen||'—')],
     ['Fecha del cálculo', r.ts ? Utilities.formatDate(new Date(r.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '—'],
-    ['Caudal en el punto de operación', r.caudal!=null ? r.caudal.toFixed(2)+' m³/h' : '— sin dato —']
+    ['Caudal en el punto de operación', r.caudal!=null ? r.caudal.toFixed(2)+' m³/h' : 'Sin dato']
   ];
   if(esV2){
     filasB1.push(['Origen del caudal', r.fuenteCaudal==='medido'
       ? 'MEDIDO con caudalímetro en sitio (manda sobre la estimación)'
       : 'Estimado por el modelo']);
+    // Cuando manda el caudalímetro, el caudal del modelo no desaparece: se
+    // reporta al lado para que se vea cuánto se apartó la estimación de la
+    // medición, que es justamente lo que calibra la confianza en el modelo
+    // en los vasos donde NO hay instrumento.
+    if(r.fuenteCaudal==='medido' && r.caudalNominal!=null){
+      var brecha = (r.caudalNominal - r.caudal)/r.caudal*100;
+      filasB1.push(['Caudal que estimaba el modelo', r.caudalNominal.toFixed(2)+' m³/h ('+
+        (brecha>=0?'+':'')+brecha.toFixed(1)+' % frente a la medición)']);
+    }
     if(r.caudalMin!=null && r.caudalMax!=null){
-      filasB1.push(['Banda de incertidumbre del modelo', r.caudalMin.toFixed(1)+' – '+r.caudalMax.toFixed(1)+' m³/h']);
+      filasB1.push(['Banda de incertidumbre del modelo', 'entre '+r.caudalMin.toFixed(1)+' y '+r.caudalMax.toFixed(1)+' m³/h']);
     }
   }
-  filasB1.push(['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : '— sin dato —']);
+  filasB1.push(['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : 'Sin dato']);
   _tarjetaDatos(body, filasB1, {pctEtiqueta:0.45});
 
   _h2(body, 'B.2 Velocidades y recirculación');
   var filasB2 = [
-    ['Velocidad en succión', r.vSuccion!=null ? r.vSuccion.toFixed(2)+' m/s' : '— sin dato —'],
-    ['Velocidad en descarga/retorno', r.vDescarga!=null ? r.vDescarga.toFixed(2)+' m/s' : '— sin dato —'],
-    ['Velocidad de filtración', r.vFiltracion!=null ? r.vFiltracion.toFixed(1)+' m³/h/m²' : '— sin dato —'],
-    ['Volumen estimado del vaso', r.volumen!=null ? r.volumen.toFixed(1)+' m³' : '— sin dato —']
+    ['Velocidad en succión', r.vSuccion!=null ? r.vSuccion.toFixed(2)+' m/s' : 'Sin dato'],
+    ['Velocidad en descarga/retorno', r.vDescarga!=null ? r.vDescarga.toFixed(2)+' m/s' : 'Sin dato'],
+    ['Velocidad de filtración', r.vFiltracion!=null ? r.vFiltracion.toFixed(1)+' m³/h/m²' : 'Sin dato'],
+    ['Volumen estimado del vaso', r.volumen!=null ? r.volumen.toFixed(1)+' m³' : 'Sin dato']
   ];
   if(esV2 && r.volumenTanque!=null){
     filasB2.push(['Volumen del tanque de compensación', r.volumenTanque.toFixed(1)+' m³']);
-    filasB2.push(['Volumen total en circulación', r.volumenSistema!=null ? r.volumenSistema.toFixed(1)+' m³' : '— sin dato —']);
+    filasB2.push(['Volumen total en circulación', r.volumenSistema!=null ? r.volumenSistema.toFixed(1)+' m³' : 'Sin dato']);
   }
-  filasB2.push(['Tiempo de recirculación normativo', r.tiempoRecirc!=null ? r.tiempoRecirc.toFixed(2)+' h' : '— sin dato —']);
+  filasB2.push(['Tiempo de recirculación normativo', r.tiempoRecirc!=null ? r.tiempoRecirc.toFixed(2)+' h' : 'Sin dato']);
   if(esV2 && r.tiempoRenovacionSistema!=null && r.volumenTanque!=null){
     filasB2.push(['Renovación real del sistema (vaso + tanque)', r.tiempoRenovacionSistema.toFixed(2)+' h']);
   }
-  filasB2.push(['Rotaciones estimadas por día', r.rotacionesDia!=null ? r.rotacionesDia.toFixed(1) : '— sin dato —']);
+  filasB2.push(['Rotaciones estimadas por día', r.rotacionesDia!=null ? r.rotacionesDia.toFixed(1) : 'Sin dato']);
+  if(r.volumenNota) filasB2.push(['Origen del volumen', String(r.volumenNota)]);
   _tarjetaDatos(body, filasB2, {mono:true, pctEtiqueta:0.45});
+
+  /* Alerta de caudal por rama del calentador (motor v2.1). Solo se dispara
+     con acople 'linea' declarado: es un hallazgo de instalación, no un
+     resultado de cálculo, y por eso va destacado en rojo y no en una tarjeta
+     de datos más. */
+  if(esV2 && r.alertaCalentador){
+    body.appendParagraph('CAUDAL POR ENCIMA DEL MÁXIMO DE FÁBRICA DEL CALENTADOR')
+        .setFontSize(9).setBold(true).setForegroundColor(C_ACENTO).setSpacingBefore(8).setSpacingAfter(2);
+    body.appendParagraph(String(r.alertaCalentador))
+        .setFontSize(8.5).setForegroundColor(C_ACENTO).setSpacingAfter(8);
+  }
 
   if(esV2 && r.tiempoRenovacionSistema!=null && r.volumenTanque!=null){
     _nota(body,
       'El tiempo de recirculación normativo se calcula sobre el volumen del vaso, que es la base ' +
       'de la Tabla No. 1: el Numeral 10.5 dimensiona el tanque de compensación como un porcentaje ' +
       '"del volumen del agua", de modo que ese volumen de referencia no puede incluirse a sí mismo. ' +
-      'La renovación del sistema se reporta por separado como lectura sanitaria complementaria — el ' +
-      'agua que retorna al vaso viene mezclada con el inventario del tanque — y no constituye ' +
-      'incumplimiento por sí sola.');
+      'La renovación del sistema se reporta aparte, como lectura sanitaria complementaria, ' +
+      'porque el agua que retorna al vaso viene mezclada con el inventario del tanque. Por sí sola ' +
+      'no es un incumplimiento.');
   }
 
   if(r.tramos && r.tramos.length){
@@ -1637,7 +1734,7 @@ function _anexoFichaHidraulica(body, ficha){
         t.lado==='succion' ? 'Succión' : 'Presión',
         String(t.nLineas>0 ? t.nLineas : 1),
         t.v.toFixed(2),
-        t.v > limite ? 'Supera '+limite+' m/s' : 'Cumple'
+        t.v > limite ? 'Supera los '+limite+' m/s' : 'Cumple'
       ]);
       excede.push(t.v > limite);
     });
@@ -1654,9 +1751,9 @@ function _anexoFichaHidraulica(body, ficha){
      inventa nada. */
   if(esV2){
     var VEREDICTO_TXT = {
-      cumple:   'CUMPLE CON HOLGURA — toda la banda de incertidumbre queda dentro de norma; la conclusión se sostiene sin medición directa.',
-      duda:     'ZONA DE DUDA — la banda cruza el límite normativo. El modelo no alcanza para concluir: este vaso requiere medición con caudalímetro.',
-      incumple: 'INCUMPLE CON HOLGURA — toda la banda queda fuera de norma; el hallazgo se sostiene sin medición directa.'
+      cumple:   'CUMPLE CON HOLGURA. Toda la banda de incertidumbre queda dentro de norma, así que la conclusión se sostiene sin medición directa.',
+      duda:     'ZONA DE DUDA. La banda cruza el límite normativo, de modo que el modelo no alcanza para concluir. Este vaso requiere medición con caudalímetro.',
+      incumple: 'INCUMPLE CON HOLGURA. Toda la banda queda fuera de norma, así que el hallazgo se sostiene sin medición directa.'
     };
     var v = r.veredictos || {};
     if(v.tiempoRecirc || v.vFiltracion){
@@ -1667,51 +1764,66 @@ function _anexoFichaHidraulica(body, ficha){
       _tarjetaDatos(body, filasV, {pctEtiqueta:0.30});
     }
 
-    if(r.cruceManometro || r.diseno){
+    if(r.cruceManometro || r.diseno || r.areaContraste){
       _h2(body, 'B.5 Verificación cruzada y contraste con el diseño');
       var filasX = [];
       if(r.cruceManometro){
         filasX.push(['Caudal despejado desde el manómetro', r.cruceManometro.caudal.toFixed(2)+' m³/h']);
         filasX.push(['Desviación frente al modelo',
-          (r.cruceManometro.desviacionPct>=0?'+':'')+r.cruceManometro.desviacionPct.toFixed(1)+' % — '+
+          (r.cruceManometro.desviacionPct>=0?'+':'')+r.cruceManometro.desviacionPct.toFixed(1)+' %. '+
           (r.cruceManometro.coherente
-            ? 'dos estimados independientes que concuerdan; la confianza en el resultado es alta'
-            : 'divergencia alta: revisar diámetros, longitudes, accesorios de alta pérdida, altura del manómetro o la curva de bomba seleccionada')]);
+            ? 'Son dos estimados independientes que concuerdan, así que la confianza en el resultado es alta.'
+            : 'La divergencia es alta. Conviene revisar diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro o la curva de bomba seleccionada.')]);
       }
       if(r.diseno){
         var DIS = {
-          conforme: 'Circuito conforme a lo entregado en obra',
-          moderada: 'Degradación moderada del circuito frente al diseño',
-          severa:   'Degradación severa, o el circuito ya no corresponde al de la ficha de obra',
-          sobre:    'Por encima del diseño: la ficha de obra no corresponde al circuito actual'
+          conforme: 'El circuito responde a lo entregado en obra.',
+          moderada: 'Hay una degradación moderada del circuito frente al diseño.',
+          severa:   'La degradación es severa, o el circuito ya no corresponde al de la ficha de obra.',
+          sobre:    'Está por encima del diseño, de modo que la ficha de obra no corresponde al circuito actual.'
         };
         filasX.push(['Caudal según ficha de entrega de obra', r.diseno.caudal.toFixed(2)+' m³/h']);
         filasX.push(['Desviación del caudal actual frente al diseño',
-          (r.diseno.desviacionPct>=0?'+':'')+r.diseno.desviacionPct.toFixed(1)+' % — '+(DIS[r.diseno.clase]||'—')]);
+          (r.diseno.desviacionPct>=0?'+':'')+r.diseno.desviacionPct.toFixed(1)+' %. '+(DIS[r.diseno.clase]||'')]);
         if(r.diseno.volumenImplicito!=null){
           var CONV = {
-            vaso:          'cuadra con el volumen del vaso: el proveedor usó el criterio normativo',
-            vasoMasTanque: 'cuadra con vaso + tanque: el proveedor incluyó el tanque de compensación, sus tiempos no son directamente comparables con los normativos',
-            noCuadra:      'no cuadra ni con el vaso ni con vaso + tanque: o la piscina fue modificada, o la ficha no corresponde a este vaso'
+            vaso:          'Cuadra con el volumen del vaso, así que el proveedor usó el criterio normativo.',
+            vasoMasTanque: 'Cuadra con el vaso más el tanque, así que el proveedor incluyó el tanque de compensación. Sus tiempos no son directamente comparables con los normativos.',
+            noCuadra:      'No cuadra ni con el vaso ni con el vaso más el tanque. O la piscina fue modificada, o la ficha no corresponde a este vaso.'
           };
           filasX.push(['Volumen implícito de la ficha de obra',
-            r.diseno.volumenImplicito.toFixed(1)+' m³ — '+(CONV[r.diseno.convencion]||'—')]);
+            r.diseno.volumenImplicito.toFixed(1)+' m³. '+(CONV[r.diseno.convencion]||'')]);
         }
+      }
+      /* Contraste del área medida contra la de la ficha de diseño: una
+         diferencia grande explica por sí sola cualquier desviación de
+         volumen, tiempo de recirculación y aforo — hay que verla antes de
+         atribuirle la brecha al circuito hidráulico. */
+      if(r.areaContraste){
+        var ARE = {
+          normal:   'Queda dentro de la tolerancia de medición en campo.',
+          criterio: 'Corresponde a una diferencia de criterio de medición: bordes, canaleta perimetral o playa.',
+          alerta:   'El vaso no corresponde al de la ficha de diseño, o fue modificado. Conviene revisarlo antes de usar el aforo y el volumen.'
+        };
+        filasX.push(['Área medida frente a la de diseño',
+          r.areaContraste.medida.toFixed(1)+' m² frente a '+r.areaContraste.diseno.toFixed(1)+' m², una desviación del '+
+          (r.areaContraste.desviacionPct>=0?'+':'')+r.areaContraste.desviacionPct.toFixed(1)+' %. '+
+          (ARE[r.areaContraste.clase]||'')]);
       }
       _tarjetaDatos(body, filasX, {pctEtiqueta:0.38});
       _nota(body,
-        'La ficha de entrega de obra es la referencia de lo que el circuito debía entregar al ser ' +
-        'recibido, no una medición de su estado actual. La brecha entre ambos valores es evidencia ' +
-        'de la evolución de la instalación (equipos sustituidos, desgaste de bomba, tubería con ' +
-        'incrustación) y constituye por sí misma el contenido del ítem CHK-078.');
+        'La ficha de entrega de obra dice lo que el circuito debía entregar al ser recibido, no cómo ' +
+        'está hoy. La brecha entre ambos valores muestra cómo evolucionó la instalación (equipos ' +
+        'sustituidos, desgaste de bomba, tubería con incrustación) y es, por sí misma, el contenido ' +
+        'del ítem CHK-078.');
     }
 
     if(r.tanqueNorma){
       _h2(body, 'B.6 Capacidad del tanque de compensación (Numeral 10.5)');
       var TQ = {
-        cumple:   'Cumple la capacidad mínima exigida',
-        parcial:  'Cumple uno de los dos criterios. La norma los ofrece con "o", de modo que cumplir uno basta; se deja como observación, no como incumplimiento',
-        incumple: 'No alcanza la capacidad mínima por ninguno de los dos criterios'
+        cumple:   'Cumple la capacidad mínima exigida.',
+        parcial:  'Cumple uno de los dos criterios. La norma los ofrece con "o", de modo que basta con cumplir uno. Se deja como observación y no como incumplimiento.',
+        incumple: 'No alcanza la capacidad mínima por ninguno de los dos criterios.'
       };
       var filasT = [
         ['Capacidad instalada', r.tanqueNorma.volumen.toFixed(2)+' m³'],
@@ -1728,30 +1840,30 @@ function _anexoFichaHidraulica(body, ficha){
       _h2(body, 'B.7 Riesgo de cavitación (NPSH)');
       var filasN = [
         ['NPSH disponible', r.npsh.npsha.toFixed(2)+' m'],
-        ['NPSH requerido (estimado)', r.npsh.npshr!=null ? r.npsh.npshr.toFixed(2)+' m' : '— sin dato —'],
-        ['Margen', r.npsh.margen!=null ? r.npsh.margen.toFixed(2)+' m' : '— sin dato —'],
+        ['NPSH requerido (estimado)', r.npsh.npshr!=null ? r.npsh.npshr.toFixed(2)+' m' : 'Sin dato'],
+        ['Margen', r.npsh.margen!=null ? r.npsh.margen.toFixed(2)+' m' : 'Sin dato'],
         ['Altitud de cálculo', r.npsh.altitud+' m.s.n.m.'+(r.npsh.altitudAsumida?' (asumida)':' (según sede)')],
         ['Temperatura del agua', r.npsh.temp.toFixed(1)+' °C'+(r.npsh.tempAsumida?' (asumida por vaso climatizado)':'')],
         ['Sumergencia disponible', r.npsh.sumergencia.toFixed(2)+' m']
       ];
       _tarjetaDatos(body, filasN, {mono:true, pctEtiqueta:0.38});
       _nota(body,
-        'La configuración de succión inundada desde el tanque de compensación es la favorable. ' +
-        'El chequeo cobra valor en el caso degradado: si la canastilla del prefiltro se colmata, la ' +
-        'pérdida en succión aumenta y el margen se consume. El NPSH requerido es una estimación por ' +
-        'velocidad específica de succión, no un dato de fábrica del equipo.');
+        'La succión inundada desde el tanque de compensación es la configuración favorable. El ' +
+        'chequeo importa sobre todo en el caso degradado: si la canastilla del prefiltro se colmata, ' +
+        'la pérdida en succión sube y el margen se consume. El NPSH requerido se estima por velocidad ' +
+        'específica de succión y no es un dato de fábrica del equipo.');
     }
   }
 
   _nota(body,
-    'Límites normativos de referencia: succión ≤ 1.8 m/s, descarga ≤ 2.4 m/s (Numeral 10.1); ' +
-    'filtración 20-40 m³/h/m² (50 en uso restringido, Numeral 10.2); tiempo de recirculación ' +
-    'según Tabla No. 1 del Anexo Técnico.');
+    'Límites normativos de referencia: succión ≤ 1.8 m/s y descarga ≤ 2.4 m/s (Numeral 10.1), ' +
+    'filtración entre 20 y 40 m³/h/m² (50 en uso restringido, Numeral 10.2), y tiempo de ' +
+    'recirculación según la Tabla No. 1 del Anexo Técnico.');
 }
 
 function _anexoDimensionamiento(body, ficha){
   body.appendPageBreak();
-  _h1(body, '11. Anexo técnico C — Dimensionamiento normativo');
+  _h1(body, '11. Anexo técnico C: dimensionamiento normativo');
   var r = ficha.aforoResultado;
   if(!r || r.error){
     body.appendParagraph(r && r.error ? ('Sin resultado válido: '+r.error) : 'No se calculó el aforo ni la dotación sanitaria para este vaso en la PWA.')
@@ -1761,7 +1873,8 @@ function _anexoDimensionamiento(body, ficha){
   _h2(body, 'C.1 Aforo máximo');
   _tarjetaDatos(body, [
     ['Área del espejo de agua', r.area.toFixed(1)+' m²'],
-    ['Factor de uso aplicado (Tabla 4)', r.factorUso+' m²/bañista — '+String(r.criterioProf||'')],
+    ['Factor de uso aplicado (Tabla 4)', r.factorUso+' m²/bañista'+
+      (r.criterioProf ? ' (criterio: '+String(r.criterioProf)+')' : '')],
     ['Aforo máximo (Numeral 10.9)', r.aforo+' bañistas'],
     ['Fecha del cálculo', r.ts ? Utilities.formatDate(new Date(r.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : '—']
   ], {pctEtiqueta:0.45});
@@ -1774,9 +1887,11 @@ function _anexoDimensionamiento(body, ficha){
   Object.keys(etiquetas).forEach(function(k){
     var d = r.dotacion && r.dotacion[k];
     if(!d) return;
-    var encontrado = (d.encontrado==null) ? '— sin dato —' : String(d.encontrado);
+    var encontrado = (d.encontrado==null) ? 'Sin dato' : String(d.encontrado);
     var falta = (d.encontrado!=null && d.encontrado < d.requerido);
-    var estadoTxt = (d.encontrado==null) ? 'Pendiente de conteo' : (falta ? 'Faltan '+(d.requerido-d.encontrado) : 'Cumple');
+    var faltantes = falta ? (d.requerido-d.encontrado) : 0;
+    var estadoTxt = (d.encontrado==null) ? 'Pendiente de conteo'
+      : (falta ? (faltantes===1 ? 'Falta 1' : 'Faltan '+faltantes) : 'Cumple');
     datos.push([etiquetas[k], d.ratio, String(d.requerido), encontrado, estadoTxt]);
     estados.push(d.encontrado==null ? 'sin dato' : (falta ? 'falta' : 'ok'));
   });
@@ -1790,29 +1905,30 @@ function _anexoDimensionamiento(body, ficha){
 
 function _anexoMemoriaCalculo(body, ficha){
   body.appendPageBreak();
-  _h1(body, '12. Anexo técnico D — Memoria de cálculo');
+  _h1(body, '12. Anexo técnico D: memoria de cálculo');
   _nota(body,
-    'Estimaciones de apoyo a la decisión del inspector: no reemplazan la medición directa con ' +
-    'caudalímetro ni el conteo físico de la dotación sanitaria. Los supuestos declarados a ' +
-    'continuación permiten reproducir o auditar cada resultado de los Anexos B y C.');
+    'Estas estimaciones apoyan la decisión del inspector, pero no reemplazan la medición directa ' +
+    'con caudalímetro ni el conteo físico de la dotación sanitaria. Con los supuestos que se ' +
+    'declaran a continuación se puede reproducir o auditar cada resultado de los Anexos B y C.');
 
   _h2(body, 'D.1 Datos de la bomba');
   var filasBomba = [
     ['Potencia', ficha.bombaHP!=null ? ficha.bombaHP+' HP' : '—'],
     ['Frecuencia de operación', ficha.bombaHz!=null ? ficha.bombaHz+' Hz' : '60 Hz (valor por defecto)'],
-    ['Origen de la curva', BOMBA_FAMILIA_LABEL[ficha.bombaFamilia] || '— sin dato —']
+    ['Origen de la curva', BOMBA_FAMILIA_LABEL[ficha.bombaFamilia] || 'Sin dato']
   ];
-  if(ficha.bombaFamilia==='superflo_vs'){
-    filasBomba.push(['Velocidad configurada', BOMBA_VELOCIDAD_VS_LABEL[ficha.bombaVelocidadVS] || '— sin dato —']);
+  var mapaVS = BOMBA_VELOCIDAD_POR_FAMILIA[ficha.bombaFamilia];
+  if(mapaVS){
+    filasBomba.push(['Velocidad configurada', mapaVS.labels[ficha[mapaVS.campo]] || 'Sin dato']);
   }
   if(ficha.bombaFamilia==='manual'){
-    filasBomba.push(['Frecuencia de medición de la curva manual', ficha.curvaManualHz!=null ? ficha.curvaManualHz+' Hz' : '— sin dato — se asume igual a la de operación']);
+    filasBomba.push(['Frecuencia de medición de la curva manual', ficha.curvaManualHz!=null ? ficha.curvaManualHz+' Hz' : 'Sin dato: se asume igual a la de operación']);
   }
   if(ficha.bombaFamilia==='manual' && ficha.curvaManual && ficha.curvaManual.length){
     var puntos = ficha.curvaManual
       .filter(function(p){ return p && p.q!=null && p.h!=null; })
       .map(function(p){ return 'Q='+p.q+' m³/h, H='+p.h+' m'; })
-      .join('  |  ');
+      .join(' / ');
     filasBomba.push(['Puntos de la curva manual', puntos || '—']);
   }
   _tarjetaDatos(body, filasBomba, {mono:true, pctEtiqueta:0.45});
@@ -1840,7 +1956,7 @@ function _anexoMemoriaCalculo(body, ficha){
       ['Diámetro de descarga/retorno', ficha.tuberiaDescargaDiam!=null ? ficha.tuberiaDescargaDiam+' pulg' : '—'],
       ['Longitud total de tubería', ficha.tuberiaLongitud!=null ? ficha.tuberiaLongitud+' m' : '—'],
       ['Número de accesorios', ficha.tuberiaAccesorios!=null ? String(ficha.tuberiaAccesorios) : '—'],
-      ['Reparto succión/descarga', ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'% / '+(100-ficha.tuberiaPctSuccion)+'%' : '50% / 50% (por defecto)']
+      ['Reparto succión y descarga', ficha.tuberiaPctSuccion!=null ? ficha.tuberiaPctSuccion+'% y '+(100-ficha.tuberiaPctSuccion)+'%' : '50% y 50% (por defecto)']
     ], {mono:true, pctEtiqueta:0.45});
   }
   body.appendParagraph('').setFontSize(4);
@@ -1851,18 +1967,27 @@ function _anexoMemoriaCalculo(body, ficha){
   if(ficha.tanqueEquilibrio==='si'){
     filasCircuito.push(['Dimensiones del tanque',
       (ficha.tanqueLargo!=null && ficha.tanqueAncho!=null && ficha.tanqueNivel!=null)
-        ? ficha.tanqueLargo+' × '+ficha.tanqueAncho+' m, lámina '+ficha.tanqueNivel+' m'
-        : '— sin dato —']);
-    filasCircuito.push(['Desnivel lámina piscina - lámina tanque',
-      ficha.desnivelPiscinaTanque!=null ? ficha.desnivelPiscinaTanque+' m' : '— sin dato —']);
+        ? ficha.tanqueLargo+' × '+ficha.tanqueAncho+' m, con lámina de '+ficha.tanqueNivel+' m'
+        : 'Sin dato']);
+    filasCircuito.push(['Desnivel entre la lámina de la piscina y la del tanque',
+      ficha.desnivelPiscinaTanque!=null ? ficha.desnivelPiscinaTanque+' m' : 'Sin dato']);
   } else {
-    filasCircuito.push(['Desnivel succión-descarga', ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m' : '—']);
+    filasCircuito.push(['Desnivel entre succión y descarga', ficha.desnivelSuccionDescarga!=null ? ficha.desnivelSuccionDescarga+' m' : '—']);
   }
   if(ficha.tipoRetorno)    filasCircuito.push(['Tipo de retorno al vaso', RETORNO_LABEL[ficha.tipoRetorno] || '—']);
   if(ficha.estadoTuberia)  filasCircuito.push(['Estado de la tubería', ESTADO_TUBERIA_LABEL[ficha.estadoTuberia] || '—']);
   if(ficha.calentadorN!=null){
-    filasCircuito.push(['Calentadores', ficha.calentadorN+' × '+(CALENTADOR_TIPO_LABEL[ficha.calentadorTipo]||'tipo sin declarar')]);
-    filasCircuito.push(['Arreglo de calentadores', CALENTADOR_ARREGLO_LABEL[ficha.calentadorArreglo] || '— sin declarar —']);
+    filasCircuito.push(['Número de calentadores', String(ficha.calentadorN)]);
+    filasCircuito.push(['Tipo de calentador', CALENTADOR_TIPO_LABEL[ficha.calentadorTipo] || 'Sin declarar']);
+    filasCircuito.push(['Arreglo de calentadores', CALENTADOR_ARREGLO_LABEL[ficha.calentadorArreglo] || 'Sin declarar']);
+    // Fichas anteriores al motor v2.1 no traen `calentadorAcople`: el motor
+    // asume 'linea' en ese caso, y el informe lo dice en vez de callarlo.
+    filasCircuito.push(['Acople al circuito principal',
+      CALENTADOR_ACOPLE_LABEL[ficha.calentadorAcople] ||
+      (CALENTADOR_ACOPLE_LABEL.linea + '. No se declaró en la ficha, así que el modelo lo asume.')]);
+    if(ficha.presionPostCalentador!=null){
+      filasCircuito.push(['Presión aguas abajo del bloque de calentadores', ficha.presionPostCalentador+' PSI']);
+    }
   }
   if(ficha.tempAgua!=null) filasCircuito.push(['Temperatura del agua', ficha.tempAgua+' °C']);
   filasCircuito.push(['Tipo de filtro', FILTRO_TIPO_LABEL[ficha.filtroTipo] || '—']);
@@ -1874,6 +1999,7 @@ function _anexoMemoriaCalculo(body, ficha){
   if(ficha.caudalMedido!=null) filasCircuito.push(['Caudal medido con caudalímetro', ficha.caudalMedido+' m³/h']);
   if(ficha.caudalDiseno!=null) filasCircuito.push(['Caudal según ficha de entrega de obra', ficha.caudalDiseno+' m³/h']);
   if(ficha.tiempoRecircDiseno!=null) filasCircuito.push(['Tiempo de recirculación de diseño', ficha.tiempoRecircDiseno+' h']);
+  if(ficha.areaDiseno!=null) filasCircuito.push(['Área del espejo según ficha de diseño', ficha.areaDiseno+' m²']);
   _tarjetaDatos(body, filasCircuito, {mono:true, pctEtiqueta:0.45});
 
   var sup = (ficha.motorResultado && ficha.motorResultado.supuestos) || null;
@@ -1883,7 +2009,7 @@ function _anexoMemoriaCalculo(body, ficha){
     if(esV2mem){
       _tarjetaDatos(body, [
         ['Modelo de cálculo', 'v2'],
-        ['Coeficiente de Hazen-Williams (C)', String(sup.C)+' — '+String(sup.estadoTuberia)],
+        ['Coeficiente de Hazen-Williams (C)', String(sup.C)+' (estado de la tubería: '+String(sup.estadoTuberia)+')'],
         ['Pérdida por accesorios', String(sup.kAccesorios)],
         ['Carga estática', String(sup.Hgeo)],
         ['Retorno al vaso', String(sup.retorno)],
@@ -1895,12 +2021,16 @@ function _anexoMemoriaCalculo(body, ficha){
         ['Banda de incertidumbre', String(sup.banda)]
       ], {mono:true, pctEtiqueta:0.38});
       _nota(body,
-        'El modelo v2 corrige tres puntos del v1: la carga estática con tanque de compensación es ' +
-        'únicamente la diferencia entre las dos láminas de agua (el recorrido de la tubería por los ' +
-        'distintos niveles del cuarto de máquinas se cancela por tratarse de conducto cerrado y lleno); ' +
-        'la lectura del manómetro deja de sumarse a la curva del sistema, porque hacerlo contaba dos ' +
-        'veces el circuito aguas abajo; y los accesorios pasan de una longitud equivalente única a ' +
-        'coeficientes K diferenciados por tipo.');
+        'El modelo v2 corrige tres puntos del v1. Con tanque de compensación, la carga estática es ' +
+        'solo la diferencia entre las dos láminas de agua, porque el recorrido de la tubería por los ' +
+        'distintos niveles del cuarto de máquinas se cancela al tratarse de conducto cerrado y lleno. ' +
+        'La lectura del manómetro ya no se suma a la curva del sistema, porque hacerlo contaba dos ' +
+        'veces el circuito aguas abajo. Y los accesorios pasan de una longitud equivalente única a ' +
+        'coeficientes K diferenciados por tipo. La revisión v2.1 agrega las curvas de fábrica de las ' +
+        'familias EQ Series, IntelliFlo VS+SVRS, WhisperFlo VST y WhisperFloXF, corrige el punto de ' +
+        'medida del manómetro con su cota respecto a la lámina, y modela el acople del calentador: ' +
+        'una bomba inyectora propia no carga la línea principal, un bypass la carga con techo y un ' +
+        'montaje en línea directa la carga sin techo.');
     } else {
       _tarjetaDatos(body, [
         ['Modelo de cálculo', 'v1 (legado)'],
@@ -1916,10 +2046,10 @@ function _anexoMemoriaCalculo(body, ficha){
   if(ficha.aforoResultado && !ficha.aforoResultado.error){
     _h2(body, 'D.4 Supuesto del aforo y dotación');
     _nota(body,
-      'La fila de la Tabla No. 4 (factor de uso) se determina con la profundidad MÁXIMA del vaso ' +
-      '— criterio conservador. La dotación sanitaria requerida (Tabla No. 5) se calcula sobre el ' +
-      '100% del aforo para cada elemento; en campo puede repartirse por género según la ' +
-      'composición real de bañistas.');
+      'La fila de la Tabla No. 4 (factor de uso) se determina con la profundidad MÁXIMA del vaso, ' +
+      'que es el criterio conservador. La dotación sanitaria requerida (Tabla No. 5) se calcula ' +
+      'sobre el 100% del aforo para cada elemento, aunque en campo puede repartirse por género ' +
+      'según la composición real de bañistas.');
   }
 }
 
@@ -1963,8 +2093,8 @@ function _conclusion(body, m, sede, piscina, area){
     m.pctCumplimiento + '% frente a los criterios de la Resolución 929 de 2026, con ');
   txt += m.noCumple + ' ítem(s) en estado No cumple y ' + (m.critico + m.alto) +
     ' hallazgo(s) clasificados en riesgo crítico o alto. ';
-  if(m.vencidos>0) txt += 'Se registran ' + m.vencidos + ' hallazgo(s) con fecha compromiso vencida, ' +
-    'lo que constituye la desviación de gestión más relevante del período. ';
+  if(m.vencidos>0) txt += 'Se registran ' + m.vencidos + ' hallazgo(s) con la fecha compromiso vencida, ' +
+    'la desviación de gestión más relevante del período. ';
   if(m.sinFecha>0) txt += m.sinFecha + ' hallazgo(s) permanecen sin fecha compromiso asignada. ';
   txt += 'La condición general se califica como: ' + _semaforo(m.pctCumplimiento) + '.';
   // Texto corrido en color normal: el rojo se reserva para estados y niveles
@@ -2028,7 +2158,7 @@ function _estiloTabla(tabla, conEncabezado, widths){
    SVG animado, así que el equivalente correcto en un informe de Google
    Docs es el servicio Charts (Charts.new...().build().getBlob()). */
 function _chartDonutCumplimiento(pct){
-  var colorOk = pct>=95 ? C_FILL_CUMPLE : (pct>=85 ? C_FILL_CUMPLE : (pct>=70 ? C_FILL_PROCESO : C_FILL_NOCUMPLE));
+  var colorOk = _colorPctFill(pct);
   var dt = Charts.newDataTable()
     .addColumn(Charts.ColumnType.STRING, 'Estado')
     .addColumn(Charts.ColumnType.NUMBER, 'Valor')
@@ -2037,83 +2167,167 @@ function _chartDonutCumplimiento(pct){
     .build();
   var chart = Charts.newPieChart()
     .setDataTable(dt)
-    .setDimensions(280, 280)
-    .setColors([colorOk, '#E2E8F0'])
+    // Se renderiza a 520 px para insertarse a 130 pt: 4x de sobremuestreo,
+    // que es lo que hace falta para que el arco no salga dentado en el PDF
+    // impreso. A 280 px (2.1x) el borde de la dona se veia escalonado.
+    .setDimensions(520, 520)
+    .setColors([colorOk, C_CELDA])
     .setLegendPosition(Charts.Position.NONE)
-    .setOption('pieHole', 0.68)
+    .setOption('pieHole', 0.74)
     .setOption('pieSliceText', 'none')
     .setOption('backgroundColor', 'transparent')
     .setOption('tooltip', {trigger:'none'})
-    .setOption('chartArea', {left:6, top:6, width:'92%', height:'92%'})
+    .setOption('chartArea', {left:8, top:8, width:'94%', height:'94%'})
     .build();
   return chart.getBlob();
 }
 
-function _chartDistribucionEstados(m){
-  var dt = Charts.newDataTable()
-    .addColumn(Charts.ColumnType.STRING, 'Estado')
-    .addColumn(Charts.ColumnType.NUMBER, 'Cantidad')
-    .addRow(['Cumple', m.cumple])
-    .addRow(['No cumple', m.noCumple])
-    .addRow(['En proceso', m.enProceso])
-    .addRow(['Pendiente', m.pendiente])
-    .addRow(['No aplica', m.noAplica])
-    .build();
-  // Se renderiza al doble del tamaño al que se inserta (220 pt) para que el
-  // PDF no la muestre pixelada; por eso las fuentes van en 15, que al
-  // reducir quedan en ~7 pt reales.
-  var chart = Charts.newPieChart()
-    .setDataTable(dt)
-    .setDimensions(440, 300)
-    .setColors([C_FILL_CUMPLE, C_FILL_NOCUMPLE, C_FILL_PROCESO, C_FILL_PENDIENTE, C_FILL_NOAPLICA])
-    .setOption('pieHole', 0.45)
-    .setOption('backgroundColor', 'transparent')
-    .setOption('pieSliceTextStyle', {fontSize:14, color:'#FFFFFF'})
-    // Se define legend en un único setOption (posición + estilo juntos) —
-    // combinarlo con setLegendPosition() pisaría este objeto o al revés,
-    // según el orden de evaluación interno del builder.
-    .setOption('legend', {position:'right', textStyle:{fontSize:15, color:C_TITULO}})
-    .setOption('chartArea', {left:10, top:10, width:'62%', height:'88%'})
-    .build();
-  return chart.getBlob();
+/* ---------- Graficas vectoriales compuestas con tablas ----------
+   El servicio Charts devuelve un PNG: en el PDF se ve pixelado, trae la
+   tipografia y los margenes de Google Charts -no los del informe- y no hay
+   forma de alinearlo con las tablas de al lado. Una barra, sin embargo, es
+   geometria pura: se compone con celdas de tabla de ancho proporcional y
+   fondo de color, y asi sale VECTORIAL - nitida a cualquier zoom, en Arial
+   como el resto del documento y encajada al punto con el ancho util A4.
+   La dona del cumplimiento global sigue siendo imagen porque un arco no se
+   puede componer con celdas rectangulares; para esa si se renderiza a 4x el
+   tamano de insercion para que no se vea pixelada.
+
+   `segmentos` es [{valor, color}]; los de valor 0 se omiten para que no
+   dejen una hendidura de 3 pt de color en la barra. */
+function _barraApilada(contenedor, segmentos, ancho, alto){
+  var vivos = segmentos.filter(function(sg){ return sg.valor > 0; });
+  if(!vivos.length) vivos = [{valor:1, color:C_FILL_NOAPLICA}];
+  var total = 0;
+  vivos.forEach(function(sg){ total += sg.valor; });
+
+  // El ultimo segmento absorbe el redondeo para que la suma de anchos de
+  // exactamente `ancho` y la barra no quede corta ni desborde la celda.
+  var anchos = [], acum = 0;
+  vivos.forEach(function(sg, i){
+    var w = (i === vivos.length-1)
+      ? Math.max(3, ancho - acum)
+      : Math.max(3, Math.round(ancho * sg.valor / total));
+    anchos.push(w); acum += w;
+  });
+
+  var t = contenedor.appendTable([vivos.map(function(){ return ''; })]);
+  t.setBorderWidth(0).setBorderColor('#FFFFFF');
+  var arriba = Math.round(alto/2);
+  for(var i=0;i<vivos.length;i++){
+    var celda = t.getCell(0,i);
+    celda.setWidth(anchos[i]).setBackgroundColor(vivos[i].color);
+    celda.setPaddingLeft(0).setPaddingRight(0)
+         .setPaddingTop(arriba).setPaddingBottom(alto-arriba);
+    celda.getChild(0).asParagraph().setFontSize(1).setSpacingBefore(0).setSpacingAfter(0);
+  }
+  return t;
 }
 
-function _chartCapitulos(m){
+/* Leyenda en una fila: cuadro de color + etiqueta + valor, uno por columna.
+   Sustituye a la leyenda lateral de Google Charts, que forzaba a reservarle
+   casi el 40% del ancho a la grafica y salia en otra tipografia. */
+function _chipsLeyenda(contenedor, items, ancho){
+  var t = contenedor.appendTable([items.map(function(){ return ''; })]);
+  t.setBorderWidth(0).setBorderColor('#FFFFFF');
+  var w = Math.floor(ancho/items.length);
+  items.forEach(function(it, i){
+    var celda = t.getCell(0,i);
+    celda.setWidth(w);
+    celda.setPaddingTop(5).setPaddingBottom(0).setPaddingLeft(i===0?0:6).setPaddingRight(0);
+    var p = celda.getChild(0).asParagraph();
+    p.setText('■ '+it.etiqueta+'  '+it.valor)
+     .setFontSize(7.5).setBold(true).setForegroundColor(C_TITULO)
+     .setSpacingBefore(0).setSpacingAfter(0);
+    // El cuadrito toma el color de la serie; el texto se queda en gris para
+    // que la leyenda no compita visualmente con la barra.
+    p.editAsText().setForegroundColor(0, 0, it.color);
+  });
+  return t;
+}
+
+/* Deja en tamano minimo los parrafos sueltos que Docs obliga a mantener
+   alrededor de una tabla anidada dentro de una celda; sin esto cada barra
+   arrastra dos renglones vacios de 11 pt y la grafica se estira al doble. */
+function _comprimirParrafos(celda){
+  for(var k=0;k<celda.getNumChildren();k++){
+    var ch = celda.getChild(k);
+    if(ch.getType()===DocumentApp.ElementType.PARAGRAPH){
+      ch.asParagraph().setFontSize(1).setSpacingBefore(0).setSpacingAfter(0);
+    }
+  }
+}
+
+/* Color de RELLENO de un porcentaje de cumplimiento. Va aparte de
+   _colorPct() porque aquel devuelve colores pensados para TEXTO (mas
+   oscuros y desaturados); usados como area de color se ven sucios. */
+function _colorPctFill(pct){
+  return pct>=85 ? C_FILL_CUMPLE : (pct>=70 ? C_FILL_PROCESO : C_FILL_NOCUMPLE);
+}
+
+/* Barras horizontales de cumplimiento por capitulo, peor primero.
+   Reemplaza al Charts.newBarChart() apilado: al ser vectorial caben
+   etiquetas de capitulo mucho mas largas (el chart las recortaba a 32
+   caracteres para que no desbordaran el eje), el % va en la misma linea de
+   su barra en vez de tener que leerlo contra una escala, y cada barra toma
+   el color de su semaforo en vez de ser todas azules. */
+function _barrasCapitulos(body, m){
   var caps = Object.keys(m.porCapitulo).map(function(cap){
     var c = m.porCapitulo[cap];
     var base = c.total - c.fueraDelDenominador;
     var pct = base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0;
-    // Los nombres de capítulo son largos ("1. Documentación técnica y
-    // legal") — se recortan al número + primeras palabras para que la
-    // gráfica quepa en el ancho A4 sin desbordar las etiquetas del eje Y.
-    var etiqueta = cap.length>34 ? cap.slice(0,32)+'…' : cap;
-    return {etiqueta:etiqueta, pct:pct};
-  }).sort(function(a,b){ return a.pct - b.pct; }); // peor primero, arriba en la barra horizontal
+    return {etiqueta: cap.length>46 ? cap.slice(0,44)+'…' : cap, pct:pct};
+  }).sort(function(a,b){ return a.pct - b.pct; });
+  if(!caps.length) return null;
 
-  var dtb = Charts.newDataTable()
-    .addColumn(Charts.ColumnType.STRING, 'Capítulo')
-    .addColumn(Charts.ColumnType.NUMBER, '% cumplimiento')
-    .addColumn(Charts.ColumnType.NUMBER, '% restante');
-  caps.forEach(function(c){ dtb.addRow([c.etiqueta, c.pct, 100-c.pct]); });
-  var dt = dtb.build();
+  var W_LBL=210, W_BAR=232, W_PCT=63;   // suman 505 pt = ANCHO_UTIL
+  var t = body.appendTable(caps.map(function(){ return ['','','']; }));
+  t.setBorderWidth(0).setBorderColor('#FFFFFF');
 
-  // Igual que la torta: se renderiza a ~1.5x del ancho al que se inserta
-  // (ANCHO_UTIL) y las fuentes se escalan en la misma proporción.
-  var anchoRender = 760;
-  var alturaPorFila = 26;
-  var chart = Charts.newBarChart()
-    .setDataTable(dt)
-    .setDimensions(anchoRender, Math.max(180, caps.length*alturaPorFila + 60))
-    .setColors([C_FILL_CUMPLE, '#E2E8F0'])
-    .setStacked()
-    .setLegendPosition(Charts.Position.NONE)
-    .setOption('backgroundColor', 'transparent')
-    .setOption('hAxis', {minValue:0, maxValue:100, textStyle:{fontSize:12, color:C_TITULO}})
-    .setOption('vAxis', {textStyle:{fontSize:12, color:C_ENCABEZADO}})
-    .setOption('bar', {groupWidth:'72%'})
-    .setOption('chartArea', {left:'40%', top:10, width:'56%', height:'90%'})
-    .build();
-  return chart.getBlob();
+  caps.forEach(function(c, i){
+    var fila = t.getRow(i);
+    var cLbl = fila.getCell(0), cBar = fila.getCell(1), cPct = fila.getCell(2);
+    cLbl.setWidth(W_LBL).setPaddingTop(3).setPaddingBottom(3).setPaddingLeft(0).setPaddingRight(12);
+    cBar.setWidth(W_BAR).setPaddingTop(5).setPaddingBottom(3).setPaddingLeft(0).setPaddingRight(0);
+    cPct.setWidth(W_PCT).setPaddingTop(3).setPaddingBottom(3).setPaddingLeft(8).setPaddingRight(0);
+
+    cLbl.getChild(0).asParagraph().setText(c.etiqueta)
+      .setFontSize(8).setBold(false).setForegroundColor(C_ENCABEZADO)
+      .setSpacingBefore(0).setSpacingAfter(0);
+
+    _barraApilada(cBar, [
+      {valor:c.pct,     color:_colorPctFill(c.pct)},
+      {valor:100-c.pct, color:C_CELDA}
+    ], W_BAR, 9);
+    _comprimirParrafos(cBar);
+
+    cPct.getChild(0).asParagraph().setText(c.pct+'%')
+      .setFontFamily(FUENTE_MONO).setFontSize(8.5).setBold(true)
+      .setForegroundColor(_colorPct(c.pct))
+      .setAlignment(DocumentApp.HorizontalAlignment.RIGHT)
+      .setSpacingBefore(0).setSpacingAfter(0);
+  });
+  return t;
+}
+
+/* Tarjeta de indicador para el tablero ejecutivo: rotulo pequeno en gris,
+   cifra grande en mono y una linea de lectura debajo. Es el "stat card" del
+   mockup, que en la version anterior estaba aplanado como una fila mas de
+   una tabla de 8 filas donde ninguna cifra resaltaba. */
+function _tarjetaKPI(celda, etiqueta, valor, lectura, color){
+  var c = _tarjetaEnCelda(celda);
+  c.setPaddingTop(8).setPaddingBottom(8).setPaddingLeft(9).setPaddingRight(9);
+  c.getChild(0).asParagraph().setText(String(etiqueta).toUpperCase())
+    .setFontSize(6.5).setBold(true).setForegroundColor(C_TITULO)
+    .setSpacingBefore(0).setSpacingAfter(1);
+  c.appendParagraph(String(valor))
+    .setFontFamily(FUENTE_MONO).setFontSize(19).setBold(true)
+    .setForegroundColor(color || C_ENCABEZADO)
+    .setSpacingBefore(0).setSpacingAfter(0);
+  c.appendParagraph(String(lectura))
+    .setFontSize(7).setBold(false).setForegroundColor(C_TITULO)
+    .setSpacingBefore(2).setSpacingAfter(0);
+  return c;
 }
 
 /** Inserta una imagen centrada en el cuerpo del documento, con ancho fijo. */
@@ -2200,7 +2414,7 @@ function _menuSedeArea(area){
   var ok = [], sinItems = [];
   lista.forEach(function(pi){
     var r = generarInformeVaso(sede, pi, ultima[pi], area);
-    if(r.ok) ok.push(pi+' ('+ultima[pi]+') — '+r.metricas.pctCumplimiento+'%'+chr10()+r.pdfUrl);
+    if(r.ok) ok.push(pi+' ('+ultima[pi]+'): '+r.metricas.pctCumplimiento+'%'+chr10()+r.pdfUrl);
     else sinItems.push(pi+' ('+ultima[pi]+')');
   });
 
@@ -2264,7 +2478,7 @@ function menuGenerarInformesPorArea(){
   var v = sh.getRange(fila,1,1,TOTAL_COLS).getValues()[0];
   var res = generarInformesPorArea(String(v[COL.sede-1]), String(v[COL.piscina-1]), _fechaStr(v[COL.fecha-1]));
   if(!res.length){ SpreadsheetApp.getUi().alert('No se generó ningún informe: el vaso no tiene ítems clasificados por área.'); return; }
-  var detalle = res.map(function(r){ return r.area+' — '+r.metricas.pctCumplimiento+'%\n'+r.pdfUrl; }).join('\n\n');
+  var detalle = res.map(function(r){ return r.area+': '+r.metricas.pctCumplimiento+'%\n'+r.pdfUrl; }).join('\n\n');
   SpreadsheetApp.getUi().alert('Informes por área generados ('+res.length+'):\n\n'+detalle);
 }
 
@@ -2437,7 +2651,7 @@ function TEST_generarInformeConFicha(){
   var filas = [
     ['CHK-152','17. Calidad del agua y operación sanitaria','Registro de pH.','Calidad de agua','Alta',
       sede, piscina, fecha, 'Responsable Prueba', 'No cumple','Bajo',
-      'Sin registro de pH en bitácora — se deja consignado por control operativo interno; no es un criterio exigido por la Res. 929 (ver nota del ítem).',
+      'Sin registro de pH en bitácora. Se deja consignado por control operativo interno, ya que no es un criterio exigido por la Res. 929 (ver nota del ítem).',
       'Retomar el registro diario de pH como buena práctica operativa.',
       'Operario de mantenimiento','2026-08-18','', '', '0', '', '', '', ''],
 
@@ -2448,13 +2662,13 @@ function TEST_generarInformeConFicha(){
 
     ['CHK-078','8. Sistema de recirculación','Caudal real verificado frente al diseño.','Operación / Calidad de agua','Alta',
       sede, piscina, fecha, 'Responsable Prueba', 'No cumple','Alto',
-      'Velocidad de filtración (42.8 m³/h/m²) y tiempo de recirculación (11.82 h) fuera de rango según el cálculo del motor hidráulico — ver Anexo B.',
+      'Velocidad de filtración (42.8 m³/h/m²) y tiempo de recirculación (11.82 h) fuera de rango según el cálculo del motor hidráulico. Ver Anexo B.',
       'Evaluar aumento de área filtrante o bomba de mayor caudal.',
       'Coordinador Mantenimiento','2026-08-20','', '', '0', '', '', '', ''],
 
     ['CHK-204','24. Aforo y control de ingreso','Aforo máximo determinado por estanque.','Operación / Seguridad','Media',
       sede, piscina, fecha, 'Responsable Prueba', 'No cumple','Medio',
-      'Faltan duchas frente a la dotación de la Tabla No. 5 (2 encontradas / 3 requeridas para 75 bañistas) — ver Anexo C.',
+      'Faltan duchas frente a la dotación de la Tabla No. 5 (2 encontradas de 3 requeridas para 75 bañistas). Ver Anexo C.',
       'Instalar 1 ducha adicional en el área de uso exclusivo del bañista.',
       'Coordinador Mantenimiento','2026-08-25','', '', '0', '', '', '', '']
   ];
