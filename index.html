@@ -258,6 +258,8 @@ input,textarea,select{font-family:inherit;}
 .fichaGrupo{font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 6px;padding-top:9px;border-top:1px solid var(--border-soft);}
 .fichaGrupo:first-child{margin-top:0;padding-top:0;border-top:0;}
 .tramoRowGrid input,.tramoRowGrid select{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 6px;font-size:11.5px;}
+.tramoManometroChk{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:var(--text-dim);cursor:pointer;}
+.tramoManometroChk input{width:14px;height:14px;flex:none;}
 .tramosResultado{margin-top:6px;}
 
 .motorWrap{margin-bottom:10px;}
@@ -703,6 +705,11 @@ var FICHA_CAMPOS = {
     {v:"bombaCalor",l:"Bomba de calor"},
     {v:"placas",l:"Intercambiador de placas"}
   ]},
+  calentadorAcople:{label:"¿Cómo conecta el calentador al circuito principal?",type:"select",group:"Calentadores",options:[
+    {v:"bypass_linea",l:"Derivación con válvula de estrangulamiento EN LA LÍNEA PRINCIPAL (Pentair ETi 400 y similares — la válvula reparte el caudal entre el calentador y el bypass)"},
+    {v:"inyector",l:"Derivación con bomba inyectora PROPIA del calentador (Raypak XTherm P y similares — desacoplado, no estrangula la línea principal)"},
+    {v:"linea",l:"En línea directa, sin bypass (todo el caudal del circuito pasa por el intercambiador)"}
+  ]},
   tempAgua:{label:"Temperatura del agua encontrada (si no se declara se asume 30 °C por ser vaso climatizado)",unit:"°C",type:"number",step:"0.5",group:"Carga estática y circuito"},
   /* --- Contraste: lo medido y lo que dice la ficha de entrega de obra ---
      caudalDiseno/tiempoRecircDiseno/areaDiseno se capturan UNA vez por vaso;
@@ -714,6 +721,7 @@ var FICHA_CAMPOS = {
   areaDiseno:{label:"Área del espejo de agua según la ficha de diseño, si se conoce",unit:"m²",type:"number",step:"0.1"},
   volumenManual:{label:"Volumen del vaso declarado directamente, si se conoce con certeza (reemplaza el cálculo por geometría)",unit:"m³",type:"number",step:"0.5"},
   alturaManometro:{label:"Cota del manómetro del filtro respecto a la lámina del tanque (o del vaso si no hay tanque) — POSITIVO si el manómetro queda arriba de la lámina, NEGATIVO si el cuarto de máquinas está más abajo (caso típico con tanque de equilibrio)",unit:"m",type:"number",step:"0.1"},
+  presionPostCalentador:{label:"Presión leída en un manómetro aguas abajo del bloque de calentadores, si hay uno instalado (opcional — sedes con válvula de estrangulamiento en la línea principal, tipo ETi 400: da el ΔP real del bloque sin depender del supuesto de catálogo)",unit:"PSI",type:"number",step:"0.5",group:"Calentadores"},
   duchasEncontradas:{label:"Duchas encontradas en sitio",unit:"u",type:"number",step:"1"},
   inodoroHEncontrados:{label:"Inodoros para hombres encontrados",unit:"u",type:"number",step:"1"},
   inodoroMEncontrados:{label:"Inodoros para mujeres encontrados",unit:"u",type:"number",step:"1"},
@@ -727,7 +735,7 @@ var ITEM_FICHA_CAMPOS = {
   "CHK-079":["tipoUso","cubierta"],
   "CHK-074":["bombaHP","bombaHz","bombaFamilia","bombaVelocidadVS","bombaVelocidadIntelliflo","bombaVelocidadWhisperVST"],
   "CHK-078":["desnivelPiscinaTanque","tipoRetorno","estadoTuberia","tempAgua",
-             "calentadorN","calentadorArreglo","calentadorTipo",
+             "calentadorN","calentadorArreglo","calentadorTipo","calentadorAcople","presionPostCalentador",
              "caudalMedido","caudalDiseno","tiempoRecircDiseno","desnivelSuccionDescarga"],
   /* El tanque de compensación tiene su propio ítem en el capítulo 11 y su
      propio requisito cuantitativo (Numeral 10.5: capacidad mínima del 10% del
@@ -799,21 +807,24 @@ var CURVAS_PENTAIR = {
   eq_15:{label:"EQ Series 1.5 HP comercial (referencia)",hp:1.5,curva:[{q:0,h:22},{q:15,h:19.5},{q:24,h:15.5},{q:30,h:10.5},{q:35,h:4.5}]},
   eq_2:{label:"EQ Series 2 HP comercial (referencia)",hp:2,curva:[{q:0,h:27},{q:17,h:24},{q:27,h:19},{q:34,h:13},{q:39,h:6}]},
   eq_3:{label:"EQ Series 3 HP comercial (referencia)",hp:3,curva:[{q:0,h:34},{q:20,h:30.5},{q:32,h:24.5},{q:41,h:17},{q:47,h:8}]},
-  // Curvas de fábrica reales (Q en GPM, H en pies a 60Hz/3450rpm según ficha
-  // del fabricante) convertidas a m³/h (×0.227125) y m c.a. (×0.3048) — NO
-  // son inferidas de un gráfico como las anteriores, son la tabla numérica
-  // dada por el fabricante para cada modelo.
+  // Curvas de fábrica reales de la familia EQ Series, dadas directamente en
+  // m³/h y m c.a. (no digitalizadas de un gráfico ni convertidas de otra
+  // unidad) por el usuario del proyecto, catálogo Pentair — 26-ago-2026.
+  // Reemplazan una versión anterior de estas mismas 4 curvas que venía de
+  // una ficha en GPM/pies: los valores coincidían dentro de ~1-5% (dentro
+  // del margen de lectura de gráfico), así que no hay conflicto real, solo
+  // una fuente más precisa y con mejor cobertura en caudal bajo.
   eq_500:{label:"Pentair EQ500 5 HP (dato de fábrica)",hp:5,curva:[
-    {q:0,h:24.38},{q:22.71,h:22.86},{q:56.78,h:18.29},{q:71.54,h:12.19},{q:84.04,h:6.10},{q:90.85,h:0}
+    {q:0,h:24},{q:53,h:20},{q:68,h:15},{q:78,h:10},{q:88,h:5},{q:92,h:1}
   ]},
   eq_750:{label:"Pentair EQ750 7.5 HP (dato de fábrica)",hp:7.5,curva:[
-    {q:0,h:24.38},{q:68.14,h:21.34},{q:85.17,h:18.29},{q:106.75,h:12.19},{q:115.83,h:6.10},{q:124.92,h:0}
+    {q:0,h:25},{q:47,h:24},{q:68,h:22},{q:79,h:20},{q:97,h:15},{q:110,h:10},{q:119,h:5},{q:127,h:2}
   ]},
   eq_1000:{label:"Pentair EQK1000 10 HP (dato de fábrica)",hp:10,curva:[
-    {q:0,h:32.00},{q:45.43,h:30.48},{q:89.71,h:24.38},{q:102.21,h:21.34},{q:111.30,h:18.29},{q:120.38,h:12.19},{q:134.00,h:6.10},{q:136.27,h:0}
+    {q:0,h:33},{q:58,h:30},{q:89,h:25},{q:106,h:20},{q:118,h:15},{q:126,h:10},{q:132,h:5},{q:137,h:3}
   ]},
   eq_1500:{label:"Pentair EQK1500 15 HP (dato de fábrica)",hp:15,curva:[
-    {q:0,h:34.14},{q:62.46,h:30.48},{q:134.00,h:24.38},{q:147.63,h:21.34},{q:157.85,h:18.29},{q:170.34,h:12.19},{q:181.70,h:6.10},{q:186.25,h:0}
+    {q:0,h:34},{q:69,h:30},{q:132,h:25},{q:152,h:20},{q:168,h:15},{q:181,h:6.5},{q:185,h:4}
   ]},
   // WhisperFloXF 3 HP, velocidad única — dato de fábrica (mismo origen que
   // las curvas EQ de arriba: tabla numérica del fabricante, no gráfico inferido).
@@ -961,6 +972,36 @@ function ajustarCurvaCuadratica(puntos){
   return {a:a,b:b,c:c,r2:r2,qMax:(qCero!=null?qCero:Math.max.apply(null,pts.map(function(p){return p.q;}))*1.15),
     evalH:function(q){ return a + b*q + c*q*q; }};
 }
+/* ⚠ NO se toca esta función para v1 (ver bloque "MODELO v1 — LEGADO,
+   CONGELADO" más abajo): un ajuste no-monótono (b>0, la curva sube antes de
+   bajar) es un bug real, pero corregirlo aquí cambiaría resultados de v1 ya
+   emitidos. La salvaguarda de monotonía vive en ajustarCurvaCuadraticaMonotona,
+   usada SOLO por resolverCurvaBombaV2.
+   Mismo ajuste que ajustarCurvaCuadratica pero con la recta forzada a pasar
+   por pendiente 0 en Q=0 (H = a + c·Q², sin término lineal): es la parábola
+   descendente más simple que sigue siendo monótona en todo el rango, usada
+   como reserva cuando el ajuste de 3 parámetros sale no-monótono. */
+function ajustarCurvaCuadraticaB0(puntos){
+  var pts = (puntos||[]).filter(function(p){ return p && isFinite(p.q) && isFinite(p.h); });
+  if(pts.length < 2) return null;
+  var n=pts.length, Sq2=0,Sq4=0,Sh=0,Sq2h=0;
+  pts.forEach(function(p){
+    var q2=p.q*p.q;
+    Sq2+=q2; Sq4+=q2*q2; Sh+=p.h; Sq2h+=q2*p.h;
+  });
+  var det = n*Sq4 - Sq2*Sq2;
+  if(Math.abs(det)<1e-9) return null;
+  var a = (Sh*Sq4 - Sq2*Sq2h)/det, c = (n*Sq2h - Sq2*Sh)/det;
+  var mediaH = Sh/n, ssTot=0, ssRes=0;
+  pts.forEach(function(p){
+    var hEst = a + c*p.q*p.q;
+    ssRes += (p.h-hEst)*(p.h-hEst);
+    ssTot += (p.h-mediaH)*(p.h-mediaH);
+  });
+  var r2 = ssTot>0 ? (1-(ssRes/ssTot)) : 1;
+  var qMax = (c<0 && a>0) ? Math.sqrt(-a/c) : Math.max.apply(null,pts.map(function(p){return p.q;}))*1.15;
+  return {a:a,b:0,c:c,r2:r2,qMax:qMax, evalH:function(q){ return a + c*q*q; }};
+}
 function mayorRaizPositiva(a,b,c){ // resuelve a·x²+b·x+c=0, devuelve la raíz positiva mayor
   if(Math.abs(a)<1e-9) return (Math.abs(b)<1e-9? null : -c/b);
   var disc = b*b-4*a*c;
@@ -968,6 +1009,43 @@ function mayorRaizPositiva(a,b,c){ // resuelve a·x²+b·x+c=0, devuelve la raí
   var r1=(-b+Math.sqrt(disc))/(2*a), r2=(-b-Math.sqrt(disc))/(2*a);
   var pos=[r1,r2].filter(function(r){return r>0;});
   return pos.length? Math.max.apply(null,pos) : null;
+}
+/* Usada SOLO por v2 (resolverCurvaBombaV2). Ajusta con ajustarCurvaCuadratica
+   y, si sale no-monótona (b>0 — la parábola sube antes de bajar, porque los
+   puntos digitados quedaron concentrados en la rama alta de caudal, sin el
+   punto de shutoff), reajusta con ajustarCurvaCuadraticaB0. Marca
+   ajustadoMonotono:true en ese caso para que el origen de la curva lo
+   declare en su etiqueta. */
+function ajustarCurvaCuadraticaMonotona(puntos){
+  var ajuste = ajustarCurvaCuadratica(puntos);
+  if(!ajuste) return null;
+  if(ajuste.b>0){
+    var forzado = ajustarCurvaCuadraticaB0(puntos);
+    if(forzado){ forzado.ajustadoMonotono = true; return forzado; }
+  }
+  return ajuste;
+}
+/* Interpolación lineal por tramos, monótona por construcción: para curvas
+   de CATÁLOGO (tabla numérica de fábrica, no puntos digitados a mano en
+   campo) no hace falta suavizar con una parábola — los puntos ya son
+   confiables y basta unirlos con rectas. Evita el problema de fondo del
+   ajuste cuadrático: una tabla de fábrica real casi nunca es una parábola
+   (ver EQK1500: casi plana en caudal bajo, se desploma en caudal alto). */
+function interpolarCurvaCatalogo(puntos){
+  var pts = (puntos||[]).filter(function(p){ return p && isFinite(p.q) && isFinite(p.h); })
+    .slice().sort(function(a,b){ return a.q-b.q; });
+  if(pts.length < 2) return null;
+  var qMax = pts[pts.length-1].q;
+  return {qMax:qMax, r2:1, evalH:function(q){
+    if(q<=pts[0].q) return pts[0].h;
+    for(var i=1;i<pts.length;i++){
+      if(q<=pts[i].q){
+        var t=(q-pts[i-1].q)/(pts[i].q-pts[i-1].q);
+        return pts[i-1].h + t*(pts[i].h-pts[i-1].h);
+      }
+    }
+    return pts[pts.length-1].h;
+  }};
 }
 
 /* Pérdida de carga por Hazen-Williams (SI): hf = 10.67·Leq·Q^1.852 /
@@ -1065,6 +1143,30 @@ function encontrarPuntoOperacion(curvaBomba, funcSistema, qMax){
   return null;
 }
 
+/* Usada SOLO por v2 — v1 sigue con la de arriba, primer cruce. Con curvas de
+   bomba correctamente monótonas (ver ajustarCurvaCuadraticaMonotona /
+   interpolarCurvaCatalogo) solo puede haber un cruce real y coincide con el
+   primero, pero se barre hasta el final y se devuelve el ÚLTIMO cruce como
+   defensa adicional: si la curva del sistema es casi plana (caso del cruce
+   por manómetro, que solo lleva la pérdida hasta el punto de medición, no
+   todo el circuito) y hay algún residuo no-monótono, el cruce físicamente
+   correcto —donde la bomba de verdad frena el sistema— es el de más
+   caudal, no uno espurio cerca de Q=0. */
+function encontrarPuntoOperacionV2(curvaBomba, funcSistema, qMax){
+  var pasos = 400, prevDiff=null, prevQ=null, resultado=null;
+  for(var i=0;i<=pasos;i++){
+    var q = qMax * i/pasos;
+    var diff = curvaBomba.evalH(q) - funcSistema(q);
+    if(prevDiff!=null && ((prevDiff>=0 && diff<0) || (prevDiff<=0 && diff>0))){
+      var t = prevDiff/(prevDiff-diff);
+      var qOp = prevQ + t*(q-prevQ);
+      resultado = {q:qOp, h:curvaBomba.evalH(qOp)};
+    }
+    prevDiff=diff; prevQ=q;
+  }
+  return resultado;
+}
+
 /* Ensambla la curva de la bomba (referencia Pentair o curva manual medida en
    campo) aplicando la afinidad por Hz que corresponda. La comparten el modelo
    v1 y el v2: el origen de la curva no cambió entre versiones, lo que cambió
@@ -1108,6 +1210,65 @@ function resolverCurvaBomba(ficha){
     var curvaHz = afinidadPorHz(ref.curva, ficha.bombaHz);
     var ajusteRef = ajustarCurvaCuadratica(curvaHz);
     if(!ajusteRef) return {error:'No se pudo ajustar la curva de referencia.'};
+    origenCurva = {evalH:ajusteRef.evalH, qMax:ajusteRef.qMax, label:ref.label+' a '+(ficha.bombaHz||60)+' Hz'};
+  } else {
+    return {error:'Selecciona el origen de la curva de la bomba en el ítem CHK-074.'};
+  }
+  return {curva:origenCurva};
+}
+
+/* Versión v2 de resolverCurvaBomba, usada SOLO por calcularHidraulicaV2 —
+   v1 sigue llamando a la de arriba, sin tocar. Dos cambios:
+   1. Curvas de CATÁLOGO (VS/IntelliFlo/WhisperVST por velocidad, y la
+      familia genérica superflo/eq/whisperflo_xf) se interpolan por tramos
+      en vez de ajustarse a una parábola: son tablas de fábrica confiables,
+      no puntos ruidosos digitados en campo, y su forma real casi nunca es
+      una parábola (ver EQK1500: casi plana en caudal bajo, se desploma en
+      caudal alto — una cuadrática de mínimos cuadrados no la sigue).
+   2. Curva MANUAL (digitada por el inspector) sigue ajustándose con
+      cuadrática, pero con la salvaguarda de monotonía: si sale con
+      pendiente positiva en Q=0 (bug real, típico cuando faltan puntos en
+      caudal bajo/no se cargó el shutoff), se reajusta forzando la parábola
+      a ser monótona en vez de devolver una curva físicamente imposible. */
+function resolverCurvaBombaV2(ficha){
+  var origenCurva;
+  if(ficha.bombaFamilia==='manual'){
+    var hzMedicion = ficha.curvaManualHz, hzOperacion = ficha.bombaHz;
+    var seEscala = hzMedicion>0 && hzOperacion>0 && hzMedicion!==hzOperacion;
+    var curvaBase = seEscala ? afinidadEntreHz(ficha.curvaManual, hzMedicion, hzOperacion) : ficha.curvaManual;
+    var ajuste = ajustarCurvaCuadraticaMonotona(curvaBase);
+    if(!ajuste) return {error:'Carga al menos 4 puntos (Q,H) válidos en la curva manual de la bomba.'};
+    var notaHz = seEscala ? ' — medida a '+hzMedicion+'Hz, proyectada por afinidad a '+hzOperacion+'Hz' : (hzMedicion>0 ? ' — medida a '+hzMedicion+'Hz' : ' — Hz de medición sin declarar, se asume igual a la de operación');
+    var notaMono = ajuste.ajustadoMonotono ? ' — el ajuste original salía no-monótono (curva de bomba subiendo antes de bajar; revisa si faltan puntos en caudal bajo, sobre todo el de shutoff), se forzó una parábola monótona' : '';
+    if(ajuste.r2 < 0.95){
+      origenCurva = {evalH:ajuste.evalH, qMax:ajuste.qMax, label:'Curva manual (R²='+ajuste.r2.toFixed(3)+' — ajuste débil, revisa los puntos)'+notaHz+notaMono, r2:ajuste.r2};
+    } else {
+      origenCurva = {evalH:ajuste.evalH, qMax:ajuste.qMax, label:'Curva manual (R²='+ajuste.r2.toFixed(3)+')'+notaHz+notaMono, r2:ajuste.r2};
+    }
+  } else if(ficha.bombaFamilia==='superflo_vs'){
+    var refVS = CURVAS_PENTAIR_VS[ficha.bombaVelocidadVS];
+    if(!refVS) return {error:'Selecciona la velocidad en la que se encontró la bomba SuperFlo VS (ítem CHK-074).'};
+    var ajusteVS = interpolarCurvaCatalogo(refVS.curva);
+    if(!ajusteVS) return {error:'No se pudo interpolar la curva de referencia.'};
+    origenCurva = {evalH:ajusteVS.evalH, qMax:ajusteVS.qMax, label:refVS.label};
+  } else if(ficha.bombaFamilia==='intelliflo_vs'){
+    var refIF = CURVAS_PENTAIR_INTELLIFLO[ficha.bombaVelocidadIntelliflo];
+    if(!refIF) return {error:'Selecciona la velocidad en la que se encontró la bomba IntelliFlo VS+SVRS (ítem CHK-074).'};
+    var ajusteIF = interpolarCurvaCatalogo(refIF.curva);
+    if(!ajusteIF) return {error:'No se pudo interpolar la curva de referencia.'};
+    origenCurva = {evalH:ajusteIF.evalH, qMax:ajusteIF.qMax, label:refIF.label};
+  } else if(ficha.bombaFamilia==='whisperflo_vst'){
+    var refWV = CURVAS_PENTAIR_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST];
+    if(!refWV) return {error:'Selecciona la velocidad en la que se encontró la bomba WhisperFlo VST (ítem CHK-074).'};
+    var ajusteWV = interpolarCurvaCatalogo(refWV.curva);
+    if(!ajusteWV) return {error:'No se pudo interpolar la curva de referencia.'};
+    origenCurva = {evalH:ajusteWV.evalH, qMax:ajusteWV.qMax, label:refWV.label};
+  } else if(ficha.bombaFamilia){
+    var ref = seleccionarCurvaPentair(ficha.bombaFamilia, ficha.bombaHP);
+    if(!ref) return {error:'Selecciona la familia de la bomba en la ficha técnica.'};
+    var curvaHz = afinidadPorHz(ref.curva, ficha.bombaHz);
+    var ajusteRef = interpolarCurvaCatalogo(curvaHz);
+    if(!ajusteRef) return {error:'No se pudo interpolar la curva de referencia.'};
     origenCurva = {evalH:ajusteRef.evalH, qMax:ajusteRef.qMax, label:ref.label+' a '+(ficha.bombaHz||60)+' Hz'};
   } else {
     return {error:'Selecciona el origen de la curva de la bomba en el ítem CHK-074.'};
@@ -1217,8 +1378,14 @@ var C_HW_ESTADO = {nueva:150, servicio:130, incrustada:110};
 /* Pérdida de referencia por calentador a su caudal nominal. Son valores de
    catálogo típicos, declarados como supuesto — el fabricante manda si hay
    ficha del equipo. Escalan con Q². */
+/* qMax: caudal de fábrica por encima del cual el propio bypass del equipo
+   deja de dejar crecer el ΔP (por eso existe el bypass). Solo aplica cuando
+   calentadorAcople==='bypass_linea' — es el techo que evita escalar Q² sin
+   límite. Dato del ETi 400: 40-120 GPM (9.1-27.3 m³/h), Pentair, manual I&O,
+   pág. 21. Sin dato de fábrica para bombaCalor/placas todavía — qMax
+   ausente ahí no pone techo (declarado, no silencioso). */
 var DP_CALENTADOR_REF = {
-  gas:{dp:2.0, q:25, label:'caldera o calentador a gas con intercambiador'},
+  gas:{dp:2.0, q:25, qMax:27.3, label:'caldera o calentador a gas con intercambiador (ETi 400 y similares)'},
   bombaCalor:{dp:1.0, q:20, label:'bomba de calor'},
   placas:{dp:2.5, q:25, label:'intercambiador de placas'}
 };
@@ -1275,15 +1442,46 @@ function hfTramoV2(qM3h, t, C, kMul){
 /* Los calentadores en SERIE suman su pérdida completa uno tras otro; en
    PARALELO cada uno ve Q/N y la pérdida cae con el cuadrado. Por eso el
    arreglo pesa muchísimo más que la cantidad: seis en serie estrangulan el
-   circuito, seis en paralelo casi no se sienten. */
+   circuito, seis en paralelo casi no se sienten.
+
+   Eso solo aplica cuando el calentador está realmente EN LÍNEA. La mayoría
+   de estos calentadores NO lo están: van sobre una derivación de la línea
+   principal, porque su caudal admisible es una fracción del que mueve la
+   bomba. calentadorAcople distingue las tres topologías reales encontradas
+   en campo:
+     'inyector'     Raypak XTherm P y similares: traen su propia bomba
+                    inyectora de acople directo (manual I&O 241513, pág. 22
+                    "Pool Heating"). El circuito principal solo ve las tees
+                    de la derivación — ya contadas en los accesorios del
+                    tramo — no el ΔP del intercambiador. ΔP=0.
+     'bypass_linea' Pentair ETi 400 y similares: la válvula de
+                    estrangulamiento SÍ está en la línea principal, en la
+                    derivación hacia el calentador — reparte el caudal entre
+                    el equipo y el bypass. Es una resistencia real en serie
+                    con el circuito, pero acotada: por encima de qMax de
+                    fábrica el bypass del propio equipo se abre y el ΔP deja
+                    de crecer con Q² (si no, sencillamente el equipo no
+                    podría operar con la bomba entregando más que su tope).
+     'linea'        Caso residual: equipo chico, sin bypass, todo el caudal
+                    pasa por el intercambiador. Mismo escalado con Q² que
+                    'bypass_linea' pero SIN techo — ahí sí hay que alertar
+                    si el circuito supera el máximo del equipo (ver
+                    calcularHidraulicaV2).
+   Ficha sin calentadorAcople declarado (fichas antiguas): se asume 'linea'
+   sin techo, el comportamiento que tenía el motor antes de este cambio —
+   no se altera en silencio nada ya calculado con un supuesto explícito. */
 function dpCalentadores(qM3h, ficha, dpMul){
   var n = ficha.calentadorN;
   if(!(n>0)) return 0;
+  var acople = ficha.calentadorAcople || 'linea';
+  if(acople==='inyector') return 0;
   var ref = DP_CALENTADOR_REF[ficha.calentadorTipo] || DP_CALENTADOR_REF.gas;
   var paralelo = (ficha.calentadorArreglo==='paralelo');
   var nSerie = paralelo ? 1 : n;
   var nRamas = paralelo ? n : 1;
-  var rel = (qM3h/nRamas)/ref.q;
+  var qRama = qM3h/nRamas;
+  if(acople==='bypass_linea' && ref.qMax>0 && qRama>ref.qMax) qRama = ref.qMax;
+  var rel = qRama/ref.q;
   return nSerie * ref.dp * rel*rel * (dpMul||1);
 }
 
@@ -1329,6 +1527,30 @@ function hfSuccionV2(qM3h, ficha, esc, tramos){
   var C = cHazenV2(ficha, esc.cMul);
   return tramos.filter(function(t){ return t.lado==='succion'; })
     .reduce(function(a,t){ return a + hfTramoV2(qM3h, t, C, esc.kMul); }, 0);
+}
+
+/* hf acumulada desde el arranque del circuito (tanque/vaso) hasta el punto
+   donde está instalado el manómetro — NO solo la succión. El manómetro casi
+   siempre está a la entrada de filtros (así lo etiqueta el campo
+   presionManometro), aguas abajo de la bomba y de al menos un tramo de
+   presión más; usar solo hfSuccionV2 ahí SUBESTIMA la pérdida acumulada y
+   por eso el caudal despejado desde la lectura salía inflado.
+   El inspector marca en qué tramo está el manómetro con la casilla
+   "manómetro aquí" (t.manometro===true, un solo tramo). Si no la marcó
+   (fichas antiguas, o el inspector no lo declaró), se cae al comportamiento
+   legado (solo succión) — subestima igual que antes, pero no rompe fichas
+   ya cargadas; el origen del supuesto queda declarado en motorResultado. */
+function hfHastaManometroV2(qM3h, ficha, esc, tramos){
+  var C = cHazenV2(ficha, esc.cMul);
+  var idx = -1;
+  for(var i=0;i<tramos.length;i++){ if(tramos[i].manometro){ idx=i; break; } }
+  if(idx<0){
+    return tramos.filter(function(t){ return t.lado==='succion'; })
+      .reduce(function(a,t){ return a + hfTramoV2(qM3h, t, C, esc.kMul); }, 0);
+  }
+  var acc = 0;
+  for(var j=0;j<=idx;j++) acc += hfTramoV2(qM3h, tramos[j], C, esc.kMul);
+  return acc;
 }
 
 /* Volumen del vaso. profIntermedia se captura desde CHK-044 pero el v1 la
@@ -1427,8 +1649,8 @@ function caudalPorManometro(origenCurva, ficha, esc, tramos){
   if(!(p>0)) return null;
   var pM = p*0.703; // PSI → m c.a.
   var alturaMan = (ficha.alturaManometro!=null && isFinite(ficha.alturaManometro)) ? ficha.alturaManometro : 0;
-  var g = function(q){ return pM + alturaMan + hfSuccionV2(q, ficha, esc, tramos); };
-  var op = encontrarPuntoOperacion(origenCurva, g, origenCurva.qMax);
+  var g = function(q){ return pM + alturaMan + hfHastaManometroV2(q, ficha, esc, tramos); };
+  var op = encontrarPuntoOperacionV2(origenCurva, g, origenCurva.qMax);
   return op ? op.q : null;
 }
 
@@ -1461,7 +1683,7 @@ function derivadosDeCaudal(q, ficha, tramos){
 }
 
 function calcularHidraulicaV2(ficha, sede){
-  var rc = resolverCurvaBomba(ficha);
+  var rc = resolverCurvaBombaV2(ficha);
   if(rc.error) return {error:rc.error};
   var origenCurva = rc.curva;
   var tramos = tramosParaV2(ficha);
@@ -1470,7 +1692,7 @@ function calcularHidraulicaV2(ficha, sede){
   var escNominal = ESCENARIOS_BANDA.filter(function(e){return e.id==='nominal';})[0];
   var caudales = {};
   ESCENARIOS_BANDA.forEach(function(esc){
-    var op = encontrarPuntoOperacion(origenCurva, curvaSistemaV2(ficha,esc,tramos), origenCurva.qMax);
+    var op = encontrarPuntoOperacionV2(origenCurva, curvaSistemaV2(ficha,esc,tramos), origenCurva.qMax);
     caudales[esc.id] = op ? op.q : null;
   });
   if(caudales.nominal==null){
@@ -1490,6 +1712,22 @@ function calcularHidraulicaV2(ficha, sede){
   var derLo = derivadosDeCaudal(qMin, ficha, tramos);
   var derHi = derivadosDeCaudal(qMax, ficha, tramos);
   var cabezal = origenCurva.evalH(qEfectivo);
+
+  /* Alerta de caudal excedido: solo tiene sentido cuando el inspector
+     declaró 'linea' (sin bypass) — si es 'bypass_linea' el equipo tiene
+     precisamente la válvula que existe para evitar esto, y si es 'inyector'
+     el calentador ni siquiera ve el caudal de la línea principal. */
+  var alertaCalentador = null;
+  if(ficha.calentadorAcople==='linea' && ficha.calentadorN>0){
+    var refAlerta = DP_CALENTADOR_REF[ficha.calentadorTipo] || DP_CALENTADOR_REF.gas;
+    if(refAlerta.qMax>0){
+      var nRamasAlerta = (ficha.calentadorArreglo==='paralelo') ? ficha.calentadorN : 1;
+      var qRamaAlerta = qEfectivo/nRamasAlerta;
+      if(qRamaAlerta > refAlerta.qMax){
+        alertaCalentador = 'El caudal por rama del calentador ('+qRamaAlerta.toFixed(1)+' m³/h) supera el máximo de fábrica declarado para este tipo de equipo ('+refAlerta.qMax.toFixed(1)+' m³/h) y NO hay bypass declarado. Con la bomba entregando más de lo que el equipo admite, o hay un bypass sin declarar en la ficha, o el calentador está operando fuera de especificación — riesgo de daño al intercambiador (Raypak, Pentair: instrucciones de instalación).';
+      }
+    }
+  }
 
   var vol = volumenVasoV2(ficha);
   var vTanque = volumenTanque(ficha);
@@ -1564,6 +1802,7 @@ function calcularHidraulicaV2(ficha, sede){
       vFiltracion: veredictoBanda('vFiltracion', derLo.vFiltracion, derHi.vFiltracion, ficha)
     },
     npsh: npsh, cruceManometro: cruce, diseno: diseno, areaContraste: areaContraste,
+    alertaCalentador: alertaCalentador,
     tanqueNorma: capacidadTanqueNorma(ficha, vol.v, vol.area),
     supuestos: {
       C: cHazenV2(ficha, 1),
@@ -1576,7 +1815,10 @@ function calcularHidraulicaV2(ficha, sede){
         ? 'retorno descarga SOBRE la lámina: la carga estática se mide hasta la boca de retorno'
         : 'retorno sumergido bajo la lámina',
       calentadores: (ficha.calentadorN>0
-        ? ficha.calentadorN+' × '+refCal.label+' en '+(ficha.calentadorArreglo==='paralelo'?'paralelo':'serie')+', ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h, escalado con Q²'
+        ? ficha.calentadorN+' × '+refCal.label+' en '+(ficha.calentadorArreglo==='paralelo'?'paralelo':'serie')+', acople: '+
+          (ficha.calentadorAcople==='inyector' ? 'bomba inyectora propia (desacoplado de la línea principal, ΔP=0 sobre el circuito)'
+            : ficha.calentadorAcople==='bypass_linea' ? 'derivación con bypass en la línea principal, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q²'+(refCal.qMax>0?', con techo en '+refCal.qMax+' m³/h por rama (el bypass del propio equipo se abre ahí)':'')
+            : 'en línea directa sin bypass declarado, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q² sin techo — declara el acople real en CHK-078 si el equipo tiene bomba inyectora o bypass')
         : 'sin calentadores declarados'),
       manometro: 'la lectura del manómetro NO se suma a la curva del sistema (eso contaba doble el circuito en el modelo v1); se usa como verificación cruzada independiente',
       altitud: alt.m+' m.s.n.m.'+(alt.asumida?' (asumida, sede sin altitud confirmada)':' (según sede)'),
@@ -2502,12 +2744,14 @@ function tramosHtml(ficha){
         '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="accesoriosAlta" placeholder="Acces. alta pérdida" value="'+(t&&t.accesoriosAlta!=null?t.accesoriosAlta:'')+'">'+
         '<input type="number" step="1" min="1" data-tramo-idx="'+i+'" data-tramo-campo="nLineas" placeholder="Líneas paralelas" value="'+(t&&t.nLineas!=null?t.nLineas:'')+'">'+
       '</div>'+
+      '<label class="tramoManometroChk"><input type="checkbox" data-tramo-idx="'+i+'" data-tramo-campo="manometro"'+(t&&t.manometro?' checked':'')+'> El manómetro del filtro se lee justo después de este tramo</label>'+
       (alerta ? '<div class="fichaAlertaMsg">⚠ Supera el máximo de 8 pulgadas de diámetro permitido (Numeral 10.1).</div>' : '')+
     '</div>';
   });
   html += '<div class="tramoAyuda"><b>Normales</b> (K=1.0): codos, tees, uniones, válvulas de bola o compuerta abiertas. '+
     '<b>Alta pérdida</b> (K=5.0): válvula multipuerto del filtro, válvulas check, canastilla o prefiltro, válvulas parcialmente cerradas. '+
-    'Separarlos importa: una multipuerto pierde del orden de cinco codos.</div>';
+    'Separarlos importa: una multipuerto pierde del orden de cinco codos. '+
+    'Marca en qué tramo queda instalado el manómetro del filtro (CHK-084): la verificación cruzada suma la pérdida real hasta ahí, no solo la de succión — si no marcas ninguno, se usa por defecto solo la succión y puede subestimar el caudal despejado.</div>';
   html += '<button type="button" class="btn2" data-action="agregarTramo" style="margin-top:6px;">+ Agregar tramo</button>';
   html += '</div>';
   return html;
@@ -2636,6 +2880,11 @@ function renderResultadoV2(res, ficha){
     html += '<div class="motorNota">'+(c.coherente
       ? 'Coincide con el modelo dentro de '+Math.abs(c.desviacionPct).toFixed(0)+'%: dos estimados independientes que concuerdan, la confianza en el resultado es alta.'
       : '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. Alguno de los datos declarados no corresponde: revisa diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro sobre la lámina, o si la curva de bomba seleccionada es realmente la instalada.')+'</div>';
+  }
+
+  if(res.alertaCalentador){
+    html += '<div class="motorFila"><span class="motorValor alerta">⚠ Calentador fuera de rango</span></div>';
+    html += '<div class="motorNota">'+esc(res.alertaCalentador)+'</div>';
   }
 
   /* Contraste contra la ficha de entrega de obra: la brecha ES el hallazgo
@@ -3460,6 +3709,13 @@ function wireSingleItem(itemEl, it){
       while(ficha.tuberiaTramos.length <= idx) ficha.tuberiaTramos.push({});
       if(campo==='nombre' || campo==='lado'){
         ficha.tuberiaTramos[idx][campo] = inp.value || null;
+      } else if(campo==='manometro'){
+        // Un solo tramo puede tener el manómetro — al marcar uno se
+        // desmarcan los demás, tanto en la ficha como en la UI.
+        ficha.tuberiaTramos.forEach(function(t,j){ t.manometro = (j===idx) ? (inp.checked||null) : null; });
+        itemEl.querySelectorAll('[data-tramo-campo="manometro"]').forEach(function(chk){
+          if(chk!==inp) chk.checked = false;
+        });
       } else {
         ficha.tuberiaTramos[idx][campo] = inp.value===''? null : parseFloat(inp.value);
       }
