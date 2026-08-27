@@ -2261,7 +2261,12 @@ function _chartDonutCumplimiento(pct){
    tamano de insercion para que no se vea pixelada.
 
    `segmentos` es [{valor, color}]; los de valor 0 se omiten para que no
-   dejen una hendidura de 3 pt de color en la barra. */
+   dejen una hendidura de 3 pt de color en la barra. Lleva el mismo hairline
+   gris de 0.75 pt que las tarjetas y tablas del resto del informe: sin
+   borde, un bloque de color sólido sobre fondo blanco se ve plano y sin
+   límite propio; con él, la barra queda enmarcada como una "pista" de
+   medidor y cada segmento se separa del siguiente con una línea, en vez de
+   fundirse a ojo por el color. */
 function _barraApilada(contenedor, segmentos, ancho, alto){
   var vivos = segmentos.filter(function(sg){ return sg.valor > 0; });
   if(!vivos.length) vivos = [{valor:1, color:C_FILL_NOAPLICA}];
@@ -2279,7 +2284,7 @@ function _barraApilada(contenedor, segmentos, ancho, alto){
   });
 
   var t = contenedor.appendTable([vivos.map(function(){ return ''; })]);
-  t.setBorderWidth(0).setBorderColor('#FFFFFF');
+  t.setBorderWidth(0.75).setBorderColor(C_CELDA);
   var arriba = Math.round(alto/2);
   for(var i=0;i<vivos.length;i++){
     var celda = t.getCell(0,i);
