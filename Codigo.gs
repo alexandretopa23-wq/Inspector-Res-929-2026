@@ -1417,7 +1417,7 @@ function _tableroKPI(body, m){
   // "Resumen ejecutivo" de la portada (_portada) — esta sección cubre los
   // indicadores de gestión que no caben en esa tarjeta compacta, sin
   // repetir la misma gráfica dos veces en el informe.
-  _h1(body, '2. Tablero ejecutivo de indicadores de gestión');
+  _h1(body, '2. Tablero de indicadores de gestión');
 
   // Las cuatro cifras que decide un gerente de un vistazo van arriba como
   // tarjetas; la tabla de abajo queda para el detalle y la columna de
