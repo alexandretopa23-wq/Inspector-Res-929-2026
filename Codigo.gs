@@ -2308,8 +2308,11 @@ function _chipsLeyenda(contenedor, items, ancho){
     celda.setWidth(w);
     celda.setPaddingTop(5).setPaddingBottom(0).setPaddingLeft(i===0?0:6).setPaddingRight(0);
     var p = celda.getChild(0).asParagraph();
-    p.setText('■ '+it.etiqueta+'  '+it.valor)
-     .setFontSize(7.5).setBold(true).setForegroundColor(C_TITULO)
+    // setText() no devuelve el párrafo para encadenar (a diferencia de
+    // setFontSize/setBold/etc.) — hay que cortar la cadena aquí o el
+    // siguiente método se llama sobre null y truena en tiempo real.
+    p.setText('■ '+it.etiqueta+'  '+it.valor);
+    p.setFontSize(7.5).setBold(true).setForegroundColor(C_TITULO)
      .setSpacingBefore(0).setSpacingAfter(0);
     // El cuadrito toma el color de la serie; el texto se queda en gris para
     // que la leyenda no compita visualmente con la barra.
@@ -2363,8 +2366,9 @@ function _barrasCapitulos(body, m){
     cBar.setWidth(W_BAR).setPaddingTop(5).setPaddingBottom(3).setPaddingLeft(0).setPaddingRight(0);
     cPct.setWidth(W_PCT).setPaddingTop(3).setPaddingBottom(3).setPaddingLeft(8).setPaddingRight(0);
 
-    cLbl.getChild(0).asParagraph().setText(c.etiqueta)
-      .setFontSize(8).setBold(false).setForegroundColor(C_ENCABEZADO)
+    var pLbl = cLbl.getChild(0).asParagraph();
+    pLbl.setText(c.etiqueta);
+    pLbl.setFontSize(8).setBold(false).setForegroundColor(C_ENCABEZADO)
       .setSpacingBefore(0).setSpacingAfter(0);
 
     _barraApilada(cBar, [
@@ -2373,8 +2377,9 @@ function _barrasCapitulos(body, m){
     ], W_BAR, 9);
     _comprimirParrafos(cBar);
 
-    cPct.getChild(0).asParagraph().setText(c.pct+'%')
-      .setFontFamily(FUENTE_MONO).setFontSize(8.5).setBold(true)
+    var pPctCap = cPct.getChild(0).asParagraph();
+    pPctCap.setText(c.pct+'%');
+    pPctCap.setFontFamily(FUENTE_MONO).setFontSize(8.5).setBold(true)
       .setForegroundColor(_colorPct(c.pct))
       .setAlignment(DocumentApp.HorizontalAlignment.RIGHT)
       .setSpacingBefore(0).setSpacingAfter(0);
@@ -2389,8 +2394,9 @@ function _barrasCapitulos(body, m){
 function _tarjetaKPI(celda, etiqueta, valor, lectura, color){
   var c = _tarjetaEnCelda(celda);
   c.setPaddingTop(8).setPaddingBottom(8).setPaddingLeft(9).setPaddingRight(9);
-  c.getChild(0).asParagraph().setText(String(etiqueta).toUpperCase())
-    .setFontSize(6.5).setBold(true).setForegroundColor(C_TITULO)
+  var pEtq = c.getChild(0).asParagraph();
+  pEtq.setText(String(etiqueta).toUpperCase());
+  pEtq.setFontSize(6.5).setBold(true).setForegroundColor(C_TITULO)
     .setSpacingBefore(0).setSpacingAfter(1);
   c.appendParagraph(String(valor))
     .setFontFamily(FUENTE_MONO).setFontSize(19).setBold(true)
