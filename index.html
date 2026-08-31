@@ -664,6 +664,7 @@ var FICHA_CAMPOS = {
     {v:"3",l:"Velocidad 3 — 3000 RPM"},
     {v:"4",l:"Velocidad 4 / máxima — 3450 RPM"}
   ]},
+  bombaRPMObservada:{label:"RPM real leída en el variador, solo si difiere de la nominal de la velocidad seleccionada (las bombas VS son reprogramables en sitio — la curva de fábrica se escala por leyes de afinidad: Q∝N, H∝N²)",unit:"RPM",type:"number",step:"10"},
   tuberiaSuccionDiam:{label:"Diámetro tubería de succión (legado, solo si no hay tramos cargados)",unit:"pulg",type:"number",step:"0.5"},
   tuberiaDescargaDiam:{label:"Diámetro tubería de descarga / retorno (legado, solo si no hay tramos cargados)",unit:"pulg",type:"number",step:"0.5"},
   tuberiaLongitud:{label:"Longitud total de tubería (legado, solo si no hay tramos cargados)",unit:"m",type:"number",step:"1"},
@@ -734,7 +735,7 @@ var ITEM_FICHA_CAMPOS = {
   "CHK-044":["profMax","profMin","profIntermedia","volumenManual"],
   "CHK-204":["largo","ancho","areaManual","areaDiseno"],
   "CHK-079":["tipoUso","cubierta"],
-  "CHK-074":["bombaHP","bombaHz","bombasParalelo","bombaFamilia","bombaVelocidadVS","bombaVelocidadIntelliflo","bombaVelocidadWhisperVST"],
+  "CHK-074":["bombaHP","bombaHz","bombasParalelo","bombaFamilia","bombaVelocidadVS","bombaVelocidadIntelliflo","bombaVelocidadWhisperVST","bombaRPMObservada"],
   "CHK-078":["desnivelPiscinaTanque","tipoRetorno","estadoTuberia","tempAgua",
              "calentadorN","calentadorArreglo","calentadorTipo","calentadorAcople","presionPostCalentador",
              "caudalMedido","caudalDiseno","tiempoRecircDiseno","desnivelSuccionDescarga"],
@@ -924,6 +925,32 @@ function afinidadEntreHz(curva, hzOrigen, hzDestino){
   var d = (hzDestino && hzDestino>0) ? hzDestino : 60;
   var k = d/o;
   return curva.map(function(p){ return {q:p.q*k, h:p.h*k*k}; });
+}
+
+/* Ley de afinidad entre dos RPM arbitrarias, para las bombas VS de
+   velocidad seleccionable (SuperFlo VS, IntelliFlo VS+SVRS, WhisperFlo
+   VST). Cada "velocidad" trae una curva de fábrica a una RPM nominal,
+   pero esa RPM es reprogramable desde el variador: en campo aparece, por
+   ejemplo, la "velocidad 4" de una IntelliFlo puesta en 3000 y no en las
+   3110 RPM de fábrica. Cuando el inspector digita la RPM observada se
+   escala la curva de catálogo: Q ∝ N, H ∝ N². */
+function afinidadEntreRPM(curva, rpmNominal, rpmObservada){
+  if(!(rpmNominal>0) || !(rpmObservada>0) || rpmNominal===rpmObservada) return curva;
+  var k = rpmObservada/rpmNominal;
+  return curva.map(function(p){ return {q:p.q*k, h:p.h*k*k}; });
+}
+function notaAfinidadRPM(rpmNominal, rpmObservada){
+  if(!(rpmNominal>0) || !(rpmObservada>0) || rpmNominal===rpmObservada) return '';
+  return ' — curva escalada por afinidad de '+rpmNominal+' a '+rpmObservada+' RPM (RPM real leída en el variador)';
+}
+/* RPM nominal de fábrica de la velocidad seleccionada, para las familias
+   VS de velocidad seleccionable. Devuelve null para curva manual, familias
+   de velocidad única y bombaHz genérico. */
+function rpmNominalDeFicha(ficha){
+  if(ficha.bombaFamilia==='superflo_vs') return RPM_VS[ficha.bombaVelocidadVS] || null;
+  if(ficha.bombaFamilia==='intelliflo_vs') return RPM_INTELLIFLO[ficha.bombaVelocidadIntelliflo] || null;
+  if(ficha.bombaFamilia==='whisperflo_vst') return RPM_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST] || null;
+  return null;
 }
 
 /* Ajuste por mínimos cuadrados de la curva de bomba a H = a + b·Q + c·Q²
@@ -1249,21 +1276,24 @@ function resolverCurvaBombaV2(ficha){
   } else if(ficha.bombaFamilia==='superflo_vs'){
     var refVS = CURVAS_PENTAIR_VS[ficha.bombaVelocidadVS];
     if(!refVS) return {error:'Selecciona la velocidad en la que se encontró la bomba SuperFlo VS (ítem CHK-074).'};
-    var ajusteVS = interpolarCurvaCatalogo(refVS.curva);
+    var rpmNomVS = RPM_VS[ficha.bombaVelocidadVS] || null;
+    var ajusteVS = interpolarCurvaCatalogo(afinidadEntreRPM(refVS.curva, rpmNomVS, ficha.bombaRPMObservada));
     if(!ajusteVS) return {error:'No se pudo interpolar la curva de referencia.'};
-    origenCurva = {evalH:ajusteVS.evalH, qMax:ajusteVS.qMax, label:refVS.label};
+    origenCurva = {evalH:ajusteVS.evalH, qMax:ajusteVS.qMax, label:refVS.label + notaAfinidadRPM(rpmNomVS, ficha.bombaRPMObservada)};
   } else if(ficha.bombaFamilia==='intelliflo_vs'){
     var refIF = CURVAS_PENTAIR_INTELLIFLO[ficha.bombaVelocidadIntelliflo];
     if(!refIF) return {error:'Selecciona la velocidad en la que se encontró la bomba IntelliFlo VS+SVRS (ítem CHK-074).'};
-    var ajusteIF = interpolarCurvaCatalogo(refIF.curva);
+    var rpmNomIF = RPM_INTELLIFLO[ficha.bombaVelocidadIntelliflo] || null;
+    var ajusteIF = interpolarCurvaCatalogo(afinidadEntreRPM(refIF.curva, rpmNomIF, ficha.bombaRPMObservada));
     if(!ajusteIF) return {error:'No se pudo interpolar la curva de referencia.'};
-    origenCurva = {evalH:ajusteIF.evalH, qMax:ajusteIF.qMax, label:refIF.label};
+    origenCurva = {evalH:ajusteIF.evalH, qMax:ajusteIF.qMax, label:refIF.label + notaAfinidadRPM(rpmNomIF, ficha.bombaRPMObservada)};
   } else if(ficha.bombaFamilia==='whisperflo_vst'){
     var refWV = CURVAS_PENTAIR_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST];
     if(!refWV) return {error:'Selecciona la velocidad en la que se encontró la bomba WhisperFlo VST (ítem CHK-074).'};
-    var ajusteWV = interpolarCurvaCatalogo(refWV.curva);
+    var rpmNomWV = RPM_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST] || null;
+    var ajusteWV = interpolarCurvaCatalogo(afinidadEntreRPM(refWV.curva, rpmNomWV, ficha.bombaRPMObservada));
     if(!ajusteWV) return {error:'No se pudo interpolar la curva de referencia.'};
-    origenCurva = {evalH:ajusteWV.evalH, qMax:ajusteWV.qMax, label:refWV.label};
+    origenCurva = {evalH:ajusteWV.evalH, qMax:ajusteWV.qMax, label:refWV.label + notaAfinidadRPM(rpmNomWV, ficha.bombaRPMObservada)};
   } else if(ficha.bombaFamilia){
     var ref = seleccionarCurvaPentair(ficha.bombaFamilia, ficha.bombaHP);
     if(!ref) return {error:'Selecciona la familia de la bomba en la ficha técnica.'};
@@ -1404,6 +1434,16 @@ var ESCENARIOS_BANDA = [
   {id:'nominal',     kMul:1.0, dpMul:1.0, cMul:1.0},
   {id:'optimista',   kMul:0.8, dpMul:0.8, cMul:1.0}
 ];
+
+/* Por debajo de esta desviación (%) el caudal despejado del manómetro
+   —que es una medición— reemplaza al del modelo —que es una estimación—
+   como caudal de operación. El umbral de coherencia normal del cruce es
+   ±25 %; una divergencia negativa de esta magnitud ya no es "ruido de
+   medición" sino "el modelo de tramos está incompleto": la bomba trabaja
+   contra una resistencia real que no está en la ficha (válvula
+   estrangulada, válvula multipuerto del filtro, o bomba entregando por
+   debajo de su curva). */
+var DESVIACION_MANOMETRO_DOMINA = -40;
 
 function altitudDeSede(sede){
   if(sede && ALTITUD_SEDE[sede]!=null) return {m:ALTITUD_SEDE[sede], asumida:false};
@@ -1611,9 +1651,13 @@ function capacidadTanqueNorma(ficha, vVaso, area){
 }
 
 function rpmEstimado(ficha){
-  if(ficha.bombaFamilia==='superflo_vs') return RPM_VS[ficha.bombaVelocidadVS] || null;
-  if(ficha.bombaFamilia==='intelliflo_vs') return RPM_INTELLIFLO[ficha.bombaVelocidadIntelliflo] || null;
-  if(ficha.bombaFamilia==='whisperflo_vst') return RPM_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST] || null;
+  var nominal = rpmNominalDeFicha(ficha);
+  if(nominal!=null){
+    /* La RPM leída en el variador manda sobre la nominal de catálogo: las
+       bombas VS se reprograman en sitio (ver afinidadEntreRPM). Afecta
+       también el NPSHr, que escala con (RPM·√Q). */
+    return (ficha.bombaRPMObservada>0) ? ficha.bombaRPMObservada : nominal;
+  }
   var hz = (ficha.bombaHz>0) ? ficha.bombaHz : 60;
   return 3450*hz/60;
 }
@@ -1719,23 +1763,55 @@ function calcularHidraulicaV2(ficha, sede){
   if(!tramos.length) return {error:'Carga al menos un tramo de tubería con su diámetro (ítem CHK-078) para correr el modelo v2.'};
 
   var escNominal = ESCENARIOS_BANDA.filter(function(e){return e.id==='nominal';})[0];
-  var caudales = {};
+  var caudales = {}, caudalesManometro = {};
   ESCENARIOS_BANDA.forEach(function(esc){
     var op = encontrarPuntoOperacionV2(origenCurva, curvaSistemaV2(ficha,esc,tramos), origenCurva.qMax);
     caudales[esc.id] = op ? op.q : null;
+    caudalesManometro[esc.id] = caudalPorManometro(origenCurva, ficha, esc, tramos);
   });
   if(caudales.nominal==null){
     return {error:'No se encontró punto de operación: la bomba no alcanza a vencer la pérdida calculada del circuito. Revisa diámetros, longitudes y sobre todo el arreglo de los calentadores (en serie la pérdida se multiplica).'};
   }
-  var qNominal = caudales.nominal;
-  var qMin = (caudales.conservador!=null) ? caudales.conservador : qNominal;
-  var qMax = (caudales.optimista!=null) ? caudales.optimista : qNominal;
+  var qModelo = caudales.nominal;
+  var qModeloMin = (caudales.conservador!=null) ? caudales.conservador : qModelo;
+  var qModeloMax = (caudales.optimista!=null) ? caudales.optimista : qModelo;
 
-  /* El caudal medido manda: si hay caudalímetro, el modelo se degrada a
-     contraste y todas las derivadas se recalculan sobre el dato real. */
+  /* Verificación cruzada por manómetro: segundo estimado independiente,
+     despejado de la lectura de CHK-084 sobre la propia curva de bomba. */
+  var qManometro = caudalesManometro.nominal;
+  var cruce = null;
+  if(qManometro!=null && qModelo>0){
+    var desv = (qManometro-qModelo)/qModelo*100;
+    cruce = {caudal:qManometro, desviacionPct:desv, coherente:Math.abs(desv)<=25};
+  }
+
+  /* Caudal de operación, en orden de prioridad:
+       1. Caudalímetro en sitio — dato real, manda siempre.
+       2. Cruce del manómetro cuando contradice al modelo por lo BAJO más
+          allá de DESVIACION_MANOMETRO_DOMINA: la bomba trabaja contra una
+          resistencia que el modelo de tramos no captura. El manómetro es
+          medición; el modelo, estimación que ahí se sabe incompleta. La
+          banda se toma también del manómetro para los tres escenarios.
+       3. Modelo (curva de sistema × curva de bomba). */
   var medido = (ficha.caudalMedido>0) ? ficha.caudalMedido : null;
-  var qEfectivo = medido!=null ? medido : qNominal;
-  var fuente = medido!=null ? 'medido' : 'modelo';
+  var manometroDomina = medido==null && cruce!=null && !cruce.coherente &&
+    cruce.desviacionPct <= DESVIACION_MANOMETRO_DOMINA && qManometro>0;
+
+  var qEfectivo, fuente, qNominal, qMin, qMax;
+  if(medido!=null){
+    qEfectivo = medido; fuente = 'medido';
+    qNominal = qModelo; qMin = qModeloMin; qMax = qModeloMax;
+  } else if(manometroDomina){
+    var qsMan = [caudalesManometro.conservador, caudalesManometro.optimista, qManometro]
+      .filter(function(v){ return v!=null && isFinite(v) && v>0; });
+    qEfectivo = qManometro; fuente = 'manometro';
+    qNominal = qManometro;
+    qMin = qsMan.length ? Math.min.apply(null, qsMan) : qManometro;
+    qMax = qsMan.length ? Math.max.apply(null, qsMan) : qManometro;
+  } else {
+    qEfectivo = qModelo; fuente = 'modelo';
+    qNominal = qModelo; qMin = qModeloMin; qMax = qModeloMax;
+  }
 
   var der = derivadosDeCaudal(qEfectivo, ficha, tramos);
   var derLo = derivadosDeCaudal(qMin, ficha, tramos);
@@ -1777,12 +1853,6 @@ function calcularHidraulicaV2(ficha, sede){
 
   var hfSucc = hfSuccionV2(qEfectivo, ficha, escNominal, tramos);
   var npsh = npshV2(ficha, sede, qEfectivo, hfSucc, nBombas);
-  var qManometro = caudalPorManometro(origenCurva, ficha, escNominal, tramos);
-  var cruce = null;
-  if(qManometro!=null && qNominal>0){
-    var desv = (qManometro-qNominal)/qNominal*100;
-    cruce = {caudal:qManometro, desviacionPct:desv, coherente:Math.abs(desv)<=25};
-  }
 
   /* Contraste con la ficha de entrega de obra. El volumen implícito
      (Q_diseño × t_diseño) permite deducir qué convención usó el proveedor en
@@ -1819,6 +1889,7 @@ function calcularHidraulicaV2(ficha, sede){
     origen: origenCurva.label,
     caudal: qEfectivo, fuenteCaudal: fuente,
     caudalNominal: qNominal, caudalMin: qMin, caudalMax: qMax,
+    caudalModelo: qModelo, caudalModeloMin: qModeloMin, caudalModeloMax: qModeloMax,
     cabezal: cabezal,
     vSuccion: der.vSuccion, vDescarga: der.vDescarga, vFiltracion: der.vFiltracion,
     tramos: der.tramos,
@@ -1857,7 +1928,10 @@ function calcularHidraulicaV2(ficha, sede){
                             : '⚠ Ningún tramo de succión declara nLineas ≥ '+nBombas+': si cada bomba tiene su línea de succión independiente, decláralo en CHK-078 o el hf y la velocidad de succión saldrán calculados sobre el caudal total y no sobre Q/'+nBombas+'.';
             })())
         : 'una sola bomba sobre el circuito'),
-      manometro: 'la lectura del manómetro NO se suma a la curva del sistema (eso contaba doble el circuito en el modelo v1); se usa como verificación cruzada independiente',
+      manometro: 'la lectura del manómetro NO se suma a la curva del sistema (eso contaba doble el circuito en el modelo v1); se usa como verificación cruzada independiente'
+        + (fuente==='manometro' && cruce
+          ? '. En este vaso REEMPLAZÓ al modelo como caudal de operación: el caudal despejado del manómetro quedó '+Math.abs(cruce.desviacionPct).toFixed(0)+'% por debajo del modelado, señal de una restricción real (válvula estrangulada, válvula multipuerto del filtro, o bomba por debajo de su curva) que el modelo de tramos no ve'
+          : ''),
       altitud: alt.m+' m.s.n.m.'+(alt.asumida?' (asumida, sede sin altitud confirmada)':' (según sede)'),
       npshr: 'NPSHr estimado por velocidad específica de succión Nss='+NSS_ASUMIDO+' (referencia conservadora, no dato de fábrica)',
       volumen: vol.nota || 'sin datos suficientes de geometría',
@@ -2899,6 +2973,13 @@ function renderResultadoV2(res, ficha){
     html += '<div class="motorNota">El modelo estimó '+num(res.caudalNominal,2,'m³/h')+
       ' (banda '+num(res.caudalMin,1)+'–'+num(res.caudalMax,1)+'). '+
       'Todas las velocidades y tiempos de abajo están calculados sobre el dato medido, no sobre la estimación.</div>';
+  } else if(res.fuenteCaudal==='manometro'){
+    html += '<div class="motorFila"><span>Caudal <b>despejado del manómetro</b> (reemplaza al modelo)</span>'+
+      '<span class="motorValor alerta">'+res.caudal.toFixed(2)+' m³/h</span></div>';
+    html += '<div class="motorNota">⚠ El modelo de tramos estimaba '+num(res.caudalModelo,2,'m³/h')+
+      ' (banda '+num(res.caudalModeloMin,1)+'–'+num(res.caudalModeloMax,1)+'), pero el caudal que se despeja de la presión medida es mucho menor. '+
+      'Una divergencia así solo se explica por una resistencia real que el modelo no ve: válvula estrangulada, válvula multipuerto del filtro, o bomba entregando por debajo de su curva. '+
+      'Las velocidades y tiempos de abajo están calculados sobre el caudal del manómetro. Confírmalo con caudalímetro.</div>';
   } else {
     html += '<div class="motorFila"><span>Estimado por el modelo (banda de incertidumbre)</span>'+
       '<span class="motorBanda">'+num(res.caudalMin,1)+' – '+num(res.caudalMax,1)+' m³/h</span></div>';
@@ -2916,7 +2997,9 @@ function renderResultadoV2(res, ficha){
       '<span class="'+(c.coherente?'motorValor':'motorValor alerta')+'">'+c.caudal.toFixed(2)+' m³/h</span></div>';
     html += '<div class="motorNota">'+(c.coherente
       ? 'Coincide con el modelo dentro de '+Math.abs(c.desviacionPct).toFixed(0)+'%: dos estimados independientes que concuerdan, la confianza en el resultado es alta.'
-      : '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. Alguno de los datos declarados no corresponde: revisa diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro sobre la lámina, o si la curva de bomba seleccionada es realmente la instalada.')+'</div>';
+      : res.fuenteCaudal==='manometro'
+        ? '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. La divergencia es tan grande y por lo bajo que se adoptó este caudal como el de operación: hay una restricción real (válvula estrangulada, multipuerto del filtro, o bomba fuera de curva) que el modelo de tramos no captura. Verifícalo en campo y mide con caudalímetro.'
+        : '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. Alguno de los datos declarados no corresponde: revisa diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro sobre la lámina, o si la curva de bomba seleccionada es realmente la instalada.')+'</div>';
   }
 
   if(res.alertaCalentador){

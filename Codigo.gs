@@ -1719,20 +1719,27 @@ function _anexoFichaHidraulica(body, ficha){
     ['Caudal en el punto de operación', r.caudal!=null ? r.caudal.toFixed(2)+' m³/h' : 'Sin dato']
   ];
   if(esV2){
-    filasB1.push(['Origen del caudal', r.fuenteCaudal==='medido'
-      ? 'MEDIDO con caudalímetro en sitio (manda sobre la estimación)'
+    filasB1.push(['Origen del caudal',
+      r.fuenteCaudal==='medido' ? 'MEDIDO con caudalímetro en sitio (manda sobre la estimación)'
+      : r.fuenteCaudal==='manometro' ? 'DESPEJADO DEL MANÓMETRO: reemplaza al modelo porque el caudal de la presión medida quedó muy por debajo del modelado — hay una restricción real (válvula estrangulada, válvula multipuerto del filtro, o bomba por debajo de su curva) que el modelo de tramos no captura'
       : 'Estimado por el modelo']);
-    // Cuando manda el caudalímetro, el caudal del modelo no desaparece: se
-    // reporta al lado para que se vea cuánto se apartó la estimación de la
-    // medición, que es justamente lo que calibra la confianza en el modelo
+    // Cuando manda el caudalímetro o el manómetro, el caudal del modelo no
+    // desaparece: se reporta al lado para que se vea cuánto se apartó la
+    // estimación, que es justamente lo que calibra la confianza en el modelo
     // en los vasos donde NO hay instrumento.
     if(r.fuenteCaudal==='medido' && r.caudalNominal!=null){
       var brecha = (r.caudalNominal - r.caudal)/r.caudal*100;
       filasB1.push(['Caudal que estimaba el modelo', r.caudalNominal.toFixed(2)+' m³/h ('+
         (brecha>=0?'+':'')+brecha.toFixed(1)+' % frente a la medición)']);
     }
+    if(r.fuenteCaudal==='manometro' && r.caudalModelo!=null){
+      var brechaM = (r.caudalModelo - r.caudal)/r.caudal*100;
+      filasB1.push(['Caudal que estimaba el modelo de tramos', r.caudalModelo.toFixed(2)+' m³/h ('+
+        (brechaM>=0?'+':'')+brechaM.toFixed(1)+' % frente al manómetro)']);
+    }
     if(r.caudalMin!=null && r.caudalMax!=null){
-      filasB1.push(['Banda de incertidumbre del modelo', 'entre '+r.caudalMin.toFixed(1)+' y '+r.caudalMax.toFixed(1)+' m³/h']);
+      filasB1.push([r.fuenteCaudal==='manometro' ? 'Banda del caudal (despejada del manómetro)' : 'Banda de incertidumbre del modelo',
+        'entre '+r.caudalMin.toFixed(1)+' y '+r.caudalMax.toFixed(1)+' m³/h']);
     }
   }
   filasB1.push(['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : 'Sin dato']);
@@ -1829,7 +1836,9 @@ function _anexoFichaHidraulica(body, ficha){
           (r.cruceManometro.desviacionPct>=0?'+':'')+r.cruceManometro.desviacionPct.toFixed(1)+' %. '+
           (r.cruceManometro.coherente
             ? 'Son dos estimados independientes que concuerdan, así que la confianza en el resultado es alta.'
-            : 'La divergencia es alta. Conviene revisar diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro o la curva de bomba seleccionada.')]);
+            : r.fuenteCaudal==='manometro'
+              ? 'La divergencia es grande y por lo bajo: se adoptó este caudal como el de operación. Indica una restricción real (válvula estrangulada, válvula multipuerto del filtro o bomba fuera de curva) que el modelo de tramos no ve. Verificar en campo y medir con caudalímetro.'
+              : 'La divergencia es alta. Conviene revisar diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro o la curva de bomba seleccionada.')]);
       }
       if(r.diseno){
         var DIS = {
@@ -1979,6 +1988,10 @@ function _anexoMemoriaCalculo(body, ficha){
   var mapaVS = BOMBA_VELOCIDAD_POR_FAMILIA[ficha.bombaFamilia];
   if(mapaVS){
     filasBomba.push(['Velocidad configurada', mapaVS.labels[ficha[mapaVS.campo]] || 'Sin dato']);
+    if(ficha.bombaRPMObservada!=null && ficha.bombaRPMObservada>0){
+      filasBomba.push(['RPM real leída en el variador',
+        ficha.bombaRPMObservada+' RPM — la curva de fábrica se escaló por afinidad (Q∝N, H∝N²) a esta velocidad, no a la RPM nominal de la preselección']);
+    }
   }
   if(ficha.bombaFamilia==='manual'){
     filasBomba.push(['Frecuencia de medición de la curva manual', ficha.curvaManualHz!=null ? ficha.curvaManualHz+' Hz' : 'Sin dato: se asume igual a la de operación']);
