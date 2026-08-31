@@ -871,7 +871,12 @@ var CURVAS_PENTAIR_VS = {
 
 /* IntelliFlo VS+SVRS 3 HP: igual que la SuperFlo VS, se opera a una de sus
    velocidades fijas seleccionables desde el controlador — cada una con su
-   propia curva de fábrica, no pasa por afinidadPorHz. */
+   propia curva de fábrica, no pasa por afinidadPorHz.
+   Vel. 4 (3110 RPM): curva de fábrica actualizada 2026-09 con dos puntos
+   extra en la zona cercana al shutoff (55 y 70 GPM), donde la interpolación
+   lineal entre 0 y 100 GPM subestimaba el cabezal — importa para el cruce
+   del manómetro, que opera en ese tramo. Datos en pies/GPM del catálogo:
+   79ft@0, 75ft@55, 70ft@70, 57ft@100, 37ft@140, 32ft@150. */
 var CURVAS_PENTAIR_INTELLIFLO = {
   1:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 1, 1100 RPM (dato de fábrica)",hp:3,curva:[
     {q:0,h:3.05},{q:4.54,h:2.90},{q:6.81,h:2.74},{q:9.09,h:2.13},{q:11.36,h:1.52}
@@ -883,7 +888,7 @@ var CURVAS_PENTAIR_INTELLIFLO = {
     {q:0,h:13.72},{q:13.63,h:11.89},{q:22.71,h:7.92},{q:24.98,h:6.71},{q:26.12,h:5.49}
   ]},
   4:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 4, 3110 RPM (dato de fábrica)",hp:3,curva:[
-    {q:0,h:24.08},{q:22.71,h:17.37},{q:31.80,h:11.28},{q:34.07,h:9.75}
+    {q:0,h:24.08},{q:12.49,h:22.86},{q:15.90,h:21.34},{q:22.71,h:17.37},{q:31.80,h:11.28},{q:34.07,h:9.75}
   ]},
   5:{label:"IntelliFlo VS+SVRS 3 HP — Velocidad 5 / máxima, 3450 RPM (dato de fábrica)",hp:3,curva:[
     {q:0,h:29.57},{q:16.81,h:27.43},{q:23.39,h:24.38},{q:28.16,h:21.34},{q:31.80,h:18.29},{q:38.61,h:11.89}
