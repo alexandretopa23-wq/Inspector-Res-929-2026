@@ -1333,11 +1333,20 @@ function _tarjetaDatos(contenedor, filas, opts){
     var etq = fila.getCell(0), val = fila.getCell(1);
     etq.setWidth(anchoEtq).setBackgroundColor(C_HEADER_TABLA);
     val.setWidth(ancho-anchoEtq).setBackgroundColor('#FFFFFF');
-    etq.setPaddingTop(6).setPaddingBottom(6).setPaddingLeft(9).setPaddingRight(9);
-    val.setPaddingTop(6).setPaddingBottom(6).setPaddingLeft(9).setPaddingRight(9);
-    etq.getChild(0).asParagraph().setFontSize(8.5).setBold(true).setForegroundColor(C_TITULO);
+    // Alto de fila reducido en todo el informe: padding vertical mínimo y
+    // párrafo sin espaciado extra ni interlineado. El texto largo sigue
+    // creciendo lo necesario para caber completo, solo se quita el aire.
+    etq.setPaddingTop(2).setPaddingBottom(2).setPaddingLeft(9).setPaddingRight(9);
+    val.setPaddingTop(2).setPaddingBottom(2).setPaddingLeft(9).setPaddingRight(9);
+    etq.setVerticalAlignment(DocumentApp.VerticalAlignment.CENTER);
+    val.setVerticalAlignment(DocumentApp.VerticalAlignment.CENTER);
+    var C = DocumentApp.HorizontalAlignment.CENTER;
+    var pe = etq.getChild(0).asParagraph();
+    pe.setFontSize(8.5).setBold(true).setForegroundColor(C_TITULO).setAlignment(C)
+      .setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
     var pv = val.getChild(0).asParagraph();
-    pv.setFontSize(9.5).setBold(true).setForegroundColor(C_ENCABEZADO);
+    pv.setFontSize(9.5).setBold(false).setForegroundColor(C_ENCABEZADO).setAlignment(C)
+      .setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
     if(opts.mono) pv.setFontFamily(FUENTE_MONO);
   }
   return t;
@@ -1383,22 +1392,33 @@ function _rotulo(contenedor, txt){
     .setSpacingBefore(10).setSpacingAfter(3);
 }
 
-/* Nota al pie de sección: texto pequeño, gris y en cursiva. */
-function _nota(contenedor, txt){
+/* Párrafo de cuerpo del informe: Arial 11, peso normal, sin cursiva y
+   justificado. Es el único estilo admitido para texto corrido (objetivo,
+   hallazgos, conclusión, párrafos y observaciones de los anexos). La letra
+   pequeña y en cursiva se reserva para los pies de imagen. */
+function _cuerpo(contenedor, txt){
   return contenedor.appendParagraph(txt)
-    .setFontSize(8.5).setItalic(true).setForegroundColor(C_TITULO)
+    .setFontFamily(FUENTE).setFontSize(11).setBold(false).setItalic(false)
+    .setForegroundColor(C_TITULO)
+    .setAlignment(DocumentApp.HorizontalAlignment.JUSTIFY)
     .setSpacingAfter(8);
+}
+
+/* Aclaraciones, alcances y observaciones al pie de sección. Antes iban en
+   cuerpo pequeño y cursiva; ahora comparten el mismo Arial 11 normal y
+   justificado que el resto del texto corrido. */
+function _nota(contenedor, txt){
+  return _cuerpo(contenedor, txt);
 }
 
 function _objetivo(body, area){
   _h1(body, '1. Objetivo');
-  body.appendParagraph(
+  _cuerpo(body,
     'Verificar el cumplimiento de los criterios técnicos constructivos y de seguridad ' +
     'establecidos en la Resolución 929 de 2026 y su Anexo Técnico para el vaso de piscina ' +
     'evaluado, documentar las condiciones observadas con evidencia fotográfica, clasificar ' +
     'los hallazgos por nivel de riesgo y establecer el plan de acción con responsables y ' +
-    'fechas de cierre.'
-  ).setForegroundColor(C_TITULO);
+    'fechas de cierre.');
 
   // Aclaración de alcance: sin ella, un lector que compara dos informes
   // segmentados del mismo vaso ve dos porcentajes distintos y asume error.
@@ -1475,8 +1495,15 @@ function _tablaCapitulos(body, m){
 
   var datos = [['Capítulo','Ítems','Cumple','No cumple','Fuera de alcance','% cumplimiento (Res. 929)']];
   var pcts = [null]; // paralelo a `datos`, guarda el % de cada fila para colorear después
-  Object.keys(m.porCapitulo).forEach(function(cap){
+  // Se ordena de menor a mayor % de cumplimiento para que la tabla siga la
+  // misma secuencia que la gráfica de barras de arriba (crítico primero).
+  var capsOrdenados = Object.keys(m.porCapitulo).map(function(cap){
     var c = m.porCapitulo[cap];
+    var base = c.total - c.fueraDelDenominador;
+    return {cap:cap, c:c, pct: base>0 ? Math.round(100*c.cumpleEnAlcance/base) : 0};
+  }).sort(function(a,b){ return a.pct - b.pct; });
+  capsOrdenados.forEach(function(o){
+    var cap = o.cap, c = o.c;
     // FIX histórico: antes el % por capítulo se calculaba contra c.total
     // (incluyendo "No aplica"), mientras que el % global excluía "No
     // aplica" del denominador — no reconciliaban. Ahora ambos usan el mismo
@@ -1508,7 +1535,7 @@ function _hallazgosConFotos(body, filas, fotos){
   });
 
   if(!conHallazgo.length){
-    body.appendParagraph('No se registraron hallazgos abiertos en esta inspección.')
+    _cuerpo(body, 'No se registraron hallazgos abiertos en esta inspección.')
         .setForegroundColor(C_OK);
     return;
   }
@@ -1571,8 +1598,7 @@ function _anexoFotografico(body, filas, fotos){
   });
 
   if(!conFoto.length){
-    body.appendParagraph('No se registró evidencia fotográfica en esta inspección.')
-        .setForegroundColor(C_TITULO).setItalic(true);
+    _cuerpo(body, 'No se registró evidencia fotográfica en esta inspección.');
     return;
   }
 
@@ -1617,9 +1643,11 @@ function _insertarFotos(body, archivos, rotulo){
   if(!archivos || !archivos.length) return;
   _rotulo(body, rotulo);
   var anchoCelda = Math.floor(ANCHO_UTIL/2);            // 252 pt por columna
-  // Una sola foto no se estira a todo el ancho: se topa en 330 pt para que
-  // una imagen vertical no ocupe la página entera.
-  var maxW = archivos.length>1 ? anchoCelda-24 : 330;
+  // Mismo ancho tope para todas las fotos —con una o con dos— para que el
+  // anexo quede parejo y ocupe menos folios. La imagen y su pie van
+  // centrados en la celda.
+  var CEN = DocumentApp.HorizontalAlignment.CENTER;
+  var maxW = 190;
   var tabla = body.appendTable();
   var fila = tabla.appendTableRow();
   archivos.slice(0,2).forEach(function(file){
@@ -1631,8 +1659,10 @@ function _insertarFotos(body, archivos, rotulo){
     var esc = Math.min(1, maxW / img.getWidth());
     img.setWidth(Math.round(img.getWidth()*esc));
     img.setHeight(Math.round(img.getHeight()*esc));
+    img.getParent().asParagraph().setAlignment(CEN);
     celda.appendParagraph(file.getName())
          .setFontSize(7).setFontFamily(FUENTE_MONO).setForegroundColor(C_TITULO)
+         .setItalic(true).setAlignment(CEN)
          .setSpacingBefore(4).setSpacingAfter(0);
   });
   // Con una sola foto la tabla queda de una columna a ancho completo — no
@@ -1674,8 +1704,7 @@ function _anexoFichaHidraulica(body, ficha){
   _h1(body, '10. Anexo técnico B: ficha hidráulica');
   var r = ficha.motorResultado;
   if(!r || r.error){
-    body.appendParagraph(r && r.error ? ('Sin resultado válido: '+r.error) : 'No se calculó el caudal y las velocidades para este vaso en la PWA.')
-        .setForegroundColor(C_TITULO).setItalic(true);
+    _cuerpo(body, r && r.error ? ('Sin resultado válido: '+r.error) : 'No se calculó el caudal y las velocidades para este vaso en la PWA.');
     return;
   }
   var esV2 = (r.modelo === 'v2');
@@ -1893,8 +1922,7 @@ function _anexoDimensionamiento(body, ficha){
   _h1(body, '11. Anexo técnico C: dimensionamiento normativo');
   var r = ficha.aforoResultado;
   if(!r || r.error){
-    body.appendParagraph(r && r.error ? ('Sin resultado válido: '+r.error) : 'No se calculó el aforo ni la dotación sanitaria para este vaso en la PWA.')
-        .setForegroundColor(C_TITULO).setItalic(true);
+    _cuerpo(body, r && r.error ? ('Sin resultado válido: '+r.error) : 'No se calculó el aforo ni la dotación sanitaria para este vaso en la PWA.');
     return;
   }
   _h2(body, 'C.1 Aforo máximo');
@@ -1944,6 +1972,10 @@ function _anexoMemoriaCalculo(body, ficha){
     ['Frecuencia de operación', ficha.bombaHz!=null ? ficha.bombaHz+' Hz' : '60 Hz (valor por defecto)'],
     ['Origen de la curva', BOMBA_FAMILIA_LABEL[ficha.bombaFamilia] || 'Sin dato']
   ];
+  if(ficha.bombasParalelo!=null && ficha.bombasParalelo>1){
+    filasBomba.push(['Bombas iguales en paralelo',
+      ficha.bombasParalelo+' — cada una trasiega ~1/'+ficha.bombasParalelo+' del caudal total; la curva del conjunto es H(Q)=H_una(Q/'+ficha.bombasParalelo+')']);
+  }
   var mapaVS = BOMBA_VELOCIDAD_POR_FAMILIA[ficha.bombaFamilia];
   if(mapaVS){
     filasBomba.push(['Velocidad configurada', mapaVS.labels[ficha[mapaVS.campo]] || 'Sin dato']);
@@ -2037,6 +2069,9 @@ function _anexoMemoriaCalculo(body, ficha){
       _tarjetaDatos(body, [
         ['Modelo de cálculo', 'v2'],
         ['Coeficiente de Hazen-Williams (C)', String(sup.C)+' (estado de la tubería: '+String(sup.estadoTuberia)+')'],
+        ['Bombas en paralelo', (ficha.bombasParalelo>1)
+          ? (sup.bombas ? String(sup.bombas) : String(ficha.bombasParalelo)+' bombas iguales en paralelo')+' (Karassik et al., 2008).'
+          : 'Una sola bomba sobre el circuito'],
         ['Pérdida por accesorios', String(sup.kAccesorios)+' (Crane Co., 2022).'],
         ['Carga estática', String(sup.Hgeo)],
         ['Retorno al vaso', String(sup.retorno)],
@@ -2057,7 +2092,11 @@ function _anexoMemoriaCalculo(body, ficha){
         'familias EQ Series, IntelliFlo VS+SVRS, WhisperFlo VST y WhisperFloXF, corrige el punto de ' +
         'medida del manómetro con su cota respecto a la lámina, y modela el acople del calentador: ' +
         'una bomba inyectora propia no carga la línea principal, un bypass la carga con techo y un ' +
-        'montaje en línea directa la carga sin techo.');
+        'montaje en línea directa la carga sin techo. También admite varias bombas iguales ' +
+        'operando en paralelo sobre un mismo circuito: a igual cabezal los caudales se suman, ' +
+        'así que la curva del conjunto de N bombas es la de una sola evaluada en Q/N. Como la ' +
+        'curva del sistema crece con el cuadrado del caudal, duplicar bombas no duplica el ' +
+        'caudal: el punto de operación sube a más cabezal y menos caudal por bomba.');
     } else {
       _tarjetaDatos(body, [
         ['Modelo de cálculo', 'v1 (legado)'],
@@ -2108,13 +2147,15 @@ function _referencias(body, incluirTecnicas, numero){
   if(incluirTecnicas){
     refs.push('Crane Co. (2022). Flow of fluids through valves, fittings, and pipe (Technical Paper No. 410).');
     refs.push('Hydraulic Institute. (2017). Rotodynamic pumps: Guideline for NPSH margin (ANSI/HI 9.6.1-2017).');
+    refs.push('Karassik, I. J., Messina, J. P., Cooper, P., & Heald, C. C. (2008). Pump handbook (4.ª ed.). McGraw-Hill.');
   }
   // Orden alfabético por autor, como pide APA, y con sangría francesa: la
   // segunda línea de cada referencia entra 0.5" respecto a la primera.
   refs.sort();
   refs.forEach(function(r){
     body.appendParagraph(r)
-        .setFontSize(9.5).setForegroundColor(C_TITULO)
+        .setFontFamily(FUENTE).setFontSize(11).setBold(false).setItalic(false)
+        .setForegroundColor(C_TITULO)
         .setIndentFirstLine(0).setIndentStart(36)
         .setLineSpacing(1.5).setSpacingAfter(10);
   });
@@ -2166,7 +2207,7 @@ function _conclusion(body, m, sede, piscina, area){
   txt += 'La condición general se califica como: ' + _semaforo(m.pctCumplimiento) + '.';
   // Texto corrido en color normal: el rojo se reserva para estados y niveles
   // de riesgo puntuales, no para párrafos enteros.
-  body.appendParagraph(txt).setForegroundColor(C_TITULO);
+  _cuerpo(body, txt);
 }
 
 function _responsabilidades(body, responsable){
@@ -2211,9 +2252,12 @@ function _estiloTabla(tabla, conEncabezado, widths){
       var celda = fila.getCell(c);
       if(widths && widths[c]) celda.setWidth(widths[c]);
       celda.setBackgroundColor(esEncabezado ? C_HEADER_TABLA : (r%2===0 ? '#FFFFFF' : C_FONDO));
-      celda.setPaddingTop(5).setPaddingBottom(5).setPaddingLeft(8).setPaddingRight(8);
+      celda.setPaddingTop(2).setPaddingBottom(2).setPaddingLeft(8).setPaddingRight(8);
+      celda.setVerticalAlignment(DocumentApp.VerticalAlignment.CENTER);
       var p = celda.getChild(0).asParagraph();
-      p.setFontSize(esEncabezado ? 8.5 : 9).setForegroundColor(esEncabezado ? C_ENCABEZADO : C_TITULO);
+      p.setFontSize(esEncabezado ? 8.5 : 9).setForegroundColor(esEncabezado ? C_ENCABEZADO : C_TITULO)
+       .setAlignment(DocumentApp.HorizontalAlignment.CENTER)
+       .setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
       if(esEncabezado) p.setBold(true);
     }
   }

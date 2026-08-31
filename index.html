@@ -634,6 +634,7 @@ var FICHA_CAMPOS = {
   ]},
   bombaHP:{label:"Potencia de la bomba",unit:"HP",type:"number",step:"0.25"},
   bombaHz:{label:"Frecuencia de operación",unit:"Hz",type:"number",step:"1",placeholder:"60"},
+  bombasParalelo:{label:"Número de bombas iguales operando en paralelo sobre el mismo circuito (deja 1 si es una sola)",unit:"u",type:"number",step:"1",placeholder:"1"},
   bombaFamilia:{label:"Origen de la curva de la bomba",type:"select",options:[
     {v:"superflo",l:"Pentair SuperFlo (velocidad única)"},
     {v:"superflo_vs",l:"Pentair SuperFlo VS 2.2 HP (velocidad seleccionable — dato de fábrica)"},
@@ -733,7 +734,7 @@ var ITEM_FICHA_CAMPOS = {
   "CHK-044":["profMax","profMin","profIntermedia","volumenManual"],
   "CHK-204":["largo","ancho","areaManual","areaDiseno"],
   "CHK-079":["tipoUso","cubierta"],
-  "CHK-074":["bombaHP","bombaHz","bombaFamilia","bombaVelocidadVS","bombaVelocidadIntelliflo","bombaVelocidadWhisperVST"],
+  "CHK-074":["bombaHP","bombaHz","bombasParalelo","bombaFamilia","bombaVelocidadVS","bombaVelocidadIntelliflo","bombaVelocidadWhisperVST"],
   "CHK-078":["desnivelPiscinaTanque","tipoRetorno","estadoTuberia","tempAgua",
              "calentadorN","calentadorArreglo","calentadorTipo","calentadorAcople","presionPostCalentador",
              "caudalMedido","caudalDiseno","tiempoRecircDiseno","desnivelSuccionDescarga"],
@@ -1623,7 +1624,7 @@ function rpmEstimado(ficha){
    del prefiltro se colmata, hf_succión se dispara y el margen se acaba.
    NPSHr se ESTIMA por velocidad específica de succión: es una referencia, no
    un dato de fábrica, y así queda declarado. */
-function npshV2(ficha, sede, qOp, hfSucc){
+function npshV2(ficha, sede, qOp, hfSucc, nBombas){
   var sumergencia = (ficha.tanqueEquilibrio==='si' && ficha.tanqueNivel>0) ? ficha.tanqueNivel : null;
   if(sumergencia==null) return null;
   var alt = altitudDeSede(sede);
@@ -1632,7 +1633,12 @@ function npshV2(ficha, sede, qOp, hfSucc){
   var pvap = presionVaporAguaKpa(temp);
   var npsha = kpaAMetros(patm-pvap) + sumergencia - (hfSucc||0);
   var rpm = rpmEstimado(ficha);
-  var npshr = (qOp>0 && rpm>0) ? Math.pow(rpm*Math.sqrt(qOp)/NSS_ASUMIDO, 4/3) : null;
+  /* NPSHr se evalúa por BOMBA: con N bombas en paralelo cada una trasiega
+     qOp/N, no el caudal total del circuito. hfSucc ya viene por línea de
+     succión (nLineas del tramo), así que el NPSHa no se divide. */
+  var nB = (nBombas>0) ? nBombas : 1;
+  var qPorBomba = qOp/nB;
+  var npshr = (qPorBomba>0 && rpm>0) ? Math.pow(rpm*Math.sqrt(qPorBomba)/NSS_ASUMIDO, 4/3) : null;
   return {npsha:npsha, npshr:npshr, margen:(npshr!=null ? npsha-npshr : null),
     altitud:alt.m, altitudAsumida:alt.asumida,
     temp:temp, tempAsumida:(ficha.tempAgua==null),
@@ -1686,6 +1692,29 @@ function calcularHidraulicaV2(ficha, sede){
   var rc = resolverCurvaBombaV2(ficha);
   if(rc.error) return {error:rc.error};
   var origenCurva = rc.curva;
+
+  /* Varias bombas IGUALES en paralelo sobre un mismo circuito. La curva
+     combinada de N bombas idénticas es la de una sola desplazada en caudal:
+     a un cabezal dado el conjunto entrega N veces el caudal de una, es decir
+     H_conj(Q) = H_una(Q/N). El punto de operación se cruza igual contra la
+     curva del sistema; como esa curva del sistema sube con Q², duplicar
+     bombas NO duplica el caudal — se sube por la curva del sistema a más
+     cabezal y menos caudal por bomba. Cada tramo de succión debe llevar
+     nLineas = nº de líneas de succión independientes (una por bomba) para
+     que la velocidad y el hf de succión se calculen sobre Q/N y no sobre Q.
+     Requiere que las bombas sean del mismo modelo/curva; con bombas distintas
+     hay que cargar la curva manual del conjunto. */
+  var nBombas = (ficha.bombasParalelo>0) ? Math.round(ficha.bombasParalelo) : 1;
+  if(nBombas>1){
+    var curvaUna = origenCurva;
+    origenCurva = {
+      evalH: function(q){ return curvaUna.evalH(q/nBombas); },
+      qMax: curvaUna.qMax*nBombas,
+      label: curvaUna.label+' — '+nBombas+' bombas iguales en paralelo (cada una entrega Q/'+nBombas+')',
+      r2: curvaUna.r2
+    };
+  }
+
   var tramos = tramosParaV2(ficha);
   if(!tramos.length) return {error:'Carga al menos un tramo de tubería con su diámetro (ítem CHK-078) para correr el modelo v2.'};
 
@@ -1747,7 +1776,7 @@ function calcularHidraulicaV2(ficha, sede){
   var tRecircHi = (vol.v!=null && qMin>0) ? vol.v/qMin : null;
 
   var hfSucc = hfSuccionV2(qEfectivo, ficha, escNominal, tramos);
-  var npsh = npshV2(ficha, sede, qEfectivo, hfSucc);
+  var npsh = npshV2(ficha, sede, qEfectivo, hfSucc, nBombas);
   var qManometro = caudalPorManometro(origenCurva, ficha, escNominal, tramos);
   var cruce = null;
   if(qManometro!=null && qNominal>0){
@@ -1820,6 +1849,14 @@ function calcularHidraulicaV2(ficha, sede){
             : ficha.calentadorAcople==='bypass_linea' ? 'derivación con bypass en la línea principal, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q²'+(refCal.qMax>0?', con techo en '+refCal.qMax+' m³/h por rama (el bypass del propio equipo se abre ahí)':'')
             : 'en línea directa sin bypass declarado, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q² sin techo — declara el acople real en CHK-078 si el equipo tiene bomba inyectora o bypass')
         : 'sin calentadores declarados'),
+      bombas: (nBombas>1
+        ? nBombas+' bombas iguales en paralelo sobre un mismo circuito. Curva combinada por el principio estándar de bombas en paralelo: a igual cabezal los caudales se suman, es decir H_conjunto(Q)=H_una(Q/'+nBombas+') (Karassik et al., 2008, cap. 8). El caudal reportado es el TOTAL del circuito; cada bomba entrega ~Q/'+nBombas+'. Válido solo si las '+nBombas+' bombas son del mismo modelo y comparten el colector de descarga; con bombas de curva distinta hay que cargar la curva manual del conjunto. '
+          + ((function(){
+              var okSucc = (tramos||[]).some(function(t){ return t.lado==='succion' && (t.nLineas||1) >= nBombas; });
+              return okSucc ? 'Cada bomba succiona por su propia línea (nLineas declarado en el tramo de succión).'
+                            : '⚠ Ningún tramo de succión declara nLineas ≥ '+nBombas+': si cada bomba tiene su línea de succión independiente, decláralo en CHK-078 o el hf y la velocidad de succión saldrán calculados sobre el caudal total y no sobre Q/'+nBombas+'.';
+            })())
+        : 'una sola bomba sobre el circuito'),
       manometro: 'la lectura del manómetro NO se suma a la curva del sistema (eso contaba doble el circuito en el modelo v1); se usa como verificación cruzada independiente',
       altitud: alt.m+' m.s.n.m.'+(alt.asumida?' (asumida, sede sin altitud confirmada)':' (según sede)'),
       npshr: 'NPSHr estimado por velocidad específica de succión Nss='+NSS_ASUMIDO+' (referencia conservadora, no dato de fábrica)',
@@ -2989,6 +3026,7 @@ function renderResultadoV2(res, ficha){
   var s = res.supuestos;
   html += '<div class="motorSupuestos"><b>Memoria de cálculo — supuestos declarados</b><br>'+
     '· Hazen-Williams C='+s.C+' — '+esc(s.estadoTuberia)+'<br>'+
+    (s.bombas ? '· Bombas: '+esc(s.bombas)+'<br>' : '')+
     '· Accesorios: '+esc(s.kAccesorios)+'<br>'+
     '· Carga estática: '+esc(s.Hgeo)+'<br>'+
     '· Retorno: '+esc(s.retorno)+'<br>'+
