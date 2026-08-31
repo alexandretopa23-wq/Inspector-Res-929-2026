@@ -675,7 +675,13 @@ var FICHA_CAMPOS = {
     {v:"arena",l:"Arena / medio granular"},{v:"cartucho",l:"Cartucho"},{v:"de",l:"Tierra de diatomeas (D.E.)"}
   ]},
   filtroArea:{label:"Área filtrante",unit:"m²",type:"number",step:"0.01"},
-  presionManometro:{label:"Presión leída en el manómetro del filtro",unit:"PSI",type:"number",step:"0.5"},
+  presionManometro:{label:"Presión leída en el manómetro del filtro (entrada del filtro)",unit:"PSI",type:"number",step:"0.5"},
+  presionSalidaFiltro:{label:"Presión leída en el manómetro de SALIDA del filtro, si hay uno (con las dos lecturas el ΔP real del filtro entra al modelo — así un lecho sucio deja de ser invisible)",unit:"PSI",type:"number",step:"0.5"},
+  filtroValvula:{label:"¿Cómo se conecta el filtro al circuito? (fija la cota relativa de los dos manómetros)",type:"select",options:[
+    {v:"bateria",l:"Batería de válvulas o colector — bocas de entrada y salida a distinta altura (entrada arriba, ~0.4 m)"},
+    {v:"selectora",l:"Válvula selectora multipuerto — entrada y salida en la misma válvula, a la misma cota"}
+  ]},
+  desnivelManometrosFiltro:{label:"Diferencia de altura entre el manómetro de ENTRADA y el de SALIDA del filtro, medida o estimada en sitio — POSITIVO si el de entrada está más ARRIBA, NEGATIVO si está más abajo, 0 si están a la misma cota. Si se digita, reemplaza el valor típico (0.4 m) que asume el modelo. El manómetro más bajo lee de más ~1.4 PSI por metro",unit:"m",type:"number",step:"0.05"},
   /* --- Circuito real: tanque de equilibrio, carga estática y calentadores ---
      Todos opcionales. El motor solo pasa al modelo v2 cuando tanqueEquilibrio
      está declarado (sí o no); mientras tanto corre el v1 legado intacto, así
@@ -746,8 +752,8 @@ var ITEM_FICHA_CAMPOS = {
      no en CHK-078. El motor las lee desde sess.ficha sin importar dónde se
      hayan diligenciado, porque la ficha es fuente única. */
   "CHK-102":["tanqueEquilibrio","tanqueLargo","tanqueAncho","tanqueNivel"],
-  "CHK-083":["filtroTipo","filtroArea"],
-  "CHK-084":["presionManometro","alturaManometro"],
+  "CHK-083":["filtroTipo","filtroArea","filtroValvula"],
+  "CHK-084":["presionManometro","presionSalidaFiltro","desnivelManometrosFiltro","alturaManometro"],
   "CHK-197":["inodoroHEncontrados","inodoroMEncontrados","orinalesEncontrados","vestieresEncontrados"],
   "CHK-198":["duchasEncontradas"],
   "CHK-199":["lavamanosEncontrados"]
@@ -1582,12 +1588,78 @@ function tramosParaV2(ficha){
   ];
 }
 
-function curvaSistemaV2(ficha, esc, tramos){
+/* ΔP del filtro medido con los dos manómetros, CORREGIDO por la diferencia de
+   cota entre ellos. Un manómetro lee presión estática LOCAL, no energía: si el
+   de salida está montado más abajo que el de entrada, gana una columna
+   hidrostática ρg·Δz que NO es pérdida del filtro. La pérdida real del lecho
+   es  h_L = (P_entrada − P_salida)·0.703 + Δz , con Δz = cota(entrada) −
+   cota(salida) (positivo si el de entrada está más arriba). Sin esa corrección
+   un filtro limpio con los manómetros a distinta altura puede dar ΔP bruto ≤ 0
+   sin que haya nada mal. Solo si h_L ≤ 0 DESPUÉS de corregir la lectura es de
+   verdad no física (manómetros descalibrados, tomas cambiadas, o sin flujo por
+   el lecho). Q_ref es el caudal al que se tomó la lectura (caudalímetro si
+   hay, si no el despejado del propio manómetro); la pérdida se escala
+   LINEALMENTE con el caudal a partir de ahí (ver hLFiltroRefV2 /
+   curvaSistemaV2). No se cuenta doble con el cruce del manómetro: ese solo
+   lleva la pérdida hasta la ENTRADA del filtro. */
+var DESNIVEL_MANOMETROS_FILTRO_TIPICO = 0.4; // m: la boca de entrada del filtro
+  // queda por encima de la de salida en una batería de válvulas / colector normal.
+/* Piso de pérdida creíble de un lecho de arena. La arena ofrece resistencia
+   siempre: un lecho recién retrolavado, a caudal de filtración normal, pierde
+   del orden de 2-5 PSI flange a flange contando el underdrain y las toberas.
+   Un h_L corregido por debajo de ~0.7 m c.a. (1 PSI) en un filtro de arena
+   solo se explica si el caudal real es muy bajo o si la instrumentación no es
+   de fiar (manómetros descalibrados, aire en la línea de toma, poco flujo por
+   el lecho) — NO se puede leer como "filtro limpio". Se marca la sospecha; el
+   término K igual entra (un K chico es inofensivo), pero el informe advierte
+   que no se concluya nada sobre el estado del lecho a partir de esa lectura. */
+var PISO_HL_ARENA = 0.7; // m c.a.
+function deltaPFiltroMedidoV2(ficha){
+  var pin = ficha.presionManometro, pout = ficha.presionSalidaFiltro;
+  if(!(pin>0) || !(pout>0)) return null;
+  var dz, dzFuente;
+  if(ficha.desnivelManometrosFiltro!=null && isFinite(ficha.desnivelManometrosFiltro)){
+    dz = ficha.desnivelManometrosFiltro; dzFuente = 'medido';
+  } else if(ficha.filtroValvula === 'selectora'){
+    dz = 0; dzFuente = 'selectora'; // entrada y salida en la misma válvula → misma cota
+  } else if(ficha.filtroValvula === 'bateria'){
+    dz = DESNIVEL_MANOMETROS_FILTRO_TIPICO; dzFuente = 'tipicoDeclarado';
+  } else {
+    dz = DESNIVEL_MANOMETROS_FILTRO_TIPICO; dzFuente = 'tipicoAsumido';
+  }
+  var mcaBruto = (pin - pout) * 0.703; // PSI → m c.a.
+  var mcaNeto = mcaBruto + dz;
+  var esArena = (ficha.filtroTipo === 'arena');
+  return {psiBruto:(pin-pout), mcaBruto:mcaBruto, dz:dz, dzFuente:dzFuente,
+    mcaNeto:mcaNeto, valido:(mcaNeto>0),
+    sospechaBaja:(esArena && mcaNeto>0 && mcaNeto < PISO_HL_ARENA)};
+}
+/* Pérdida del filtro en función del caudal, anclada en la lectura de los dos
+   manómetros. AUDITADO con la ecuación de Ergun (fluids 1.3.1): a la velocidad
+   de filtración de una piscina (Re de partícula ≈ 3-9, régimen viscoso) el
+   término inercial del lecho de arena pesa solo 6-14 %, así que la pérdida del
+   MEDIO escala casi lineal con el caudal (exponente ≈ 1.1), no con Q². Y un
+   lecho colmatado —el caso que este término existe para no ignorar— se
+   comporta como filtración de torta, también lineal (ΔP ∝ μ·U·R_torta). Por
+   eso el modelo escala la pérdida medida LINEALMENTE con el caudal:
+   h_L(Q) = h_L_ref · (Q / Q_ref).  El error de un ajuste de un solo punto es
+   0 en Q_ref y crece al alejarse; la banda ×0.8-1.3 (misma que calentadores)
+   absorbe eso más la incertidumbre del anclaje y de Δz. Las toberas y el
+   underdrain internos sí van con Q², pero no se pueden separar de la lectura
+   única y su peso es menor que el del lecho cuando el filtro está sucio. */
+function hLFiltroRefV2(ficha, qRef){
+  var d = deltaPFiltroMedidoV2(ficha);
+  if(!d || !d.valido || !(qRef>0)) return 0;
+  return d.mcaNeto; // m c.a. a Q_ref
+}
+function curvaSistemaV2(ficha, esc, tramos, hLFiltroRef, qRefFiltro){
   var C = cHazenV2(ficha, esc.cMul);
   var Hgeo = cargaEstaticaV2(ficha);
+  var hLF = hLFiltroRef||0, qRF = qRefFiltro||0;
   return function(qM3h){
     var hf = tramos.reduce(function(a,t){ return a + hfTramoV2(qM3h, t, C, esc.kMul); }, 0);
-    return hf + dpCalentadores(qM3h, ficha, esc.dpMul) + Hgeo;
+    var lossFiltro = (hLF>0 && qRF>0) ? hLF * (qM3h/qRF) * (esc.dpMul||1) : 0;
+    return hf + dpCalentadores(qM3h, ficha, esc.dpMul) + Hgeo + lossFiltro;
   };
 }
 function hfSuccionV2(qM3h, ficha, esc, tramos){
@@ -1790,10 +1862,18 @@ function calcularHidraulicaV2(ficha, sede){
 
   var escNominal = ESCENARIOS_BANDA.filter(function(e){return e.id==='nominal';})[0];
   var caudales = {}, caudalesManometro = {};
+  /* El cruce del manómetro es independiente de la curva del sistema (usa solo
+     la pérdida hasta el punto de medición), así que se resuelve primero y
+     sirve además para anclar la pérdida del filtro cuando no hay caudalímetro. */
   ESCENARIOS_BANDA.forEach(function(esc){
-    var op = encontrarPuntoOperacionV2(origenCurva, curvaSistemaV2(ficha,esc,tramos), origenCurva.qMax);
-    caudales[esc.id] = op ? op.q : null;
     caudalesManometro[esc.id] = caudalPorManometro(origenCurva, ficha, esc, tramos);
+  });
+  var qRefFiltro = (ficha.caudalMedido>0) ? ficha.caudalMedido
+                 : (caudalesManometro.nominal>0 ? caudalesManometro.nominal : 0);
+  var hLFiltroRef = hLFiltroRefV2(ficha, qRefFiltro); // m c.a. a Q_ref, 0 si no aplica
+  ESCENARIOS_BANDA.forEach(function(esc){
+    var op = encontrarPuntoOperacionV2(origenCurva, curvaSistemaV2(ficha,esc,tramos,hLFiltroRef,qRefFiltro), origenCurva.qMax);
+    caudales[esc.id] = op ? op.q : null;
   });
   if(caudales.nominal==null){
     return {error:'No se encontró punto de operación: la bomba no alcanza a vencer la pérdida calculada del circuito. Revisa diámetros, longitudes y sobre todo el arreglo de los calentadores (en serie la pérdida se multiplica).'};
@@ -1931,6 +2011,15 @@ function calcularHidraulicaV2(ficha, sede){
       tiempoRecirc: veredictoBanda('tiempoRecirc', tRecircLo, tRecircHi, ficha),
       vFiltracion: veredictoBanda('vFiltracion', derLo.vFiltracion, derHi.vFiltracion, ficha)
     },
+    deltaPFiltro: (function(){
+      var d = deltaPFiltroMedidoV2(ficha);
+      if(!d) return null;
+      return {psi:d.psiBruto, mca:d.mcaBruto, dz:d.dz, dzFuente:d.dzFuente, mcaNeto:d.mcaNeto, valido:d.valido,
+        sospechaBaja:d.sospechaBaja,
+        entra:(hLFiltroRef>0), hLRef:hLFiltroRef, qRef:qRefFiltro,
+        cLineal:(hLFiltroRef>0 && qRefFiltro>0 ? hLFiltroRef/qRefFiltro : 0),
+        fuenteQRef:(ficha.caudalMedido>0?'caudalímetro':'manómetro')};
+    })(),
     npsh: npsh, cruceManometro: cruce, diseno: diseno, areaContraste: areaContraste,
     alertaCalentador: alertaCalentador,
     tanqueNorma: capacidadTanqueNorma(ficha, vol.v, vol.area),
@@ -1962,6 +2051,25 @@ function calcularHidraulicaV2(ficha, sede){
         + (fuente==='manometro' && cruce
           ? '. En este vaso REEMPLAZÓ al modelo como caudal de operación: el caudal despejado del manómetro quedó '+Math.abs(cruce.desviacionPct).toFixed(0)+'% por debajo del modelado, señal de una restricción real (válvula estrangulada, válvula multipuerto del filtro, o bomba por debajo de su curva) que el modelo de tramos no ve'
           : ''),
+      filtro: (function(){
+        var d = deltaPFiltroMedidoV2(ficha);
+        if(!d) return 'sin doble lectura del manómetro (entrada y salida del filtro): la pérdida del filtro NO entra a la curva del sistema — un lecho colmatado no se detecta por esta vía. Captura también la presión de salida en CHK-084.';
+        var dzTxt = {
+          medido: 'Δz medido en sitio = '+d.dz.toFixed(2)+' m (entrada '+(d.dz>=0?'más arriba':'más abajo')+' que salida).',
+          selectora: 'Válvula selectora multipuerto: entrada y salida son dos bocas de la misma válvula, a la misma cota, así que Δz = 0.',
+          tipicoDeclarado: 'Batería de válvulas / colector declarada: se aplica el desnivel típico entre la boca de entrada y la de salida del filtro, Δz = '+d.dz.toFixed(2)+' m (entrada arriba).',
+          tipicoAsumido: 'No se declaró el tipo de conexión del filtro en CHK-083: se ASUME batería de válvulas con desnivel típico entrada-salida Δz = '+d.dz.toFixed(2)+' m. Si el filtro tiene válvula selectora multipuerto, decláralo para que Δz pase a 0.'
+        }[d.dzFuente];
+        var corr = ' Corrección de cota entre manómetros: un manómetro lee presión estática local, no energía, y el que quede más abajo gana ~1.4 PSI por metro que no es del filtro. '+dzTxt+
+          ' Pérdida real del lecho = '+d.mcaBruto.toFixed(2)+' m c.a. (bruto) + '+d.dz.toFixed(2)+' m = '+d.mcaNeto.toFixed(2)+' m c.a.';
+        if(!d.valido) return 'ΔP bruto = '+d.psiBruto.toFixed(1)+' PSI ('+d.mcaBruto.toFixed(2)+' m c.a.).'+corr+' El resultado corregido es ≤ 0: en flujo hacia adelante el lecho solo disipa energía, nunca la añade, así que una pérdida neta negativa no es física — manómetros descalibrados, tomas intercambiadas, o sin flujo por el lecho al leer. Una válvula estrangulada aguas abajo NO invierte el signo: sube las dos lecturas por igual y baja el caudal. Se ignora y el filtro no entra al modelo por esta vía.';
+        var susp = d.sospechaBaja
+          ? ' ⚠ Filtro de arena con pérdida corregida de solo '+d.mcaNeto.toFixed(2)+' m c.a.: la ecuación de Ergun da 1-2 m para un lecho limpio a caudal de filtración normal (20-30 m³/h/m²), y la arena ofrece resistencia siempre. Una lectura tan baja indica caudal real muy bajo o instrumentación poco fiable (manómetros descalibrados, aire en la toma, poco flujo por el lecho) — NO se puede leer como "lecho limpio". El término igual entra al modelo, pero no concluyas nada sobre el estado del filtro con esta lectura.'
+          : '';
+        var metodo = ' Escala LINEALMENTE con el caudal (h_L(Q)=h_L_ref·Q/Q_ref): a la velocidad de filtración de una piscina el lecho de arena está en régimen viscoso —Ergun, término inercial <15 %— y un lecho colmatado se comporta como filtración de torta, también lineal. Banda ×0.8-1.3.';
+        if(!(qRefFiltro>0)) return 'pérdida real del lecho = '+d.mcaNeto.toFixed(2)+' m c.a.'+corr+' Pero sin caudal de referencia para anclarla no entra al modelo.'+susp;
+        return 'pérdida real del lecho = '+d.mcaNeto.toFixed(2)+' m c.a. a '+qRefFiltro.toFixed(1)+' m³/h ('+(ficha.caudalMedido>0?'caudalímetro':'caudal despejado del manómetro')+').'+metodo+' No se cuenta doble con el cruce del manómetro, que solo lleva la pérdida hasta la entrada del filtro.'+corr+susp;
+      })(),
       altitud: alt.m+' m.s.n.m.'+(alt.asumida?' (asumida, sede sin altitud confirmada)':' (según sede)'),
       npshr: 'NPSHr estimado por velocidad específica de succión Nss='+NSS_ASUMIDO+' (referencia conservadora, no dato de fábrica)',
       volumen: vol.nota || 'sin datos suficientes de geometría',
@@ -3035,6 +3143,41 @@ function renderResultadoV2(res, ficha){
         : '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. Alguno de los datos declarados no corresponde: revisa diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro sobre la lámina, o si la curva de bomba seleccionada es realmente la instalada.')+'</div>';
   }
 
+  if(res.deltaPFiltro){
+    var f = res.deltaPFiltro;
+    var fSucio = f.valido && f.mcaNeto >= 6; // ~8.5 PSI: umbral típico de retrolavado de lecho de arena
+    html += '<div class="motorSub">Pérdida real del filtro (dos manómetros)</div>';
+    html += '<div class="motorFila"><span>ΔP bruto entrada − salida</span>'+
+      '<span class="motorValor">'+f.psi.toFixed(1)+' PSI ('+f.mca.toFixed(2)+' m c.a.)</span></div>';
+    var DZF = {
+      medido:'medida en sitio', selectora:'válvula selectora, misma cota',
+      tipicoDeclarado:'batería de válvulas, valor típico', tipicoAsumido:'asumida (declara el tipo de válvula en CHK-083)'
+    };
+    if(f.dz!==0){
+      html += '<div class="motorFila"><span>Corrección por cota entre manómetros ('+(DZF[f.dzFuente]||'')+')</span>'+
+        '<span class="motorValor">+'+f.dz.toFixed(2)+' m c.a.</span></div>';
+      html += '<div class="motorFila"><span>Pérdida real del lecho (corregida)</span>'+
+        '<span class="'+(f.valido?(fSucio?'motorValor alerta':'motorValor'):'motorValor alerta')+'">'+f.mcaNeto.toFixed(2)+' m c.a.</span></div>';
+    } else if(f.dzFuente==='selectora'){
+      html += '<div class="motorNota" style="margin-top:2px;">Sin corrección de cota: válvula selectora multipuerto, entrada y salida a la misma altura.</div>';
+    }
+    if(!f.valido){
+      html += '<div class="motorNota">⚠ La pérdida neta sale ≤ 0 aun después de corregir por la cota. En flujo hacia adelante el lecho solo disipa energía, nunca la añade: no es físico. '+
+        'Causa probable: manómetros descalibrados, tomas de entrada/salida intercambiadas, o no había flujo por el lecho al leer. '+
+        'Una válvula de bypass estrangulada aguas abajo NO invierte el signo: sube las dos lecturas por igual y baja el caudal. La pérdida del filtro no entra al modelo por esta vía.</div>';
+    } else {
+      html += '<div class="motorNota">'+(fSucio
+        ? '⚠ Pérdida alta: el lecho puede estar colmatado y pide retrolavado. '
+        : '')+(f.sospechaBaja
+        ? '⚠ Filtro de arena con pérdida corregida de solo '+f.mcaNeto.toFixed(2)+' m c.a. La arena ofrece resistencia siempre: la ecuación de Ergun da 1-2 m para un lecho limpio a caudal normal. Lo más probable es que el caudal real sea muy bajo o que la instrumentación no sea de fiar (manómetros descalibrados, aire en la toma). NO lo leas como "filtro limpio". El término igual se aplica, pero no concluyas nada sobre el lecho con esta lectura. '
+        : '')+(f.dz!==0
+        ? 'El manómetro más bajo lee de más ~1.4 PSI por metro (columna hidrostática, no pérdida del filtro); por eso se corrige por la cota antes de usar el ΔP. '
+        : '')+
+        'Entra a la curva del sistema escalada LINEALMENTE con el caudal ('+f.mcaNeto.toFixed(2)+' m c.a. a '+f.qRef.toFixed(1)+' m³/h del '+esc(f.fuenteQRef)+', banda ×0.8-1.3): a esa velocidad de filtración el lecho está en régimen viscoso (Ergun) y un lecho sucio se comporta como filtración de torta, ambos ≈ lineales, no Q². '+
+        'El modelo ya no es ciego a un filtro sucio; no se cuenta doble con el cruce del manómetro, que llega solo hasta la entrada del filtro.</div>';
+    }
+  }
+
   if(res.alertaCalentador){
     html += '<div class="motorFila"><span class="motorValor alerta">⚠ Calentador fuera de rango</span></div>';
     html += '<div class="motorNota">'+esc(res.alertaCalentador)+'</div>';
@@ -3148,6 +3291,7 @@ function renderResultadoV2(res, ficha){
     '· Retorno: '+esc(s.retorno)+'<br>'+
     '· Calentadores: '+esc(s.calentadores)+'<br>'+
     '· Manómetro: '+esc(s.manometro)+'<br>'+
+    (s.filtro ? '· Filtro: '+esc(s.filtro)+'<br>' : '')+
     '· Altitud: '+esc(s.altitud)+'<br>'+
     '· '+esc(s.npshr)+'<br>'+
     '· Volumen: '+esc(s.volumen)+'<br>'+

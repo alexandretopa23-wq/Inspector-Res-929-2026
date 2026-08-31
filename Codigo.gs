@@ -135,6 +135,10 @@ var BOMBA_VELOCIDAD_POR_FAMILIA = {
 var FILTRO_TIPO_LABEL = {
   arena:'Arena / medio granular', cartucho:'Cartucho', de:'Tierra de diatomeas (D.E.)'
 };
+var FILTRO_VALVULA_LABEL = {
+  bateria:'Batería de válvulas o colector (bocas de entrada y salida a distinta altura)',
+  selectora:'Válvula selectora multipuerto (entrada y salida en la misma válvula, a la misma cota)'
+};
 /* Selects del modelo hidráulico v2 (circuito con tanque de compensación). */
 var TANQUE_LABEL = {
   si:'Sí, la bomba succiona desde el tanque de compensación',
@@ -1833,9 +1837,49 @@ function _anexoFichaHidraulica(body, ficha){
       _tarjetaDatos(body, filasV, {pctEtiqueta:0.30});
     }
 
-    if(r.cruceManometro || r.diseno || r.areaContraste){
+    if(r.cruceManometro || r.diseno || r.areaContraste || r.deltaPFiltro){
       _h2(body, 'B.5 Verificación cruzada y contraste con el diseño');
       var filasX = [];
+      if(r.deltaPFiltro){
+        var dpf = r.deltaPFiltro;
+        filasX.push(['ΔP bruto del filtro (entrada − salida)',
+          dpf.psi.toFixed(1)+' PSI ('+dpf.mca.toFixed(2)+' m c.a.)']);
+        var DZ_ORIGEN = {
+          medido:        'medida en sitio',
+          selectora:     'el filtro tiene válvula selectora multipuerto, de modo que la entrada y la salida son dos bocas de la misma válvula, a la misma cota',
+          tipicoDeclarado:'se declaró batería de válvulas o colector, así que se aplica el desnivel típico entre la boca de entrada y la de salida del filtro (entrada más alta)',
+          tipicoAsumido: 'no se declaró el tipo de conexión del filtro (ítem CHK-083), así que se asume una batería de válvulas con el desnivel típico entre la boca de entrada y la de salida; si el filtro tiene válvula selectora multipuerto, declararlo para que esta corrección pase a cero'
+        };
+        if(dpf.dz){
+          filasX.push(['Corrección por diferencia de cota entre los dos manómetros',
+            '+'+dpf.dz.toFixed(2)+' m c.a. ('+(DZ_ORIGEN[dpf.dzFuente]||'')+'). El manómetro lee presión estática local, no energía: el que quede más abajo gana una columna de agua de '+
+            'aproximadamente 1.4 PSI por metro que no es pérdida del filtro. Con el de entrada más alto que el de salida, la pérdida real del lecho es '+
+            dpf.mca.toFixed(2)+' m c.a. (bruto) + '+dpf.dz.toFixed(2)+' m = '+dpf.mcaNeto.toFixed(2)+' m c.a.']);
+        } else if(dpf.dzFuente==='selectora'){
+          filasX.push(['Diferencia de cota entre los dos manómetros',
+            'Nula: '+DZ_ORIGEN.selectora+'. El ΔP bruto se usa sin corrección hidrostática.']);
+        }
+        if(!dpf.valido){
+          filasX.push(['Resultado',
+            'La pérdida neta del lecho sale en '+dpf.mcaNeto.toFixed(2)+' m c.a., es decir cero o negativa. En un filtro con flujo hacia adelante el lecho solo disipa energía, nunca la añade, de modo que ese valor no es físico. '+
+            'La causa está en la instrumentación (manómetros descalibrados, tomas de entrada y salida intercambiadas) o en que no había flujo por el lecho al momento de leer. Una válvula de bypass parcialmente cerrada aguas abajo no produce este efecto: sube ambas lecturas por igual y reduce el caudal. '+
+            'La pérdida del filtro no se incorpora a la curva del sistema.']);
+        } else {
+          filasX.push(['Cómo entra al cálculo',
+            'La pérdida real del lecho ('+dpf.mcaNeto.toFixed(2)+' m c.a. al caudal de referencia de '+
+            dpf.qRef.toFixed(1)+' m³/h, tomado del '+(dpf.fuenteQRef==='caudalímetro'?'caudalímetro en sitio':'caudal despejado del propio manómetro')+
+            ') se suma a la curva del sistema escalada de forma lineal con el caudal: h_L(Q) = h_L_ref · Q / Q_ref, con la misma banda de ±30 % que el resto de las pérdidas del modelo. '+
+            'Se usa una relación lineal y no cuadrática porque a la velocidad de filtración de una piscina el lecho de arena trabaja en régimen viscoso —la ecuación de Ergun da un término inercial inferior al 15 %— y un lecho colmatado se comporta como una filtración de torta, que también es lineal. '+
+            'Antes de esta lectura el modelo de tramos no incorporaba el filtro y un lecho colmatado no producía ningún efecto en el caudal calculado.'+
+            (dpf.mcaNeto>=6 ? ' La pérdida es alta: el lecho probablemente requiere retrolavado.' : '')]);
+          if(dpf.sospechaBaja){
+            filasX.push(['Advertencia sobre la lectura',
+              'El filtro es de arena y la pérdida corregida del lecho es de apenas '+dpf.mcaNeto.toFixed(2)+' m c.a. La ecuación de Ergun da entre 1 y 2 m de columna de agua para un lecho limpio a caudal de filtración normal, y el medio granular ofrece resistencia en todo momento. Un valor tan bajo apunta a un caudal real muy reducido o a instrumentación poco confiable (manómetros descalibrados, aire en la línea de toma, poco flujo por el lecho), y no debe interpretarse como que el lecho está limpio. El término se incorpora igual al cálculo, pero la lectura no sirve para concluir sobre el estado del filtro.']);
+          }
+          filasX.push(['Relación con el cruce del manómetro',
+            'No hay doble conteo: el cruce del manómetro solo acumula la pérdida del circuito hasta la ENTRADA del filtro, y este término cubre exclusivamente el salto a través del lecho.']);
+        }
+      }
       if(r.cruceManometro){
         filasX.push(['Caudal despejado desde el manómetro', r.cruceManometro.caudal.toFixed(2)+' m³/h']);
         filasX.push(['Desviación frente al modelo',
@@ -2070,7 +2114,17 @@ function _anexoMemoriaCalculo(body, ficha){
   if(ficha.tempAgua!=null) filasCircuito.push(['Temperatura del agua', ficha.tempAgua+' °C']);
   filasCircuito.push(['Tipo de filtro', FILTRO_TIPO_LABEL[ficha.filtroTipo] || '—']);
   filasCircuito.push(['Área filtrante', ficha.filtroArea!=null ? ficha.filtroArea+' m²' : '—']);
-  filasCircuito.push(['Presión de manómetro del filtro', ficha.presionManometro!=null ? ficha.presionManometro+' PSI' : '—']);
+  if(ficha.filtroValvula!=null){
+    filasCircuito.push(['Conexión del filtro al circuito', FILTRO_VALVULA_LABEL[ficha.filtroValvula] || String(ficha.filtroValvula)]);
+  }
+  filasCircuito.push(['Presión de manómetro del filtro (entrada)', ficha.presionManometro!=null ? ficha.presionManometro+' PSI' : '—']);
+  if(ficha.presionSalidaFiltro!=null){
+    filasCircuito.push(['Presión de manómetro a la salida del filtro', ficha.presionSalidaFiltro+' PSI']);
+  }
+  if(ficha.desnivelManometrosFiltro!=null){
+    filasCircuito.push(['Diferencia de cota entre los manómetros del filtro',
+      ficha.desnivelManometrosFiltro+' m ('+(ficha.desnivelManometrosFiltro>0?'entrada más arriba que salida':'salida más arriba que entrada')+')']);
+  }
   if(ficha.alturaManometro!=null){
     filasCircuito.push(['Altura del manómetro sobre la lámina', ficha.alturaManometro+' m']);
   }
@@ -2096,6 +2150,7 @@ function _anexoMemoriaCalculo(body, ficha){
         ['Retorno al vaso', String(sup.retorno)],
         ['Calentadores', String(sup.calentadores)],
         ['Uso de la lectura del manómetro', String(sup.manometro)],
+        ['Pérdida del filtro', sup.filtro ? String(sup.filtro) : 'Sin doble lectura del manómetro (entrada y salida): la pérdida del filtro no entra a la curva del sistema.'],
         ['Altitud para el cálculo de NPSH', String(sup.altitud)],
         ['NPSH requerido', String(sup.npshr)+' (Hydraulic Institute, 2017).'],
         ['Volumen del vaso', String(sup.volumen)],
@@ -2115,7 +2170,24 @@ function _anexoMemoriaCalculo(body, ficha){
         'operando en paralelo sobre un mismo circuito: a igual cabezal los caudales se suman, ' +
         'así que la curva del conjunto de N bombas es la de una sola evaluada en Q/N. Como la ' +
         'curva del sistema crece con el cuadrado del caudal, duplicar bombas no duplica el ' +
-        'caudal: el punto de operación sube a más cabezal y menos caudal por bomba.');
+        'caudal: el punto de operación sube a más cabezal y menos caudal por bomba. ' +
+        'Cuando el filtro tiene manómetro de entrada y de salida, el salto de presión medido ' +
+        'entre ambos se suma a la curva del sistema escalado de forma lineal con el caudal ' +
+        '(h_L(Q) = h_L_ref · Q / Q_ref), de modo que el estado real del lecho —limpio o ' +
+        'colmatado— queda reflejado en el caudal calculado en lugar de quedar por fuera del ' +
+        'modelo. Se usa una relación lineal y no cuadrática porque a la velocidad de filtración ' +
+        'de una piscina el lecho de arena trabaja en régimen viscoso (la ecuación de Ergun deja ' +
+        'el término inercial por debajo del 15 %) y un lecho colmatado se comporta como una ' +
+        'filtración de torta, que también es lineal. Ese término no se solapa con la ' +
+        'verificación por manómetro, que solo lleva la pérdida hasta la entrada del filtro. El ' +
+        'manómetro mide presión estática local, no energía: si los dos instrumentos están a ' +
+        'distinta altura, el que quede más abajo registra una columna hidrostática de cerca de ' +
+        '1.4 PSI por metro que no corresponde al filtro, y por eso el ΔP bruto se corrige con la ' +
+        'diferencia de cota antes de usarlo. Una vez hecha esa corrección, la pérdida a través del ' +
+        'lecho tiene que ser positiva —el medio filtrante disipa energía, no la aporta—; si aun ' +
+        'así sale cero o negativa, la causa está en manómetros descalibrados, en tomas de entrada ' +
+        'y salida intercambiadas o en que no había flujo por el lecho al momento de leer, y el ' +
+        'modelo descarta la lectura en lugar de introducir una pérdida negativa.');
     } else {
       _tarjetaDatos(body, [
         ['Modelo de cálculo', 'v1 (legado)'],
