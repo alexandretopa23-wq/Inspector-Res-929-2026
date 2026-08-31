@@ -1727,9 +1727,13 @@ function _anexoFichaHidraulica(body, ficha){
     // desaparece: se reporta al lado para que se vea cuánto se apartó la
     // estimación, que es justamente lo que calibra la confianza en el modelo
     // en los vasos donde NO hay instrumento.
-    if(r.fuenteCaudal==='medido' && r.caudalNominal!=null){
-      var brecha = (r.caudalNominal - r.caudal)/r.caudal*100;
-      filasB1.push(['Caudal que estimaba el modelo', r.caudalNominal.toFixed(2)+' m³/h ('+
+    // caudalModelo* (motor >= 2026-09) guarda lo que estimó el modelo aunque
+    // mande otra fuente; fichas viejas con 'medido' lo tenían en caudalNominal.
+    var qModeloRep = (r.caudalModelo!=null) ? r.caudalModelo
+      : (r.fuenteCaudal==='medido' ? r.caudalNominal : null);
+    if(r.fuenteCaudal==='medido' && qModeloRep!=null){
+      var brecha = (qModeloRep - r.caudal)/r.caudal*100;
+      filasB1.push(['Caudal que estimaba el modelo', qModeloRep.toFixed(2)+' m³/h ('+
         (brecha>=0?'+':'')+brecha.toFixed(1)+' % frente a la medición)']);
     }
     if(r.fuenteCaudal==='manometro' && r.caudalModelo!=null){
@@ -1737,9 +1741,11 @@ function _anexoFichaHidraulica(body, ficha){
       filasB1.push(['Caudal que estimaba el modelo de tramos', r.caudalModelo.toFixed(2)+' m³/h ('+
         (brechaM>=0?'+':'')+brechaM.toFixed(1)+' % frente al manómetro)']);
     }
-    if(r.caudalMin!=null && r.caudalMax!=null){
-      filasB1.push([r.fuenteCaudal==='manometro' ? 'Banda del caudal (despejada del manómetro)' : 'Banda de incertidumbre del modelo',
-        'entre '+r.caudalMin.toFixed(1)+' y '+r.caudalMax.toFixed(1)+' m³/h']);
+    var bLo = r.caudalMin, bHi = r.caudalMax, bLbl = 'Banda de incertidumbre del modelo';
+    if(r.fuenteCaudal==='manometro') bLbl = 'Banda del caudal (despejada del manómetro)';
+    else if(r.fuenteCaudal==='medido'){ bLo = r.caudalModeloMin; bHi = r.caudalModeloMax; bLbl = 'Banda que estimaba el modelo'; }
+    if(bLo!=null && bHi!=null){
+      filasB1.push([bLbl, 'entre '+bLo.toFixed(1)+' y '+bHi.toFixed(1)+' m³/h']);
     }
   }
   filasB1.push(['Cabezal en el punto de operación', r.cabezal!=null ? r.cabezal.toFixed(2)+' m c.a.' : 'Sin dato']);

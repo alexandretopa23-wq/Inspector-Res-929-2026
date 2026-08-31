@@ -1799,8 +1799,12 @@ function calcularHidraulicaV2(ficha, sede){
 
   var qEfectivo, fuente, qNominal, qMin, qMax;
   if(medido!=null){
+    /* Una medición directa no tiene banda de modelo: la banda se colapsa al
+       dato medido para que los veredictos se evalúen sobre la medición y no
+       sobre la estimación (que puede quedar lejos). El caudal del modelo se
+       conserva aparte en caudalModelo* para mostrar la brecha. */
     qEfectivo = medido; fuente = 'medido';
-    qNominal = qModelo; qMin = qModeloMin; qMax = qModeloMax;
+    qNominal = medido; qMin = medido; qMax = medido;
   } else if(manometroDomina){
     var qsMan = [caudalesManometro.conservador, caudalesManometro.optimista, qManometro]
       .filter(function(v){ return v!=null && isFinite(v) && v>0; });
@@ -2968,11 +2972,14 @@ function renderResultadoV2(res, ficha){
      con dos decimales transmite una exactitud que el método no tiene. */
   html += '<div class="motorSub">Caudal en el punto de operación</div>';
   if(res.fuenteCaudal==='medido'){
+    var qMd=(res.caudalModelo!=null)?res.caudalModelo:res.caudalNominal;
+    var qMdLo=(res.caudalModeloMin!=null)?res.caudalModeloMin:res.caudalMin;
+    var qMdHi=(res.caudalModeloMax!=null)?res.caudalModeloMax:res.caudalMax;
     html += '<div class="motorFila"><span>Caudal <b>medido con caudalímetro</b> (manda sobre el modelo)</span>'+
       '<span class="motorValor">'+res.caudal.toFixed(2)+' m³/h</span></div>';
-    html += '<div class="motorNota">El modelo estimó '+num(res.caudalNominal,2,'m³/h')+
-      ' (banda '+num(res.caudalMin,1)+'–'+num(res.caudalMax,1)+'). '+
-      'Todas las velocidades y tiempos de abajo están calculados sobre el dato medido, no sobre la estimación.</div>';
+    html += '<div class="motorNota">El modelo estimaba '+num(qMd,2,'m³/h')+
+      ' (banda '+num(qMdLo,1)+'–'+num(qMdHi,1)+'). '+
+      'Todas las velocidades, tiempos y veredictos de abajo están calculados sobre el dato medido, no sobre la estimación.</div>';
   } else if(res.fuenteCaudal==='manometro'){
     html += '<div class="motorFila"><span>Caudal <b>despejado del manómetro</b> (reemplaza al modelo)</span>'+
       '<span class="motorValor alerta">'+res.caudal.toFixed(2)+' m³/h</span></div>';
