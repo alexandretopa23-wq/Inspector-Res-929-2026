@@ -728,7 +728,7 @@ var FICHA_CAMPOS = {
   tiempoRecircDiseno:{label:"Tiempo de recirculación según la ficha de entrega de obra",unit:"h",type:"number",step:"0.1",group:"Contraste con medición y diseño"},
   areaDiseno:{label:"Área del espejo de agua según la ficha de diseño, si se conoce",unit:"m²",type:"number",step:"0.1"},
   volumenManual:{label:"Volumen del vaso declarado directamente, si se conoce con certeza (reemplaza el cálculo por geometría)",unit:"m³",type:"number",step:"0.5"},
-  alturaManometro:{label:"Cota del manómetro del filtro respecto a la lámina del tanque (o del vaso si no hay tanque) — POSITIVO si el manómetro queda arriba de la lámina, NEGATIVO si el cuarto de máquinas está más abajo (caso típico con tanque de equilibrio)",unit:"m",type:"number",step:"0.1"},
+  alturaManometro:{label:"Cota del manómetro de ENTRADA del filtro respecto a la lámina del tanque (o del vaso si no hay tanque) — POSITIVO si el manómetro queda arriba de la lámina, NEGATIVO si el cuarto de máquinas está más abajo (caso típico con tanque de equilibrio). Solo la usa la verificación cruzada; para el manómetro de salida basta con el desnivel relativo entre ambos",unit:"m",type:"number",step:"0.1"},
   presionPostCalentador:{label:"Presión leída en un manómetro aguas abajo del bloque de calentadores, si hay uno instalado (opcional — sedes con válvula de estrangulamiento en la línea principal, tipo ETi 400: da el ΔP real del bloque sin depender del supuesto de catálogo)",unit:"PSI",type:"number",step:"0.5",group:"Calentadores"},
   duchasEncontradas:{label:"Duchas encontradas en sitio",unit:"u",type:"number",step:"1"},
   inodoroHEncontrados:{label:"Inodoros para hombres encontrados",unit:"u",type:"number",step:"1"},

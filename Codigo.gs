@@ -2126,7 +2126,7 @@ function _anexoMemoriaCalculo(body, ficha){
       ficha.desnivelManometrosFiltro+' m ('+(ficha.desnivelManometrosFiltro>0?'entrada más arriba que salida':'salida más arriba que entrada')+')']);
   }
   if(ficha.alturaManometro!=null){
-    filasCircuito.push(['Altura del manómetro sobre la lámina', ficha.alturaManometro+' m']);
+    filasCircuito.push(['Altura del manómetro de entrada del filtro sobre la lámina', ficha.alturaManometro+' m']);
   }
   if(ficha.caudalMedido!=null) filasCircuito.push(['Caudal medido con caudalímetro', ficha.caudalMedido+' m³/h']);
   if(ficha.caudalDiseno!=null) filasCircuito.push(['Caudal según ficha de entrega de obra', ficha.caudalDiseno+' m³/h']);
