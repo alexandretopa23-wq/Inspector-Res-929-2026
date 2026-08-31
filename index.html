@@ -664,7 +664,7 @@ var FICHA_CAMPOS = {
     {v:"3",l:"Velocidad 3 — 3000 RPM"},
     {v:"4",l:"Velocidad 4 / máxima — 3450 RPM"}
   ]},
-  bombaRPMObservada:{label:"RPM real leída en el variador, solo si difiere de la nominal de la velocidad seleccionada (las bombas VS son reprogramables en sitio — la curva de fábrica se escala por leyes de afinidad: Q∝N, H∝N²)",unit:"RPM",type:"number",step:"10"},
+  bombaRPMObservada:{label:"RPM que muestra la pantalla del variador con la bomba operando. Digítala siempre que puedas leerla: las preselecciones (Veloc 1-4) son reprogramables en sitio — p.ej. 'Veloc 2' puesta en 3000 RPM — así que la RPM real manda sobre la preselección. El modelo toma la curva de fábrica más cercana y la escala por afinidad (Q∝N, H∝N²).",unit:"RPM",type:"number",step:"10"},
   tuberiaSuccionDiam:{label:"Diámetro tubería de succión (legado, solo si no hay tramos cargados)",unit:"pulg",type:"number",step:"0.5"},
   tuberiaDescargaDiam:{label:"Diámetro tubería de descarga / retorno (legado, solo si no hay tramos cargados)",unit:"pulg",type:"number",step:"0.5"},
   tuberiaLongitud:{label:"Longitud total de tubería (legado, solo si no hay tramos cargados)",unit:"m",type:"number",step:"1"},
@@ -956,6 +956,36 @@ function rpmNominalDeFicha(ficha){
   if(ficha.bombaFamilia==='intelliflo_vs') return RPM_INTELLIFLO[ficha.bombaVelocidadIntelliflo] || null;
   if(ficha.bombaFamilia==='whisperflo_vst') return RPM_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST] || null;
   return null;
+}
+
+/* Curva base para el escalado por afinidad. Cuando hay RPM observada se
+   ancla en la velocidad de fábrica cuya RPM nominal está MÁS CERCA de la
+   observada — NO en la preselección activa del controlador. Las
+   preselecciones son reprogramables (p.ej. "Veloc 2" puesta en 3000 RPM);
+   escalar desde su RPM de catálogo (1500) sería una extrapolación ×2 que
+   amplifica el error de digitalización de la curva, mientras que escalar
+   desde la vecina real (3110→3000) es una corrección del 3.5%. Sin RPM
+   observada se usa la preselección tal cual. */
+function curvaBaseVS(mapaCurvas, mapaRPM, velSel, rpmObs){
+  if(rpmObs>0){
+    var best=null, bestD=Infinity;
+    Object.keys(mapaRPM).forEach(function(k){
+      var d=Math.abs(mapaRPM[k]-rpmObs);
+      if(mapaCurvas[k] && d<bestD){ bestD=d; best=k; }
+    });
+    if(best!=null) return {ref:mapaCurvas[best], rpmNom:mapaRPM[best], velUsada:best};
+  }
+  return {ref:mapaCurvas[velSel]||null, rpmNom:(mapaRPM[velSel]||null), velUsada:velSel};
+}
+function resolverCurvaCatalogoVS(mapaCurvas, mapaRPM, velSel, rpmObs, errSinVel){
+  var base = curvaBaseVS(mapaCurvas, mapaRPM, velSel, rpmObs);
+  if(!base.ref) return {error:errSinVel};
+  var aj = interpolarCurvaCatalogo(afinidadEntreRPM(base.ref.curva, base.rpmNom, rpmObs));
+  if(!aj) return {error:'No se pudo interpolar la curva de referencia.'};
+  var label = base.ref.label + notaAfinidadRPM(base.rpmNom, rpmObs);
+  if(rpmObs>0 && String(base.velUsada)!==String(velSel))
+    label += ' [curva base: velocidad '+base.velUsada+', la de RPM nominal más cercana a '+rpmObs+' — la preselección activa en el controlador ('+velSel+') está reprogramada]';
+  return {curva:{evalH:aj.evalH, qMax:aj.qMax, label:label}};
 }
 
 /* Ajuste por mínimos cuadrados de la curva de bomba a H = a + b·Q + c·Q²
@@ -1279,26 +1309,17 @@ function resolverCurvaBombaV2(ficha){
       origenCurva = {evalH:ajuste.evalH, qMax:ajuste.qMax, label:'Curva manual (R²='+ajuste.r2.toFixed(3)+')'+notaHz+notaMono, r2:ajuste.r2};
     }
   } else if(ficha.bombaFamilia==='superflo_vs'){
-    var refVS = CURVAS_PENTAIR_VS[ficha.bombaVelocidadVS];
-    if(!refVS) return {error:'Selecciona la velocidad en la que se encontró la bomba SuperFlo VS (ítem CHK-074).'};
-    var rpmNomVS = RPM_VS[ficha.bombaVelocidadVS] || null;
-    var ajusteVS = interpolarCurvaCatalogo(afinidadEntreRPM(refVS.curva, rpmNomVS, ficha.bombaRPMObservada));
-    if(!ajusteVS) return {error:'No se pudo interpolar la curva de referencia.'};
-    origenCurva = {evalH:ajusteVS.evalH, qMax:ajusteVS.qMax, label:refVS.label + notaAfinidadRPM(rpmNomVS, ficha.bombaRPMObservada)};
+    var rvs = resolverCurvaCatalogoVS(CURVAS_PENTAIR_VS, RPM_VS, ficha.bombaVelocidadVS, ficha.bombaRPMObservada, 'Selecciona la velocidad en la que se encontró la bomba SuperFlo VS (ítem CHK-074).');
+    if(rvs.error) return rvs;
+    origenCurva = rvs.curva;
   } else if(ficha.bombaFamilia==='intelliflo_vs'){
-    var refIF = CURVAS_PENTAIR_INTELLIFLO[ficha.bombaVelocidadIntelliflo];
-    if(!refIF) return {error:'Selecciona la velocidad en la que se encontró la bomba IntelliFlo VS+SVRS (ítem CHK-074).'};
-    var rpmNomIF = RPM_INTELLIFLO[ficha.bombaVelocidadIntelliflo] || null;
-    var ajusteIF = interpolarCurvaCatalogo(afinidadEntreRPM(refIF.curva, rpmNomIF, ficha.bombaRPMObservada));
-    if(!ajusteIF) return {error:'No se pudo interpolar la curva de referencia.'};
-    origenCurva = {evalH:ajusteIF.evalH, qMax:ajusteIF.qMax, label:refIF.label + notaAfinidadRPM(rpmNomIF, ficha.bombaRPMObservada)};
+    var rif = resolverCurvaCatalogoVS(CURVAS_PENTAIR_INTELLIFLO, RPM_INTELLIFLO, ficha.bombaVelocidadIntelliflo, ficha.bombaRPMObservada, 'Selecciona la velocidad en la que se encontró la bomba IntelliFlo VS+SVRS (ítem CHK-074).');
+    if(rif.error) return rif;
+    origenCurva = rif.curva;
   } else if(ficha.bombaFamilia==='whisperflo_vst'){
-    var refWV = CURVAS_PENTAIR_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST];
-    if(!refWV) return {error:'Selecciona la velocidad en la que se encontró la bomba WhisperFlo VST (ítem CHK-074).'};
-    var rpmNomWV = RPM_WHISPERFLO_VST[ficha.bombaVelocidadWhisperVST] || null;
-    var ajusteWV = interpolarCurvaCatalogo(afinidadEntreRPM(refWV.curva, rpmNomWV, ficha.bombaRPMObservada));
-    if(!ajusteWV) return {error:'No se pudo interpolar la curva de referencia.'};
-    origenCurva = {evalH:ajusteWV.evalH, qMax:ajusteWV.qMax, label:refWV.label + notaAfinidadRPM(rpmNomWV, ficha.bombaRPMObservada)};
+    var rwv = resolverCurvaCatalogoVS(CURVAS_PENTAIR_WHISPERFLO_VST, RPM_WHISPERFLO_VST, ficha.bombaVelocidadWhisperVST, ficha.bombaRPMObservada, 'Selecciona la velocidad en la que se encontró la bomba WhisperFlo VST (ítem CHK-074).');
+    if(rwv.error) return rwv;
+    origenCurva = rwv.curva;
   } else if(ficha.bombaFamilia){
     var ref = seleccionarCurvaPentair(ficha.bombaFamilia, ficha.bombaHP);
     if(!ref) return {error:'Selecciona la familia de la bomba en la ficha técnica.'};
