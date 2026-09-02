@@ -806,8 +806,8 @@ var CURVAS_PENTAIR = {
     {q:0,h:21.95},{q:4.54,h:19.81},{q:9.09,h:12.80},{q:11.36,h:7.92},{q:11.81,h:0}
   ]},
   superflo_075:{label:"SuperFlo 0.75 HP (referencia)",hp:0.75,curva:[{q:0,h:13},{q:8,h:11.5},{q:14,h:9},{q:18,h:6},{q:21,h:3}]},
-  superflo_1:{label:"SuperFlo 1 HP (dato de fábrica)",hp:1,curva:[
-    {q:0,h:27.13},{q:4.54,h:25.91},{q:9.09,h:20.12},{q:11.36,h:16.46},{q:13.63,h:11.58},{q:15.44,h:0}
+  superflo_1:{label:"SuperFlo 1 HP (dato de fábrica, 60 Hz velocidad única)",hp:1,curva:[
+    {q:0,h:21.95},{q:6.81,h:21.34},{q:9.99,h:19.81},{q:12.26,h:18.29},{q:15.67,h:15.24},{q:18.17,h:12.19},{q:20.67,h:9.14},{q:22.94,h:6.10}
   ]},
   superflo_15:{label:"SuperFlo 1.5 HP (referencia)",hp:1.5,curva:[{q:0,h:20},{q:12,h:18},{q:20,h:14.5},{q:26,h:10},{q:30,h:5}]},
   superflo_2:{label:"SuperFlo 2 HP (referencia)",hp:2,curva:[{q:0,h:24},{q:14,h:21.5},{q:23,h:17.5},{q:29,h:12},{q:33,h:6}]},
@@ -2026,54 +2026,54 @@ function calcularHidraulicaV2(ficha, sede){
     supuestos: {
       C: cHazenV2(ficha, 1),
       estadoTuberia: ficha.estadoTuberia || 'no declarado (se asume tubería nueva, C=150)',
-      kAccesorios: 'método K de Crane TP-410 — accesorio normal K='+K_ACCESORIO.normal+', alta pérdida K='+K_ACCESORIO.alta,
+      kAccesorios: 'Método K de Crane TP-410. Accesorio normal K='+K_ACCESORIO.normal+', accesorio de alta pérdida K='+K_ACCESORIO.alta+'.',
       Hgeo: (ficha.tanqueEquilibrio==='si'
-        ? cargaEstaticaV2(ficha)+' m c.a. = diferencia entre la lámina de la piscina y la del tanque de compensación. El recorrido de la tubería por los distintos niveles del cuarto de máquinas NO suma carga estática: es conducto cerrado y lleno, se cancela.'
-        : cargaEstaticaV2(ficha)+' m c.a. (desnivel succión-descarga declarado; sin tanque de compensación)'),
+        ? cargaEstaticaV2(ficha)+' m c.a., la diferencia entre la lámina de la piscina y la del tanque de compensación. El recorrido de la tubería por el cuarto de máquinas no suma carga estática porque es conducto cerrado y lleno: se cancela.'
+        : cargaEstaticaV2(ficha)+' m c.a., el desnivel succión-descarga declarado. No hay tanque de compensación.'),
       retorno: ficha.tipoRetorno==='sobreLamina'
-        ? 'retorno descarga SOBRE la lámina: la carga estática se mide hasta la boca de retorno'
-        : 'retorno sumergido bajo la lámina',
+        ? 'El retorno descarga sobre la lámina, así que la carga estática se mide hasta la boca de retorno.'
+        : 'Retorno sumergido bajo la lámina.',
       calentadores: (ficha.calentadorN>0
-        ? ficha.calentadorN+' × '+refCal.label+' en '+(ficha.calentadorArreglo==='paralelo'?'paralelo':'serie')+', acople: '+
-          (ficha.calentadorAcople==='inyector' ? 'bomba inyectora propia (desacoplado de la línea principal, ΔP=0 sobre el circuito)'
-            : ficha.calentadorAcople==='bypass_linea' ? 'derivación con bypass en la línea principal, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q²'+(refCal.qMax>0?', con techo en '+refCal.qMax+' m³/h por rama (el bypass del propio equipo se abre ahí)':'')
-            : 'en línea directa sin bypass declarado, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q² sin techo — declara el acople real en CHK-078 si el equipo tiene bomba inyectora o bypass')
-        : 'sin calentadores declarados'),
+        ? ficha.calentadorN+' × '+refCal.label+' en '+(ficha.calentadorArreglo==='paralelo'?'paralelo':'serie')+'. Acople: '+
+          (ficha.calentadorAcople==='inyector' ? 'bomba inyectora propia, desacoplado de la línea principal, ΔP=0 sobre el circuito.'
+            : ficha.calentadorAcople==='bypass_linea' ? 'bypass en la línea principal, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q²'+(refCal.qMax>0?', con techo en '+refCal.qMax+' m³/h por rama, donde abre el bypass del propio equipo.':'.')
+            : 'línea directa sin bypass declarado, ΔP de referencia '+refCal.dp+' m c.a. a '+refCal.q+' m³/h escalado con Q² sin techo. Declara el acople real en CHK-078 si el equipo tiene bomba inyectora o bypass.')
+        : 'Sin calentadores declarados.'),
       bombas: (nBombas>1
-        ? nBombas+' bombas iguales en paralelo sobre un mismo circuito. Curva combinada por el principio estándar de bombas en paralelo: a igual cabezal los caudales se suman, es decir H_conjunto(Q)=H_una(Q/'+nBombas+') (Karassik et al., 2008, cap. 8). El caudal reportado es el TOTAL del circuito; cada bomba entrega ~Q/'+nBombas+'. Válido solo si las '+nBombas+' bombas son del mismo modelo y comparten el colector de descarga; con bombas de curva distinta hay que cargar la curva manual del conjunto. '
+        ? nBombas+' bombas iguales en paralelo sobre un mismo circuito. A igual cabezal los caudales se suman, así que la curva del conjunto es la de una bomba evaluada en Q/'+nBombas+' (Karassik et al., 2008, cap. 8). El caudal reportado es el total del circuito y cada bomba entrega cerca de Q/'+nBombas+'. Solo vale si las '+nBombas+' bombas son del mismo modelo y comparten el colector de descarga. Con curvas distintas hay que cargar la curva manual del conjunto. '
           + ((function(){
               var okSucc = (tramos||[]).some(function(t){ return t.lado==='succion' && (t.nLineas||1) >= nBombas; });
-              return okSucc ? 'Cada bomba succiona por su propia línea (nLineas declarado en el tramo de succión).'
-                            : '⚠ Ningún tramo de succión declara nLineas ≥ '+nBombas+': si cada bomba tiene su línea de succión independiente, decláralo en CHK-078 o el hf y la velocidad de succión saldrán calculados sobre el caudal total y no sobre Q/'+nBombas+'.';
+              return okSucc ? 'Cada bomba succiona por su propia línea, según el nLineas declarado en el tramo de succión.'
+                            : 'Aviso: ningún tramo de succión declara nLineas ≥ '+nBombas+'. Si cada bomba tiene línea de succión propia, decláralo en CHK-078 o el hf y la velocidad de succión saldrán sobre el caudal total y no sobre Q/'+nBombas+'.';
             })())
-        : 'una sola bomba sobre el circuito'),
-      manometro: 'la lectura del manómetro NO se suma a la curva del sistema (eso contaba doble el circuito en el modelo v1); se usa como verificación cruzada independiente'
+        : 'Una sola bomba sobre el circuito.'),
+      manometro: 'La lectura del manómetro no se suma a la curva del sistema. La presión medida ya es consecuencia de la resistencia del circuito, así que sumarla contaría el tramo aguas abajo dos veces. Sirve como verificación cruzada independiente: del valor leído se despeja el caudal que lo produciría y se compara con el del modelo.'
         + (fuente==='manometro' && cruce
-          ? '. En este vaso REEMPLAZÓ al modelo como caudal de operación: el caudal despejado del manómetro quedó '+Math.abs(cruce.desviacionPct).toFixed(0)+'% por debajo del modelado, señal de una restricción real (válvula estrangulada, válvula multipuerto del filtro, o bomba por debajo de su curva) que el modelo de tramos no ve'
+          ? ' En este vaso reemplazó al modelo como caudal de operación. El caudal despejado del manómetro quedó '+Math.abs(cruce.desviacionPct).toFixed(0)+'% por debajo del modelado, señal de una restricción real que el modelo de tramos no ve: válvula estrangulada, válvula multipuerto del filtro o bomba por debajo de su curva.'
           : ''),
       filtro: (function(){
         var d = deltaPFiltroMedidoV2(ficha);
-        if(!d) return 'sin doble lectura del manómetro (entrada y salida del filtro): la pérdida del filtro NO entra a la curva del sistema — un lecho colmatado no se detecta por esta vía. Captura también la presión de salida en CHK-084.';
+        if(!d) return 'Sin la doble lectura del manómetro (entrada y salida del filtro), la pérdida del lecho no entra a la curva del sistema y un lecho colmatado no se detecta por esta vía. Captura también la presión de salida en CHK-084.';
         var dzTxt = {
-          medido: 'Δz medido en sitio = '+d.dz.toFixed(2)+' m (entrada '+(d.dz>=0?'más arriba':'más abajo')+' que salida).',
+          medido: 'Δz medido en sitio = '+d.dz.toFixed(2)+' m, con la entrada '+(d.dz>=0?'más arriba':'más abajo')+' que la salida.',
           selectora: 'Válvula selectora multipuerto: entrada y salida son dos bocas de la misma válvula, a la misma cota, así que Δz = 0.',
-          tipicoDeclarado: 'Batería de válvulas / colector declarada: se aplica el desnivel típico entre la boca de entrada y la de salida del filtro, Δz = '+d.dz.toFixed(2)+' m (entrada arriba).',
-          tipicoAsumido: 'No se declaró el tipo de conexión del filtro en CHK-083: se ASUME batería de válvulas con desnivel típico entrada-salida Δz = '+d.dz.toFixed(2)+' m. Si el filtro tiene válvula selectora multipuerto, decláralo para que Δz pase a 0.'
+          tipicoDeclarado: 'Batería de válvulas o colector declarada: se aplica el desnivel típico entre la boca de entrada y la de salida, Δz = '+d.dz.toFixed(2)+' m, entrada arriba.',
+          tipicoAsumido: 'No se declaró el tipo de conexión del filtro (CHK-083): se asume batería de válvulas con desnivel típico Δz = '+d.dz.toFixed(2)+' m. Si el filtro tiene válvula selectora multipuerto, decláralo para que Δz pase a 0.'
         }[d.dzFuente];
-        var corr = ' Corrección de cota entre manómetros: un manómetro lee presión estática local, no energía, y el que quede más abajo gana ~1.4 PSI por metro que no es del filtro. '+dzTxt+
+        var corr = ' Corrección de cota entre manómetros: cada instrumento lee presión estática local, no energía, y el que quede más abajo gana cerca de 1.4 PSI por metro que no es del filtro (Bernoulli; White, 2011). '+dzTxt+
           ' Pérdida real del lecho = '+d.mcaBruto.toFixed(2)+' m c.a. (bruto) + '+d.dz.toFixed(2)+' m = '+d.mcaNeto.toFixed(2)+' m c.a.';
-        if(!d.valido) return 'ΔP bruto = '+d.psiBruto.toFixed(1)+' PSI ('+d.mcaBruto.toFixed(2)+' m c.a.).'+corr+' El resultado corregido es ≤ 0: en flujo hacia adelante el lecho solo disipa energía, nunca la añade, así que una pérdida neta negativa no es física — manómetros descalibrados, tomas intercambiadas, o sin flujo por el lecho al leer. Una válvula estrangulada aguas abajo NO invierte el signo: sube las dos lecturas por igual y baja el caudal. Se ignora y el filtro no entra al modelo por esta vía.';
+        if(!d.valido) return 'ΔP bruto = '+d.psiBruto.toFixed(1)+' PSI ('+d.mcaBruto.toFixed(2)+' m c.a.).'+corr+' Corregido da ≤ 0. En flujo hacia adelante el lecho solo disipa energía, nunca la añade, así que una pérdida neta negativa no es física: manómetros descalibrados, tomas intercambiadas o sin flujo por el lecho al leer. Una válvula estrangulada aguas abajo no invierte el signo, sube las dos lecturas por igual y baja el caudal. La lectura se descarta y el filtro no entra al modelo por esta vía.';
         var susp = d.sospechaBaja
-          ? ' ⚠ Filtro de arena con pérdida corregida de solo '+d.mcaNeto.toFixed(2)+' m c.a.: la ecuación de Ergun da 1-2 m para un lecho limpio a caudal de filtración normal (20-30 m³/h/m²), y la arena ofrece resistencia siempre. Una lectura tan baja indica caudal real muy bajo o instrumentación poco fiable (manómetros descalibrados, aire en la toma, poco flujo por el lecho) — NO se puede leer como "lecho limpio". El término igual entra al modelo, pero no concluyas nada sobre el estado del filtro con esta lectura.'
+          ? ' Aviso: filtro de arena con pérdida corregida de apenas '+d.mcaNeto.toFixed(2)+' m c.a. La ecuación de Ergun da 1 a 2 m para un lecho limpio a caudal de filtración normal, 20 a 30 m³/h/m² (Ergun, 1952), y la arena ofrece resistencia en todo momento. Un valor tan bajo apunta a caudal real muy bajo o a instrumentación poco confiable, no a un lecho limpio. El término entra igual al modelo, pero esta lectura no sirve para concluir sobre el estado del filtro.'
           : '';
-        var metodo = ' Escala LINEALMENTE con el caudal (h_L(Q)=h_L_ref·Q/Q_ref): a la velocidad de filtración de una piscina el lecho de arena está en régimen viscoso —Ergun, término inercial <15 %— y un lecho colmatado se comporta como filtración de torta, también lineal. Banda ×0.8-1.3.';
-        if(!(qRefFiltro>0)) return 'pérdida real del lecho = '+d.mcaNeto.toFixed(2)+' m c.a.'+corr+' Pero sin caudal de referencia para anclarla no entra al modelo.'+susp;
-        return 'pérdida real del lecho = '+d.mcaNeto.toFixed(2)+' m c.a. a '+qRefFiltro.toFixed(1)+' m³/h ('+(ficha.caudalMedido>0?'caudalímetro':'caudal despejado del manómetro')+').'+metodo+' No se cuenta doble con el cruce del manómetro, que solo lleva la pérdida hasta la entrada del filtro.'+corr+susp;
+        var metodo = ' Escala de forma lineal con el caudal, h_L(Q) = h_L_ref · Q / Q_ref. Lineal y no cuadrática porque a la velocidad de filtración de una piscina el lecho de arena trabaja en régimen viscoso, con Reynolds de partícula entre 3 y 9 y término inercial bajo el 15 % (Ergun, 1952; Reynolds, 1883), y un lecho colmatado se comporta como filtración de torta, también lineal. Banda ×0.8 a 1.3.';
+        if(!(qRefFiltro>0)) return 'Pérdida real del lecho = '+d.mcaNeto.toFixed(2)+' m c.a.'+corr+' Sin un caudal de referencia con que anclarla, este término no entra al modelo.'+susp;
+        return 'Pérdida real del lecho = '+d.mcaNeto.toFixed(2)+' m c.a. a '+qRefFiltro.toFixed(1)+' m³/h ('+(ficha.caudalMedido>0?'caudalímetro':'caudal despejado del manómetro')+').'+metodo+' No se cuenta doble con la verificación por manómetro, que solo lleva la pérdida hasta la entrada del filtro.'+corr+susp;
       })(),
-      altitud: alt.m+' m.s.n.m.'+(alt.asumida?' (asumida, sede sin altitud confirmada)':' (según sede)'),
-      npshr: 'NPSHr estimado por velocidad específica de succión Nss='+NSS_ASUMIDO+' (referencia conservadora, no dato de fábrica)',
-      volumen: vol.nota || 'sin datos suficientes de geometría',
-      banda: 'banda de incertidumbre: K ×0.8-1.3, ΔP de calentadores ×0.8-1.3, C de Hazen-Williams hasta -13%'
+      altitud: alt.m+' m.s.n.m.'+(alt.asumida?', asumida, sede sin altitud confirmada.':', según sede.'),
+      npshr: 'NPSHr estimado por velocidad específica de succión Nss='+NSS_ASUMIDO+'. Referencia conservadora, no dato de fábrica.',
+      volumen: vol.nota || 'Sin datos suficientes de geometría.',
+      banda: 'Banda de incertidumbre: K ×0.8 a 1.3, ΔP de calentadores ×0.8 a 1.3, C de Hazen-Williams hasta -13 %.'
     }
   };
 }
