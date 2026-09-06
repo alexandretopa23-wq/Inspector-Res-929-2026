@@ -1019,8 +1019,23 @@ function resolverGauss3(M){
   }
   return x;
 }
+/* Un punto de la curva solo es válido si SUS DOS coordenadas fueron digitadas.
+   El filtro original usaba el isFinite GLOBAL, que coacciona: isFinite(null)
+   es true porque Number(null) es 0. Como el editor de la curva guarda null
+   en la coordenada que queda vacía (ver el handler de curvaManual), toda fila
+   escrita y luego borrada entraba al ajuste como un punto (0,0) — un shutoff
+   falso con cabezal cero que hunde la parábola y dispara la salvaguarda de
+   monotonía sobre una curva que era perfectamente monótona.
+   Se verificó contra los 30 backups y las fichas de la hoja: ninguna curva
+   guardada tiene coordenadas en null, así que esta corrección es un no-op
+   sobre todo lo ya emitido y NO rompe el congelamiento de v1. */
+function puntosCurvaValidos(puntos){
+  return (puntos||[]).filter(function(p){
+    return p && p.q!=null && p.h!=null && Number.isFinite(p.q) && Number.isFinite(p.h);
+  });
+}
 function ajustarCurvaCuadratica(puntos){
-  var pts = (puntos||[]).filter(function(p){ return p && isFinite(p.q) && isFinite(p.h); });
+  var pts = puntosCurvaValidos(puntos);
   if(pts.length < 3) return null;
   var n=pts.length, Sq=0,Sq2=0,Sq3=0,Sq4=0,Sh=0,Sqh=0,Sq2h=0;
   pts.forEach(function(p){
@@ -1051,7 +1066,7 @@ function ajustarCurvaCuadratica(puntos){
    descendente más simple que sigue siendo monótona en todo el rango, usada
    como reserva cuando el ajuste de 3 parámetros sale no-monótono. */
 function ajustarCurvaCuadraticaB0(puntos){
-  var pts = (puntos||[]).filter(function(p){ return p && isFinite(p.q) && isFinite(p.h); });
+  var pts = puntosCurvaValidos(puntos);
   if(pts.length < 2) return null;
   var n=pts.length, Sq2=0,Sq4=0,Sh=0,Sq2h=0;
   pts.forEach(function(p){
@@ -1101,7 +1116,7 @@ function ajustarCurvaCuadraticaMonotona(puntos){
    ajuste cuadrático: una tabla de fábrica real casi nunca es una parábola
    (ver EQK1500: casi plana en caudal bajo, se desploma en caudal alto). */
 function interpolarCurvaCatalogo(puntos){
-  var pts = (puntos||[]).filter(function(p){ return p && isFinite(p.q) && isFinite(p.h); })
+  var pts = puntosCurvaValidos(puntos)
     .slice().sort(function(a,b){ return a.q-b.q; });
   if(pts.length < 2) return null;
   var qMax = pts[pts.length-1].q;
@@ -1792,6 +1807,12 @@ function npshV2(ficha, sede, qOp, hfSucc, nBombas){
    caudal sobre su propia curva. Es un segundo estimado independiente del
    primero: si los dos coinciden hay confianza real; si divergen, algún dato
    está mal declarado y el motor lo dice en vez de entregar un número firme. */
+/* ¿El inspector marcó en qué tramo se lee el manómetro? Sin esa marca el
+   cruce solo descuenta la succión y el caudal despejado sale inflado. */
+function tramosTienenManometro(ficha){
+  var t = ficha && ficha.tuberiaTramos;
+  return !!(t && t.some && t.some(function(x){ return x && x.manometro===true; }));
+}
 function caudalPorManometro(origenCurva, ficha, esc, tramos){
   var p = ficha.presionManometro;
   if(!(p>0)) return null;
@@ -1889,6 +1910,18 @@ function calcularHidraulicaV2(ficha, sede){
   if(qManometro!=null && qModelo>0){
     var desv = (qManometro-qModelo)/qModelo*100;
     cruce = {caudal:qManometro, desviacionPct:desv, coherente:Math.abs(desv)<=25};
+  } else if(ficha.presionManometro>0){
+    /* No hubo intersección: la lectura exige más cabezal del que la bomba puede
+       dar a NINGÚN caudal. Antes esto devolvía null y el bloque entero se caía
+       del informe en silencio, justo cuando la ficha contiene su contradicción
+       más informativa. El techo es el shutoff más la columna que el manómetro
+       tenga encima (cota negativa = manómetro bajo la lámina); ninguna válvula
+       ni filtro sucio puede superarlo, porque lo impone la curva de bomba y no
+       el circuito. */
+    var zMan = (ficha.alturaManometro!=null && isFinite(ficha.alturaManometro)) ? ficha.alturaManometro : 0;
+    var techoM = origenCurva.evalH(0) - zMan;
+    cruce = {imposible:true, lecturaPsi:ficha.presionManometro, lecturaM:ficha.presionManometro*0.703,
+             techoM:techoM, techoPsi:techoM/0.703, shutoffM:origenCurva.evalH(0), cotaMan:zMan};
   }
 
   /* Caudal de operación, en orden de prioridad:
@@ -2098,13 +2131,33 @@ function evaluarResultadoHidraulico(clave, valor, ficha){
   if(clave==='vSuccion') return valor>1.8 ? {alerta:true,msg:'Supera 1.8 m/s en succión (Numeral 10.1).'} : {alerta:false};
   if(clave==='vDescarga') return valor>2.4 ? {alerta:true,msg:'Supera 2.4 m/s en presión/retorno (Numeral 10.1).'} : {alerta:false};
   if(clave==='vFiltracion'){
+    /* El rango 20-40 (y el techo de 50 en uso restringido) lo fija el numeral
+       10.2 SOLO para filtros de medio granular. Para cartucho y tierra de
+       diatomeas el mismo numeral remite a "las indicaciones del fabricante",
+       y sus velocidades de diseño son un orden de magnitud menores (un Emaux
+       CF50 son 11.4 m³/h sobre 4.63 m² = 2.5 m³/h/m²): aplicarles la banda de
+       arena los declara incumplidos siempre, aunque trabajen en su punto de
+       placa. Se exime solo con el tipo declarado EXPLÍCITAMENTE; con el campo
+       vacío se mantiene el comportamiento anterior, que es el de todas las
+       fichas ya emitidas (ninguna trae tipoFiltro diligenciado). */
+    if(ficha.tipoFiltro==='cartucho' || ficha.tipoFiltro==='de'){
+      return {alerta:false, msg:'Filtro de '+(ficha.tipoFiltro==='cartucho'?'cartucho':'tierra de diatomeas')+': el rango 20-40 m³/h/m² del numeral 10.2 aplica a medio granular. Contrasta contra el caudal de diseño de placa del fabricante.'};
+    }
     var limite = ficha.tipoUso==='restringido' ? 50 : 40;
     if(valor > limite) return {alerta:true,msg:'Supera '+limite+' m³/h/m² de velocidad de filtración (Numeral 10.2).'};
     if(ficha.tipoUso!=='restringido' && valor < 20) return {alerta:true,msg:'Por debajo de 20 m³/h/m², el mínimo del rango 20-40 (Numeral 10.2).'};
     return {alerta:false};
   }
   if(clave==='tiempoRecirc'){
-    var rango = {colectivo:[4,6], restringido:[4,6], infantil:[1,2], similar:[0.5,0.5]}[ficha.tipoUso];
+    /* Tabla 1 fija bandas para piscina (4-6 h) e infantil (1-2 h), pero para
+       estructura similar fija 0.5 h como TECHO, no como banda. Codificado como
+       [0.5,0.5] cualquier tiempo menor —es decir, mejor recirculación— salía
+       incumpliendo, y el mensaje se delataba solo ("rango 0.5-0.5 h"). */
+    if(ficha.tipoUso==='similar'){
+      if(valor > 0.5) return {alerta:true,msg:'Supera el techo de 0.5 h de la Tabla 1 para estructuras similares.'};
+      return {alerta:false};
+    }
+    var rango = {colectivo:[4,6], restringido:[4,6], infantil:[1,2]}[ficha.tipoUso];
     if(!rango) return null;
     if(valor < rango[0] || valor > rango[1]){
       return {alerta:true,msg:'Fuera del rango '+rango[0]+'-'+rango[1]+' h de la Tabla 1 para este tipo de uso.'};
@@ -2202,7 +2255,7 @@ var ITEM_HINTS = [
   {re:/desnatador/i, hint:"Cuenta las unidades y verifica proporción de 1 cada 46.5 m² de espejo de agua, canastilla en buen estado y mecanismo de bloqueo funcional."},
   {re:/boquilla|inyector/i, hint:"Verifica espaciamiento (1 cada 6m de perímetro) y que no haya zonas muertas sin recirculación visible."},
   {re:/turbidez/i, hint:"El límite normativo es 3 NTU máximo en todo momento — solicita el último registro del turbidímetro o mide en sitio si tienes el equipo."},
-  {re:/filtro/i, hint:"Revisa manómetro de presión diferencial (control de obstrucción) y que la velocidad de filtración esté dentro de 20-40 m³/h/m²."},
+  {re:/filtro/i, hint:"Revisa manómetro de presión diferencial (control de obstrucción). En filtros de medio granular la velocidad de filtración debe estar entre 20-40 m³/h/m²; en cartucho o diatomeas el numeral 10.2 remite al caudal de diseño de placa del fabricante. Verifica también el estado del elemento filtrante: un cartucho roto o desgarrado cortocircuita el filtro y ninguna velocidad lo compensa."},
   {re:/dren|succi[oó]n|atrapamiento/i, hint:"Verifica cubiertas antientrampamiento homologadas, Sistema de Liberación de Vacío operativo y botón de apagado de emergencia accesible."},
   {re:/v[eé]rtice|chafl[aá]n/i, hint:"Inspecciona visualmente el ángulo entre muros y piso: debe ser redondeado (media caña) o con chaflán, sin esquinas de 90° que acumulen suciedad."},
   {re:/corredor|and[eé]n/i, hint:"Mide el ancho con cinta métrica: mínimo 1.20m desde el borde de la piscina, superficie sin resaltos ni filos."},
@@ -3134,6 +3187,19 @@ function renderResultadoV2(res, ficha){
   if(res.cruceManometro){
     var c = res.cruceManometro;
     html += '<div class="motorSub">Verificación cruzada con el manómetro</div>';
+    if(c.imposible){
+      html += '<div class="motorFila"><span>Lectura declarada</span>'+
+        '<span class="motorValor alerta">'+c.lecturaPsi.toFixed(1)+' PSI ('+c.lecturaM.toFixed(2)+' m c.a.)</span></div>';
+      html += '<div class="motorFila"><span>Máximo que la bomba puede producir en esa toma</span>'+
+        '<span class="motorValor">'+c.techoPsi.toFixed(1)+' PSI ('+c.techoM.toFixed(2)+' m c.a.)</span></div>';
+      html += '<div class="motorVeredicto incumple"><b>Manómetro fuera de rango — la lectura es físicamente imposible</b>'+
+        'La presión declarada supera en '+(c.lecturaPsi-c.techoPsi).toFixed(1)+' PSI el techo de esta bomba, que es su shutoff ('+
+        c.shutoffM.toFixed(2)+' m c.a.) más la columna sobre el manómetro (cota '+c.cotaMan.toFixed(2)+' m). '+
+        'Ese techo lo impone la curva de bomba, no el circuito: ninguna válvula estrangulada, filtro sucio ni restricción puede superarlo. '+
+        'Las causas posibles son manómetro descalibrado o trabado, cota del manómetro mal medida, que la bomba instalada no sea la de la curva cargada, o que esa curva no incluya el punto de caudal cero — si el dato más bajo cargado no llega al shutoff, el techo mostrado arriba queda por debajo del real y el instrumento puede estar sano. '+
+        '<b>El caudal de este informe queda sin verificar</b>: es el estimado del modelo, sin contraste independiente. '+
+        'Corrige el instrumento y vuelve a medir antes de dar el caudal por firme.</div>';
+    } else {
     html += '<div class="motorFila"><span>Caudal despejado desde la lectura del manómetro</span>'+
       '<span class="'+(c.coherente?'motorValor':'motorValor alerta')+'">'+c.caudal.toFixed(2)+' m³/h</span></div>';
     html += '<div class="motorNota">'+(c.coherente
@@ -3141,6 +3207,10 @@ function renderResultadoV2(res, ficha){
       : res.fuenteCaudal==='manometro'
         ? '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. La divergencia es tan grande y por lo bajo que se adoptó este caudal como el de operación: hay una restricción real (válvula estrangulada, multipuerto del filtro, o bomba fuera de curva) que el modelo de tramos no captura. Verifícalo en campo y mide con caudalímetro.'
         : '⚠ Difiere del modelo en '+c.desviacionPct.toFixed(0)+'%. Alguno de los datos declarados no corresponde: revisa diámetros, longitudes, accesorios de alta pérdida, la altura del manómetro sobre la lámina, o si la curva de bomba seleccionada es realmente la instalada.')+'</div>';
+    }
+    if(!tramosTienenManometro(ficha)){
+      html += '<div class="motorNota">⚠ No marcaste en qué tramo está el manómetro (casilla "manómetro aquí" en CHK-078), así que el cruce solo descuenta la pérdida de succión. Eso SUBESTIMA la pérdida acumulada hasta la toma y por lo tanto INFLA el caudal despejado. Marcar el tramo correcto es el dato que más reduce la incertidumbre de esta verificación.</div>';
+    }
   }
 
   if(res.deltaPFiltro){
