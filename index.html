@@ -2009,6 +2009,12 @@ function calcularHidraulicaV2(ficha, sede){
     var r = qEfectivo/ficha.caudalDiseno;
     diseno.clase = r>=1.15 ? 'sobre' : (r>=0.90 ? 'conforme' : (r>=0.70 ? 'moderada' : 'severa'));
     if(ficha.tiempoRecircDiseno>0){
+      /* La ficha de obra es la referencia contra la que se mide la desviación
+         de caudal, pero nadie verificaba que ESA referencia fuera normativa.
+         Un proveedor que dimensionó con un tiempo fuera de Tabla 1 produce un
+         caudal de diseño no normativo, y entonces la desviación reportada
+         apunta al vaso cuando el problema está en la ficha. */
+      diseno.tiempoTabla1 = contraTabla1(ficha.tiempoRecircDiseno, ficha.tipoUso);
       diseno.volumenImplicito = ficha.caudalDiseno*ficha.tiempoRecircDiseno;
       var dv = vol.v!=null ? Math.abs(diseno.volumenImplicito-vol.v)/vol.v : null;
       var ds = vSistema!=null ? Math.abs(diseno.volumenImplicito-vSistema)/vSistema : null;
@@ -2126,6 +2132,25 @@ function calcularHidraulica(ficha, sede){
 /* Umbral normativo para cada resultado calculado — mismo mecanismo visual
    (verde/naranja) que estadoCampoFicha, aplicado a valores DERIVADOS en vez
    de digitados directamente. */
+/* Tabla 1 en un solo lugar. Fija BANDAS para piscina (4-6 h) e infantil
+   (1-2 h), pero para estructura similar fija 0.5 h como TECHO, no como banda:
+   codificado antes como [0.5,0.5], cualquier tiempo menor —es decir, mejor
+   recirculación— salía incumpliendo, y el mensaje se delataba solo ("rango
+   0.5-0.5 h"). Lo consultan dos verificaciones distintas: el tiempo MEDIDO
+   (evaluarResultadoHidraulico) y el tiempo de DISEÑO declarado en la ficha de
+   entrega de obra (contraste con diseño), que antes nadie contrastaba. */
+function rangoTabla1(tipoUso){
+  if(tipoUso==='similar') return {lo:null, hi:0.5, txt:'el techo de 0.5 h de la Tabla 1 para estructuras similares'};
+  var r = {colectivo:[4,6], restringido:[4,6], infantil:[1,2]}[tipoUso];
+  return r ? {lo:r[0], hi:r[1], txt:'el rango '+r[0]+'-'+r[1]+' h de la Tabla 1 para este tipo de uso'} : null;
+}
+function contraTabla1(t, tipoUso){
+  var r = rangoTabla1(tipoUso);
+  if(!r || !(t>0)) return null;
+  var fuera = (r.lo==null) ? (t > r.hi) : (t < r.lo || t > r.hi);
+  return {fuera:fuera, rango:r,
+    msg: fuera ? (r.lo==null ? 'Supera '+r.txt+'.' : 'Fuera d'+r.txt+'.') : null};
+}
 function evaluarResultadoHidraulico(clave, valor, ficha){
   if(valor==null || isNaN(valor)) return null;
   if(clave==='vSuccion') return valor>1.8 ? {alerta:true,msg:'Supera 1.8 m/s en succión (Numeral 10.1).'} : {alerta:false};
@@ -2149,20 +2174,9 @@ function evaluarResultadoHidraulico(clave, valor, ficha){
     return {alerta:false};
   }
   if(clave==='tiempoRecirc'){
-    /* Tabla 1 fija bandas para piscina (4-6 h) e infantil (1-2 h), pero para
-       estructura similar fija 0.5 h como TECHO, no como banda. Codificado como
-       [0.5,0.5] cualquier tiempo menor —es decir, mejor recirculación— salía
-       incumpliendo, y el mensaje se delataba solo ("rango 0.5-0.5 h"). */
-    if(ficha.tipoUso==='similar'){
-      if(valor > 0.5) return {alerta:true,msg:'Supera el techo de 0.5 h de la Tabla 1 para estructuras similares.'};
-      return {alerta:false};
-    }
-    var rango = {colectivo:[4,6], restringido:[4,6], infantil:[1,2]}[ficha.tipoUso];
-    if(!rango) return null;
-    if(valor < rango[0] || valor > rango[1]){
-      return {alerta:true,msg:'Fuera del rango '+rango[0]+'-'+rango[1]+' h de la Tabla 1 para este tipo de uso.'};
-    }
-    return {alerta:false};
+    var v = contraTabla1(valor, ficha.tipoUso);
+    if(!v) return null;
+    return v.fuera ? {alerta:true, msg:v.msg} : {alerta:false};
   }
   return null;
 }
@@ -3270,11 +3284,19 @@ function renderResultadoV2(res, ficha){
     if(DCLASE) html += '<div class="motorVeredicto '+DCLASE.cls+'"><b>'+esc(DCLASE.t)+'</b>La ficha de obra es la referencia de lo que el circuito <i>debía</i> entregar, no una medición del estado actual. La brecha es evidencia de cómo evolucionó la instalación.</div>';
     if(d.volumenImplicito!=null){
       var CONV = {
-        vaso:'El volumen implícito de la ficha ('+d.volumenImplicito.toFixed(1)+' m³) cuadra con el volumen del vaso: el proveedor usó el criterio normativo.',
+        vaso:'El volumen implícito de la ficha ('+d.volumenImplicito.toFixed(1)+' m³) cuadra con el volumen del vaso: el proveedor dimensionó sobre el vaso, sin incluir tanque de compensación. Eso identifica la convención de volumen que usó, NO dice que su tiempo de recirculación cumpla la Tabla 1 — eso se verifica aparte.',
         vasoMasTanque:'El volumen implícito de la ficha ('+d.volumenImplicito.toFixed(1)+' m³) cuadra con vaso + tanque: el proveedor incluyó el tanque de compensación en su cálculo. Sus tiempos no son comparables directamente con los normativos.',
         noCuadra:'⚠ El volumen implícito de la ficha ('+d.volumenImplicito.toFixed(1)+' m³) no cuadra ni con el vaso ni con vaso + tanque. O la piscina fue modificada, o la ficha no corresponde a este vaso.'
       }[d.convencion];
       if(CONV) html += '<div class="motorNota">'+esc(CONV)+'</div>';
+    }
+    if(d.tiempoTabla1 && d.tiempoTabla1.fuera){
+      html += '<div class="motorVeredicto incumple"><b>La ficha de entrega de obra no es una referencia normativa</b>'+
+        'Declara un tiempo de recirculación de diseño de '+d.tiempo.toFixed(2)+' h, que incumple '+
+        esc(d.tiempoTabla1.rango.txt)+'. El caudal de diseño de '+d.caudal.toFixed(2)+' m³/h se derivó de ese tiempo, '+
+        'así que la desviación mostrada arriba se está midiendo contra una referencia que ya no cumple: '+
+        'no la leas como un defecto del vaso sin revisar antes la ficha. El caudal normativo mínimo para este vaso '+
+        'sale de aplicar el tiempo correcto de la Tabla 1 sobre el volumen medido en campo.</div>';
     }
   }
 
