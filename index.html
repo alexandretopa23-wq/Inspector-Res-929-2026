@@ -252,7 +252,12 @@ input,textarea,select{font-family:inherit;}
 .tramosWrap{margin-top:4px;}
 .tramoRow{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:8px;margin-bottom:8px;}
 .tramoRow.fichaAlerta{border-color:var(--r-alto);}
-.tramoRow>input[data-tramo-campo="nombre"]{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 9px;font-size:12.5px;margin-bottom:6px;}
+.tramoRowHead{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.tramoRowHead input[data-tramo-campo="nombre"]{flex:1;min-width:0;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 9px;font-size:12.5px;}
+.tramoPos{flex:none;font-size:10.5px;font-weight:700;color:var(--text-faint);padding:0 2px;}
+.tramoBtnMini{flex:none;width:26px;height:26px;line-height:24px;padding:0;border-radius:7px;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);font-size:13px;cursor:pointer;}
+.tramoBtnMini:disabled{opacity:.35;cursor:default;}
+.tramoBtnMini.tramoBtnDel{color:var(--c-nocumple);}
 .tramoRowGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
 .tramoAyuda{font-size:10.5px;color:var(--text-faint);margin-top:5px;line-height:1.35;}
 .fichaGrupo{font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 6px;padding-top:9px;border-top:1px solid var(--border-soft);}
@@ -3044,11 +3049,18 @@ function curvaManualHtml(ficha){
 function tramosHtml(ficha){
   var tramos = (ficha.tuberiaTramos && ficha.tuberiaTramos.length) ? ficha.tuberiaTramos : [{},{}];
   var html = '<div class="tramosWrap">'+
-    '<div class="subLabel" style="margin-top:10px;">Tramos de tubería del cuarto de máquinas (uno por sección — diámetro, longitud y lado hidráulico)</div>';
+    '<div class="subLabel" style="margin-top:10px;">Tramos de tubería del cuarto de máquinas (uno por sección — diámetro, longitud y lado hidráulico). '+
+    'Cárgalos EN EL ORDEN en que el agua los recorre, desde la bomba/vaso hasta la toma del manómetro: el cálculo suma tramos por su POSICIÓN en esta lista, no por su nombre. Usa ↑ / ↓ para corregir el orden.</div>';
   tramos.forEach(function(t,i){
     var alerta = (t && t.diametro>8);
     html += '<div class="tramoRow'+(alerta?' fichaAlerta':'')+'">'+
-      '<input type="text" data-tramo-idx="'+i+'" data-tramo-campo="nombre" placeholder="Nombre del tramo (ej. Bomba-filtros)" value="'+esc(t&&t.nombre!=null?t.nombre:'')+'">'+
+      '<div class="tramoRowHead">'+
+        '<span class="tramoPos">#'+(i+1)+'</span>'+
+        '<input type="text" data-tramo-idx="'+i+'" data-tramo-campo="nombre" placeholder="Nombre del tramo (ej. Bomba-filtros)" value="'+esc(t&&t.nombre!=null?t.nombre:'')+'">'+
+        '<button type="button" class="tramoBtnMini" data-action="moverTramoArriba" data-tramo-idx="'+i+'" title="Mover arriba"'+(i===0?' disabled':'')+'>↑</button>'+
+        '<button type="button" class="tramoBtnMini" data-action="moverTramoAbajo" data-tramo-idx="'+i+'" title="Mover abajo"'+(i===tramos.length-1?' disabled':'')+'>↓</button>'+
+        '<button type="button" class="tramoBtnMini tramoBtnDel" data-action="eliminarTramo" data-tramo-idx="'+i+'" title="Eliminar este tramo">🗑</button>'+
+      '</div>'+
       '<div class="tramoRowGrid">'+
         '<input type="number" step="0.5" data-tramo-idx="'+i+'" data-tramo-campo="diametro" placeholder="Ø pulg" value="'+(t&&t.diametro!=null?t.diametro:'')+'">'+
         '<select data-tramo-idx="'+i+'" data-tramo-campo="lado">'+
@@ -4140,6 +4152,56 @@ function wireSingleItem(itemEl, it){
       pintarMiniaturas(itemEl);
     };
   }
+  /* Mover/eliminar tramos: el cálculo de pérdida hasta el manómetro
+     (hfHastaManometroV2) suma tramos por su POSICIÓN en ficha.tuberiaTramos,
+     no por su nombre — asume que la lista está en el orden en que el agua
+     realmente los recorre. Antes de estos botones la única forma de
+     corregir un orden equivocado era borrar y reescribir los campos a mano.
+     Mover intercambia el tramo completo (incluido manometro:true si lo
+     lleva) con el vecino; eliminar solo hace splice — ninguno de los dos
+     necesita tocar el resto de los tramos. */
+  function rerenderTramos(){
+    itemEl.innerHTML = renderItemFull(it, getResp(), CIERRA_ITEM_ESTADOS.indexOf(getResp().estado)>=0);
+    wireSingleItem(itemEl, it);
+    pintarMiniaturas(itemEl);
+  }
+  itemEl.querySelectorAll('[data-action="moverTramoArriba"]').forEach(function(btn){
+    btn.onclick = function(e){
+      e.stopPropagation();
+      var idx = parseInt(btn.getAttribute('data-tramo-idx'),10);
+      var ficha = getFicha(sess);
+      var t = ficha.tuberiaTramos;
+      if(!t || idx<=0 || idx>=t.length) return;
+      var tmp = t[idx-1]; t[idx-1] = t[idx]; t[idx] = tmp;
+      saveSession(sess); updateSavedLabel(); maybeAutoSyncFicha();
+      rerenderTramos();
+    };
+  });
+  itemEl.querySelectorAll('[data-action="moverTramoAbajo"]').forEach(function(btn){
+    btn.onclick = function(e){
+      e.stopPropagation();
+      var idx = parseInt(btn.getAttribute('data-tramo-idx'),10);
+      var ficha = getFicha(sess);
+      var t = ficha.tuberiaTramos;
+      if(!t || idx<0 || idx>=t.length-1) return;
+      var tmp = t[idx+1]; t[idx+1] = t[idx]; t[idx] = tmp;
+      saveSession(sess); updateSavedLabel(); maybeAutoSyncFicha();
+      rerenderTramos();
+    };
+  });
+  itemEl.querySelectorAll('[data-action="eliminarTramo"]').forEach(function(btn){
+    btn.onclick = function(e){
+      e.stopPropagation();
+      var idx = parseInt(btn.getAttribute('data-tramo-idx'),10);
+      var ficha = getFicha(sess);
+      var t = ficha.tuberiaTramos;
+      if(!t || idx<0 || idx>=t.length) return;
+      t.splice(idx,1);
+      if(!t.length) t.push({});
+      saveSession(sess); updateSavedLabel(); maybeAutoSyncFicha();
+      rerenderTramos();
+    };
+  });
 
   var btnCalcular = itemEl.querySelector('[data-action="calcularHidraulica"]');
   if(btnCalcular){
