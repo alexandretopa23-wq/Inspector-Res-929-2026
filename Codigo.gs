@@ -731,19 +731,36 @@ var FUERA_ALCANCE_929 = {
    ítem (CHK-003, el plano consolidado hidráulico+eléctrico+gas) que no se
    puede partir entre áreas. Si se agregan ítems al checklist (nuevo CHK-xxx)
    y no aparecen aquí, _areaDe() los manda a "Sin clasificar" para que se
-   note en el dashboard en vez de perderse en silencio dentro de otra área. */
+   note en el dashboard en vez de perderse en silencio dentro de otra área.
+
+   Revisión 2026-09-01 (cruce contra los respCierre reales de las inspecciones,
+   ver Novedades_Revision_Inspecciones.md): se movieron 10 ítems para que el
+   reparto del informe/dashboard coincida con quién cierra de verdad —
+   CHK-030, CHK-034 → Gestión de sede; CHK-036, CHK-039, CHK-202 → Térmica e
+   Hidráulica; CHK-111, CHK-173(→Gestión), CHK-175, CHK-176, CHK-177 → ajuste.
+   Detalle: CHK-030/034 (reglamento y aforo visibles) son documentos de sede;
+   CHK-036 (revestimiento) y CHK-039 (protocolo de limpieza de vértices sin
+   media caña) los cierra T&H como operador de piscina; CHK-111 (extintor del
+   cuarto de equipos) es dotación de Infraestructura; CHK-173 (señalización
+   incluyente) es de sede; CHK-175/176/177 (demarcar área de primeros
+   auxilios, señalizarla, punto de agua) exigen intervención física de
+   Infraestructura; CHK-202 (ventilación mecánica de sanitarios) es de T&H.
+
+   Revisión 2026-09-06: CHK-009 (certificado SSLV de la piscina) → Térmica e
+   Hidráulica; es documentación operativa del vaso que cierra T&H, no
+   Infraestructura. */
 var AREA_ORDEN = ['Eléctrico', 'Infraestructura', 'Térmica e Hidráulica', 'Gestión de sede', 'Compartido (los 3)'];
 var ID_A_AREA = {
   'CHK-001':'Infraestructura', 'CHK-002':'Infraestructura', 'CHK-003':'Compartido (los 3)', 'CHK-004':'Eléctrico',
   'CHK-005':'Térmica e Hidráulica', 'CHK-006':'Térmica e Hidráulica', 'CHK-007':'Térmica e Hidráulica', 'CHK-008':'Infraestructura',
-  'CHK-009':'Infraestructura', 'CHK-010':'Eléctrico', 'CHK-011':'Infraestructura', 'CHK-012':'Térmica e Hidráulica',
+  'CHK-009':'Térmica e Hidráulica', 'CHK-010':'Eléctrico', 'CHK-011':'Infraestructura', 'CHK-012':'Térmica e Hidráulica',
   'CHK-013':'Eléctrico', 'CHK-014':'Térmica e Hidráulica', 'CHK-015':'Eléctrico', 'CHK-016':'Térmica e Hidráulica',
   'CHK-017':'Gestión de sede', 'CHK-018':'Térmica e Hidráulica', 'CHK-019':'Térmica e Hidráulica', 'CHK-020':'Térmica e Hidráulica',
   'CHK-021':'Térmica e Hidráulica', 'CHK-022':'Térmica e Hidráulica', 'CHK-023':'Eléctrico', 'CHK-024':'Térmica e Hidráulica',
   'CHK-025':'Gestión de sede', 'CHK-026':'Infraestructura', 'CHK-027':'Infraestructura', 'CHK-028':'Infraestructura',
-  'CHK-029':'Infraestructura', 'CHK-030':'Infraestructura', 'CHK-031':'Infraestructura', 'CHK-032':'Infraestructura',
-  'CHK-033':'Infraestructura', 'CHK-034':'Infraestructura', 'CHK-035':'Infraestructura', 'CHK-036':'Infraestructura',
-  'CHK-037':'Infraestructura', 'CHK-038':'Infraestructura', 'CHK-039':'Infraestructura', 'CHK-040':'Térmica e Hidráulica',
+  'CHK-029':'Infraestructura', 'CHK-030':'Gestión de sede', 'CHK-031':'Infraestructura', 'CHK-032':'Infraestructura',
+  'CHK-033':'Infraestructura', 'CHK-034':'Gestión de sede', 'CHK-035':'Infraestructura', 'CHK-036':'Térmica e Hidráulica',
+  'CHK-037':'Infraestructura', 'CHK-038':'Infraestructura', 'CHK-039':'Térmica e Hidráulica', 'CHK-040':'Térmica e Hidráulica',
   'CHK-041':'Térmica e Hidráulica', 'CHK-042':'Infraestructura', 'CHK-043':'Infraestructura', 'CHK-044':'Infraestructura',
   'CHK-045':'Infraestructura', 'CHK-046':'Infraestructura', 'CHK-047':'Infraestructura', 'CHK-048':'Infraestructura',
   'CHK-049':'Infraestructura', 'CHK-050':'Infraestructura', 'CHK-051':'Infraestructura', 'CHK-052':'Infraestructura',
@@ -761,7 +778,7 @@ var ID_A_AREA = {
   'CHK-097':'Térmica e Hidráulica', 'CHK-098':'Térmica e Hidráulica', 'CHK-099':'Térmica e Hidráulica', 'CHK-100':'Térmica e Hidráulica',
   'CHK-101':'Térmica e Hidráulica', 'CHK-102':'Térmica e Hidráulica', 'CHK-103':'Térmica e Hidráulica', 'CHK-104':'Térmica e Hidráulica',
   'CHK-105':'Térmica e Hidráulica', 'CHK-106':'Térmica e Hidráulica', 'CHK-107':'Térmica e Hidráulica', 'CHK-108':'Térmica e Hidráulica',
-  'CHK-109':'Térmica e Hidráulica', 'CHK-110':'Térmica e Hidráulica', 'CHK-111':'Térmica e Hidráulica', 'CHK-112':'Térmica e Hidráulica',
+  'CHK-109':'Térmica e Hidráulica', 'CHK-110':'Térmica e Hidráulica', 'CHK-111':'Infraestructura', 'CHK-112':'Térmica e Hidráulica',
   'CHK-113':'Eléctrico', 'CHK-114':'Eléctrico', 'CHK-115':'Térmica e Hidráulica', 'CHK-116':'Eléctrico',
   'CHK-117':'Eléctrico', 'CHK-118':'Eléctrico', 'CHK-119':'Eléctrico', 'CHK-120':'Eléctrico',
   'CHK-121':'Eléctrico', 'CHK-122':'Eléctrico', 'CHK-123':'Eléctrico', 'CHK-124':'Eléctrico',
@@ -777,14 +794,14 @@ var ID_A_AREA = {
   'CHK-161':'Térmica e Hidráulica', 'CHK-162':'Infraestructura', 'CHK-163':'Infraestructura', 'CHK-164':'Infraestructura',
   'CHK-165':'Infraestructura', 'CHK-166':'Infraestructura', 'CHK-167':'Infraestructura', 'CHK-168':'Infraestructura',
   'CHK-169':'Infraestructura', 'CHK-170':'Infraestructura', 'CHK-171':'Infraestructura', 'CHK-172':'Infraestructura',
-  'CHK-173':'Infraestructura', 'CHK-174':'Infraestructura', 'CHK-175':'Gestión de sede', 'CHK-176':'Gestión de sede',
-  'CHK-177':'Gestión de sede', 'CHK-178':'Infraestructura', 'CHK-179':'Gestión de sede', 'CHK-180':'Gestión de sede',
+  'CHK-173':'Gestión de sede', 'CHK-174':'Infraestructura', 'CHK-175':'Infraestructura', 'CHK-176':'Infraestructura',
+  'CHK-177':'Infraestructura', 'CHK-178':'Infraestructura', 'CHK-179':'Gestión de sede', 'CHK-180':'Gestión de sede',
   'CHK-181':'Gestión de sede', 'CHK-182':'Gestión de sede', 'CHK-183':'Gestión de sede', 'CHK-184':'Gestión de sede',
   'CHK-185':'Gestión de sede', 'CHK-186':'Gestión de sede', 'CHK-187':'Gestión de sede', 'CHK-188':'Gestión de sede',
   'CHK-189':'Gestión de sede', 'CHK-190':'Gestión de sede', 'CHK-191':'Gestión de sede', 'CHK-192':'Gestión de sede',
   'CHK-193':'Gestión de sede', 'CHK-194':'Gestión de sede', 'CHK-195':'Gestión de sede', 'CHK-196':'Gestión de sede',
   'CHK-197':'Infraestructura', 'CHK-198':'Infraestructura', 'CHK-199':'Infraestructura', 'CHK-200':'Infraestructura',
-  'CHK-201':'Infraestructura', 'CHK-202':'Infraestructura', 'CHK-203':'Infraestructura', 'CHK-204':'Gestión de sede',
+  'CHK-201':'Infraestructura', 'CHK-202':'Térmica e Hidráulica', 'CHK-203':'Infraestructura', 'CHK-204':'Gestión de sede',
   'CHK-205':'Gestión de sede', 'CHK-206':'Gestión de sede', 'CHK-207':'Gestión de sede', 'CHK-208':'Gestión de sede',
   'CHK-209':'Gestión de sede', 'CHK-210':'Térmica e Hidráulica', 'CHK-211':'Térmica e Hidráulica', 'CHK-212':'Térmica e Hidráulica',
   'CHK-213':'Térmica e Hidráulica', 'CHK-214':'Térmica e Hidráulica', 'CHK-215':'Térmica e Hidráulica', 'CHK-216':'Infraestructura',
@@ -1863,14 +1880,18 @@ function _anexoFichaHidraulica(body, ficha){
           filasX.push(['Resultado',
             'La pérdida neta del lecho sale en '+dpf.mcaNeto.toFixed(2)+' m c.a., es decir cero o negativa. En un filtro con flujo hacia adelante el lecho solo disipa energía, nunca la añade, de modo que ese valor no es físico. '+
             'La causa está en la instrumentación (manómetros descalibrados, tomas de entrada y salida intercambiadas) o en que no había flujo por el lecho al momento de leer. Una válvula de bypass parcialmente cerrada aguas abajo no produce este efecto: sube ambas lecturas por igual y reduce el caudal. '+
-            'La pérdida del filtro no se incorpora a la curva del sistema.']);
+            'Por eso ESTA LECTURA se descarta: no sirve para estimar la pérdida del lecho y no se incorpora a la curva del sistema. El filtro tampoco se modela por otra vía, de modo que la curva del sistema queda del lado optimista frente a un lecho colmatado; para incorporarlo hace falta una lectura válida de los dos manómetros.']);
+        } else if(!dpf.entra || !(dpf.qRef>0)){
+          filasX.push(['Resultado',
+            'La pérdida real del lecho es de '+dpf.mcaNeto.toFixed(2)+' m c.a., pero no hay un caudal de referencia con que anclarla (ni caudalímetro en sitio ni caudal despejado del manómetro), así que este término no se incorpora a la curva del sistema. La curva queda del lado optimista frente a un lecho colmatado.'+
+            (dpf.sospechaBaja ? ' Además, siendo un filtro de arena, una pérdida corregida de solo '+dpf.mcaNeto.toFixed(2)+' m c.a. apunta a caudal real muy bajo o instrumentación poco confiable. La ecuación de Ergun da 1 a 2 m para un lecho limpio a caudal de filtración normal (Ergun, 1952).' : '')]);
         } else {
           filasX.push(['Cómo entra al cálculo',
             'La pérdida real del lecho ('+dpf.mcaNeto.toFixed(2)+' m c.a. al caudal de referencia de '+
             dpf.qRef.toFixed(1)+' m³/h, tomado del '+(dpf.fuenteQRef==='caudalímetro'?'caudalímetro en sitio':'caudal despejado del propio manómetro')+
             ') se suma a la curva del sistema escalada de forma lineal con el caudal: h_L(Q) = h_L_ref · Q / Q_ref, con la misma banda de ±30 % que el resto de las pérdidas del modelo. '+
-            'Se usa una relación lineal y no cuadrática porque a la velocidad de filtración de una piscina el lecho de arena trabaja en régimen viscoso —la ecuación de Ergun da un término inercial inferior al 15 %— y un lecho colmatado se comporta como una filtración de torta, que también es lineal. '+
-            'Antes de esta lectura el modelo de tramos no incorporaba el filtro y un lecho colmatado no producía ningún efecto en el caudal calculado.'+
+            'La relación es lineal y no cuadrática porque a la velocidad de filtración de una piscina el lecho de arena trabaja en régimen viscoso, con Reynolds de partícula entre 3 y 9 y término inercial bajo el 15 % (Ergun, 1952; Reynolds, 1883), y un lecho colmatado se comporta como filtración de torta, también lineal. '+
+            'El filtro solo entra al modelo por esta vía: sin las dos lecturas del manómetro, un lecho colmatado no altera el caudal calculado.'+
             (dpf.mcaNeto>=6 ? ' La pérdida es alta: el lecho probablemente requiere retrolavado.' : '')]);
           if(dpf.sospechaBaja){
             filasX.push(['Advertencia sobre la lectura',
@@ -2158,36 +2179,35 @@ function _anexoMemoriaCalculo(body, ficha){
       ], {mono:true, pctEtiqueta:0.38});
       _nota(body,
         'El modelo v2 corrige tres puntos del v1. Con tanque de compensación, la carga estática es ' +
-        'solo la diferencia entre las dos láminas de agua, porque el recorrido de la tubería por los ' +
-        'distintos niveles del cuarto de máquinas se cancela al tratarse de conducto cerrado y lleno. ' +
-        'La lectura del manómetro ya no se suma a la curva del sistema, porque hacerlo contaba dos ' +
-        'veces el circuito aguas abajo. Y los accesorios pasan de una longitud equivalente única a ' +
-        'coeficientes K diferenciados por tipo. La revisión v2.1 agrega las curvas de fábrica de las ' +
-        'familias EQ Series, IntelliFlo VS+SVRS, WhisperFlo VST y WhisperFloXF, corrige el punto de ' +
-        'medida del manómetro con su cota respecto a la lámina, y modela el acople del calentador: ' +
-        'una bomba inyectora propia no carga la línea principal, un bypass la carga con techo y un ' +
-        'montaje en línea directa la carga sin techo. También admite varias bombas iguales ' +
-        'operando en paralelo sobre un mismo circuito: a igual cabezal los caudales se suman, ' +
-        'así que la curva del conjunto de N bombas es la de una sola evaluada en Q/N. Como la ' +
-        'curva del sistema crece con el cuadrado del caudal, duplicar bombas no duplica el ' +
-        'caudal: el punto de operación sube a más cabezal y menos caudal por bomba. ' +
-        'Cuando el filtro tiene manómetro de entrada y de salida, el salto de presión medido ' +
-        'entre ambos se suma a la curva del sistema escalado de forma lineal con el caudal ' +
-        '(h_L(Q) = h_L_ref · Q / Q_ref), de modo que el estado real del lecho —limpio o ' +
-        'colmatado— queda reflejado en el caudal calculado en lugar de quedar por fuera del ' +
-        'modelo. Se usa una relación lineal y no cuadrática porque a la velocidad de filtración ' +
-        'de una piscina el lecho de arena trabaja en régimen viscoso (la ecuación de Ergun deja ' +
-        'el término inercial por debajo del 15 %) y un lecho colmatado se comporta como una ' +
-        'filtración de torta, que también es lineal. Ese término no se solapa con la ' +
-        'verificación por manómetro, que solo lleva la pérdida hasta la entrada del filtro. El ' +
-        'manómetro mide presión estática local, no energía: si los dos instrumentos están a ' +
-        'distinta altura, el que quede más abajo registra una columna hidrostática de cerca de ' +
-        '1.4 PSI por metro que no corresponde al filtro, y por eso el ΔP bruto se corrige con la ' +
-        'diferencia de cota antes de usarlo. Una vez hecha esa corrección, la pérdida a través del ' +
-        'lecho tiene que ser positiva —el medio filtrante disipa energía, no la aporta—; si aun ' +
-        'así sale cero o negativa, la causa está en manómetros descalibrados, en tomas de entrada ' +
-        'y salida intercambiadas o en que no había flujo por el lecho al momento de leer, y el ' +
-        'modelo descarta la lectura en lugar de introducir una pérdida negativa.');
+        'solo la diferencia entre las dos láminas de agua, porque el recorrido de la tubería por el ' +
+        'cuarto de máquinas se cancela al ser conducto cerrado y lleno. La lectura del manómetro ya ' +
+        'no se suma a la curva del sistema, porque hacerlo contaba dos veces el circuito aguas ' +
+        'abajo. Y los accesorios pasan de una longitud equivalente única a coeficientes K por tipo ' +
+        '(Crane Co., 2022). La revisión v2.1 agrega las curvas de fábrica de las familias EQ ' +
+        'Series, IntelliFlo VS+SVRS, WhisperFlo VST y WhisperFloXF, corrige el punto de medida del ' +
+        'manómetro con su cota respecto a la lámina, y modela el acople del calentador: una bomba ' +
+        'inyectora propia no carga la línea principal, un bypass la carga con techo y un montaje en ' +
+        'línea directa la carga sin techo. También admite varias bombas iguales en paralelo sobre ' +
+        'un mismo circuito: a igual cabezal los caudales se suman, así que la curva del conjunto de ' +
+        'N bombas es la de una sola evaluada en Q/N (Karassik et al., 2008). Como la curva del ' +
+        'sistema crece con el cuadrado del caudal, duplicar bombas no duplica el caudal: el punto ' +
+        'de operación sube a más cabezal y menos caudal por bomba. ' +
+        'Cuando el filtro tiene manómetro de entrada y de salida, el salto de presión medido entre ' +
+        'ambos se suma a la curva del sistema escalado de forma lineal con el caudal, ' +
+        'h_L(Q) = h_L_ref · Q / Q_ref, de modo que el estado real del lecho queda reflejado en el ' +
+        'caudal calculado. La relación es lineal y no cuadrática porque a la velocidad de ' +
+        'filtración de una piscina el lecho de arena trabaja en régimen viscoso, con Reynolds de ' +
+        'partícula entre 3 y 9 y término inercial bajo el 15 % (Ergun, 1952; Reynolds, 1883), y un ' +
+        'lecho colmatado se comporta como filtración de torta, también lineal. Ese término no se ' +
+        'solapa con la verificación por manómetro, que solo lleva la pérdida hasta la entrada del ' +
+        'filtro. El manómetro mide presión estática local, no energía (Bernoulli; White, 2011): si ' +
+        'los dos instrumentos están a distinta altura, el que quede más abajo registra una columna ' +
+        'de cerca de 1.4 PSI por metro que no corresponde al filtro, y por eso el ΔP bruto se ' +
+        'corrige con la diferencia de cota antes de usarlo. Hecha esa corrección, la pérdida a ' +
+        'través del lecho tiene que ser positiva, porque el medio filtrante disipa energía y no la ' +
+        'aporta. Si aun así sale cero o negativa, la causa está en manómetros descalibrados, en ' +
+        'tomas de entrada y salida intercambiadas o en que no había flujo por el lecho al momento ' +
+        'de leer, y el modelo descarta esa lectura en lugar de introducir una pérdida negativa.');
     } else {
       _tarjetaDatos(body, [
         ['Modelo de cálculo', 'v1 (legado)'],
@@ -2237,8 +2257,11 @@ function _referencias(body, incluirTecnicas, numero){
   ];
   if(incluirTecnicas){
     refs.push('Crane Co. (2022). Flow of fluids through valves, fittings, and pipe (Technical Paper No. 410).');
+    refs.push('Ergun, S. (1952). Fluid flow through packed columns. Chemical Engineering Progress, 48(2), 89 a 94.');
     refs.push('Hydraulic Institute. (2017). Rotodynamic pumps: Guideline for NPSH margin (ANSI/HI 9.6.1-2017).');
     refs.push('Karassik, I. J., Messina, J. P., Cooper, P., & Heald, C. C. (2008). Pump handbook (4.ª ed.). McGraw-Hill.');
+    refs.push('Reynolds, O. (1883). An experimental investigation of the circumstances which determine whether the motion of water shall be direct or sinuous, and of the law of resistance in parallel channels. Philosophical Transactions of the Royal Society of London, 174, 935 a 982.');
+    refs.push('White, F. M. (2011). Fluid mechanics (7.ª ed.). McGraw-Hill.');
   }
   // Orden alfabético por autor, como pide APA, y con sangría francesa: la
   // segunda línea de cada referencia entra 0.5" respecto a la primera.
