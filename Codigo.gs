@@ -748,13 +748,28 @@ var FUERA_ALCANCE_929 = {
 
    Revisión 2026-09-06: CHK-009 (certificado SSLV de la piscina) → Térmica e
    Hidráulica; es documentación operativa del vaso que cierra T&H, no
-   Infraestructura. */
+   Infraestructura.
+
+   Revisión 2026-09-08 (cruce del mapa contra el "Enfoque técnico" de la hoja,
+   ver Revision_Asignacion_Items_por_Area.md): dos ajustes tras confirmación del
+   equipo —
+   · CHK-013 (certificados de sensores ópticos / de inmersión) Eléctrico → T&H:
+     el sensor de inmersión hace parte de la gestión operativa de la línea T&H,
+     no de la instrumentación eléctrica.
+   · CHK-141 (acceso restringido al depósito de químicos) T&H → Infraestructura:
+     control de acceso a un recinto, mismo oficio que CHK-105 (cuarto de equipos).
+   Confirmado sin cambio: cap. 27 completo (CHK-223–230) sigue en T&H — T&H opera
+   las piscinas y hace la gestión de hallazgos; cap. 25 completo (CHK-210–215)
+   sigue en T&H por lo mismo; CHK-059/060 siguen en T&H (rejillas de las
+   canaletas perimetrales del vaso), y CHK-054/055 siguen en Infraestructura
+   (rejillas de piso / desagüe, ajenas al circuito hidráulico); CHK-136/137
+   siguen en Eléctrico (gestión inmediata del área, con apoyo de Infraestructura). */
 var AREA_ORDEN = ['Eléctrico', 'Infraestructura', 'Térmica e Hidráulica', 'Gestión de sede', 'Compartido (los 3)'];
 var ID_A_AREA = {
   'CHK-001':'Infraestructura', 'CHK-002':'Infraestructura', 'CHK-003':'Compartido (los 3)', 'CHK-004':'Eléctrico',
   'CHK-005':'Térmica e Hidráulica', 'CHK-006':'Térmica e Hidráulica', 'CHK-007':'Térmica e Hidráulica', 'CHK-008':'Infraestructura',
   'CHK-009':'Térmica e Hidráulica', 'CHK-010':'Eléctrico', 'CHK-011':'Infraestructura', 'CHK-012':'Térmica e Hidráulica',
-  'CHK-013':'Eléctrico', 'CHK-014':'Térmica e Hidráulica', 'CHK-015':'Eléctrico', 'CHK-016':'Térmica e Hidráulica',
+  'CHK-013':'Térmica e Hidráulica', 'CHK-014':'Térmica e Hidráulica', 'CHK-015':'Eléctrico', 'CHK-016':'Térmica e Hidráulica',
   'CHK-017':'Gestión de sede', 'CHK-018':'Térmica e Hidráulica', 'CHK-019':'Térmica e Hidráulica', 'CHK-020':'Térmica e Hidráulica',
   'CHK-021':'Térmica e Hidráulica', 'CHK-022':'Térmica e Hidráulica', 'CHK-023':'Eléctrico', 'CHK-024':'Térmica e Hidráulica',
   'CHK-025':'Gestión de sede', 'CHK-026':'Infraestructura', 'CHK-027':'Infraestructura', 'CHK-028':'Infraestructura',
@@ -786,7 +801,7 @@ var ID_A_AREA = {
   'CHK-129':'Térmica e Hidráulica', 'CHK-130':'Térmica e Hidráulica', 'CHK-131':'Térmica e Hidráulica', 'CHK-132':'Térmica e Hidráulica',
   'CHK-133':'Eléctrico', 'CHK-134':'Eléctrico', 'CHK-135':'Eléctrico', 'CHK-136':'Eléctrico',
   'CHK-137':'Eléctrico', 'CHK-138':'Eléctrico', 'CHK-139':'Eléctrico', 'CHK-140':'Infraestructura',
-  'CHK-141':'Térmica e Hidráulica', 'CHK-142':'Infraestructura', 'CHK-143':'Eléctrico', 'CHK-144':'Infraestructura',
+  'CHK-141':'Infraestructura', 'CHK-142':'Infraestructura', 'CHK-143':'Eléctrico', 'CHK-144':'Infraestructura',
   'CHK-145':'Térmica e Hidráulica', 'CHK-146':'Térmica e Hidráulica', 'CHK-147':'Térmica e Hidráulica', 'CHK-148':'Infraestructura',
   'CHK-149':'Infraestructura', 'CHK-150':'Térmica e Hidráulica', 'CHK-151':'Térmica e Hidráulica', 'CHK-152':'Térmica e Hidráulica',
   'CHK-153':'Térmica e Hidráulica', 'CHK-154':'Térmica e Hidráulica', 'CHK-155':'Térmica e Hidráulica', 'CHK-156':'Térmica e Hidráulica',
