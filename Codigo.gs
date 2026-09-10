@@ -1130,6 +1130,41 @@ function obtenerDashboard(spreadsheetId){
     return {fecha:fecha, vasos:Object.keys(porFecha[fecha]).length};
   });
 
+  /* ---------- Segmentación por área para el dashboard ----------
+     Deja que el tablero COMPLETO (KPIs, "Capítulos con más fallas", "Estado
+     de los ítems", "Cumplimiento por sede") se recalcule al tocar una fila de
+     "Distribución de hallazgos por área", y que ese corte se pueda combinar
+     con una sede. Se envían solo los bloques numéricos: la lista de hallazgos
+     NO se replica por segmento — el cliente filtra DATA.global.hallazgos por
+     `area`/`sede` (cada hallazgo ya trae ambos campos), y así el payload no
+     se multiplica por (áreas × sedes).
+     El área de cada ítem es la exacta de _areaDe() — sin fundir "Compartido
+     (los 3)" en las áreas técnicas como hace _filasDeArea() para los informes
+     — para que los conteos calcen fila por fila con la tabla que el usuario
+     toca (m.porArea usa esa misma clave exacta). */
+  function _globalLite(gl){
+    var o = {}; for(var k in gl){ if(k!=='hallazgos') o[k] = gl[k]; } return o;
+  }
+  function _segmentoDashboard(filas){
+    var r = _resumenDashboard(filas);
+    return {global:_globalLite(r.global), capitulos:r.capitulos, areas:r.areas};
+  }
+  var segPorArea = {}, segPorAreaSede = {}, segPorSede = {};
+  Object.keys(porSede).forEach(function(s){ segPorSede[s] = _segmentoDashboard(porSede[s]); });
+  AREA_ORDEN.forEach(function(area){
+    var filasArea = todo.filter(function(f){ return _areaDe(String(f[COL.id-1]))===area; });
+    if(!filasArea.length) return;
+    segPorArea[area] = _segmentoDashboard(filasArea);
+    var bySede = {};
+    filasArea.forEach(function(f){
+      var s = String(f[COL.sede-1]||'Sin sede');
+      (bySede[s] = bySede[s] || []).push(f);
+    });
+    Object.keys(bySede).forEach(function(s){
+      segPorAreaSede[area+'␟'+s] = _segmentoDashboard(bySede[s]);
+    });
+  });
+
   return {
     ok:true,
     actualizadoEn: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'),
@@ -1140,7 +1175,8 @@ function obtenerDashboard(spreadsheetId){
     vasos: vasos,
     capitulos: resumenGlobal.capitulos,
     areas: resumenGlobal.areas,
-    tendencia: tendencia
+    tendencia: tendencia,
+    segmentacion: {porArea:segPorArea, porAreaSede:segPorAreaSede, porSede:segPorSede}
   };
  }catch(err){
   return {ok:false, error:String(err.message||err)};
