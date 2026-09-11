@@ -1858,10 +1858,23 @@ function derivadosDeCaudal(q, ficha, tramos){
   };
 }
 
+/* Sin curva de bomba (bomba sin declarar, o sin datos de catálogo/curva
+   manual suficientes) el modelo no puede ubicar un punto de operación por sí
+   mismo — pero si hay ficha.caudalMedido (caudalímetro u otro instrumento en
+   sitio) esa curva deja de hacer falta: las velocidades por tramo, la
+   filtración y la recirculación se calculan directo sobre el dato medido
+   (derivadosDeCaudal, curvaSistemaV2 no entran en esta cuenta). Lo único que
+   se pierde sin curva es lo que SÍ depende de ella: cabezal, el caudal que
+   habría estimado el modelo (caudalModelo*) y el cruce por manómetro. Antes
+   de este cambio, un vaso sin la ficha de la bomba pero con instrumento en
+   sitio no podía calcular nada — el botón fallaba con "Selecciona la
+   familia de la bomba" aunque el dato que manda (el medido) ya estuviera. */
 function calcularHidraulicaV2(ficha, sede){
   var rc = resolverCurvaBombaV2(ficha);
-  if(rc.error) return {error:rc.error};
-  var origenCurva = rc.curva;
+  var origenCurva = rc.error ? null : rc.curva;
+  if(!origenCurva && !(ficha.caudalMedido>0)){
+    return {error: rc.error};
+  }
 
   /* Varias bombas IGUALES en paralelo sobre un mismo circuito. La curva
      combinada de N bombas idénticas es la de una sola desplazada en caudal:
@@ -1875,7 +1888,7 @@ function calcularHidraulicaV2(ficha, sede){
      Requiere que las bombas sean del mismo modelo/curva; con bombas distintas
      hay que cargar la curva manual del conjunto. */
   var nBombas = (ficha.bombasParalelo>0) ? Math.round(ficha.bombasParalelo) : 1;
-  if(nBombas>1){
+  if(nBombas>1 && origenCurva){
     var curvaUna = origenCurva;
     origenCurva = {
       evalH: function(q){ return curvaUna.evalH(q/nBombas); },
@@ -1893,31 +1906,36 @@ function calcularHidraulicaV2(ficha, sede){
   /* El cruce del manómetro es independiente de la curva del sistema (usa solo
      la pérdida hasta el punto de medición), así que se resuelve primero y
      sirve además para anclar la pérdida del filtro cuando no hay caudalímetro. */
-  ESCENARIOS_BANDA.forEach(function(esc){
-    caudalesManometro[esc.id] = caudalPorManometro(origenCurva, ficha, esc, tramos);
-  });
+  if(origenCurva){
+    ESCENARIOS_BANDA.forEach(function(esc){
+      caudalesManometro[esc.id] = caudalPorManometro(origenCurva, ficha, esc, tramos);
+    });
+  }
   var qRefFiltro = (ficha.caudalMedido>0) ? ficha.caudalMedido
                  : (caudalesManometro.nominal>0 ? caudalesManometro.nominal : 0);
   var hLFiltroRef = hLFiltroRefV2(ficha, qRefFiltro); // m c.a. a Q_ref, 0 si no aplica
-  ESCENARIOS_BANDA.forEach(function(esc){
-    var op = encontrarPuntoOperacionV2(origenCurva, curvaSistemaV2(ficha,esc,tramos,hLFiltroRef,qRefFiltro), origenCurva.qMax);
-    caudales[esc.id] = op ? op.q : null;
-  });
-  if(caudales.nominal==null){
-    return {error:'No se encontró punto de operación: la bomba no alcanza a vencer la pérdida calculada del circuito. Revisa diámetros, longitudes y sobre todo el arreglo de los calentadores (en serie la pérdida se multiplica).'};
+  if(origenCurva){
+    ESCENARIOS_BANDA.forEach(function(esc){
+      var op = encontrarPuntoOperacionV2(origenCurva, curvaSistemaV2(ficha,esc,tramos,hLFiltroRef,qRefFiltro), origenCurva.qMax);
+      caudales[esc.id] = op ? op.q : null;
+    });
+    if(caudales.nominal==null && !(ficha.caudalMedido>0)){
+      return {error:'No se encontró punto de operación: la bomba no alcanza a vencer la pérdida calculada del circuito. Revisa diámetros, longitudes y sobre todo el arreglo de los calentadores (en serie la pérdida se multiplica).'};
+    }
   }
   var qModelo = caudales.nominal;
   var qModeloMin = (caudales.conservador!=null) ? caudales.conservador : qModelo;
   var qModeloMax = (caudales.optimista!=null) ? caudales.optimista : qModelo;
 
   /* Verificación cruzada por manómetro: segundo estimado independiente,
-     despejado de la lectura de CHK-084 sobre la propia curva de bomba. */
+     despejado de la lectura de CHK-084 sobre la propia curva de bomba. Sin
+     curva de bomba resuelta no hay con qué despejarlo, así que se omite. */
   var qManometro = caudalesManometro.nominal;
   var cruce = null;
   if(qManometro!=null && qModelo>0){
     var desv = (qManometro-qModelo)/qModelo*100;
     cruce = {caudal:qManometro, desviacionPct:desv, coherente:Math.abs(desv)<=25};
-  } else if(ficha.presionManometro>0){
+  } else if(origenCurva && ficha.presionManometro>0){
     /* No hubo intersección: la lectura exige más cabezal del que la bomba puede
        dar a NINGÚN caudal. Antes esto devolvía null y el bloque entero se caía
        del informe en silencio, justo cuando la ficha contiene su contradicción
@@ -1966,7 +1984,7 @@ function calcularHidraulicaV2(ficha, sede){
   var der = derivadosDeCaudal(qEfectivo, ficha, tramos);
   var derLo = derivadosDeCaudal(qMin, ficha, tramos);
   var derHi = derivadosDeCaudal(qMax, ficha, tramos);
-  var cabezal = origenCurva.evalH(qEfectivo);
+  var cabezal = origenCurva ? origenCurva.evalH(qEfectivo) : null;
 
   /* Alerta de caudal excedido: solo tiene sentido cuando el inspector
      declaró 'linea' (sin bypass) — si es 'bypass_linea' el equipo tiene
@@ -2042,7 +2060,8 @@ function calcularHidraulicaV2(ficha, sede){
   var alt = altitudDeSede(sede);
   return {
     modelo: 'v2',
-    origen: origenCurva.label,
+    origen: origenCurva ? origenCurva.label : 'Sin curva de bomba declarada — velocidades y filtración calculadas directo sobre el caudal medido/instrumento en sitio y los tramos (CHK-078)',
+    sinCurvaBomba: !origenCurva,
     caudal: qEfectivo, fuenteCaudal: fuente,
     caudalNominal: qNominal, caudalMin: qMin, caudalMax: qMax,
     caudalModelo: qModelo, caudalModeloMin: qModeloMin, caudalModeloMax: qModeloMax,
@@ -3198,9 +3217,13 @@ function renderResultadoV2(res, ficha){
       (v.msg && v.clase!=='cumple' ? ' <i>'+esc(v.msg)+'</i>' : '')+'</div>';
   }
 
-  var html = '<div class="motorOrigen">Curva usada: '+esc(res.origen)+
+  var html = '<div class="motorOrigen">'+(res.sinCurvaBomba?'':'Curva usada: ')+esc(res.origen)+
     (res.ts ? ' · calculado '+fmtDate(res.ts) : '')+
     '<span class="motorBadge">MODELO v2</span></div>';
+  if(res.sinCurvaBomba){
+    html += '<div class="motorNota">Sin curva de bomba: no hay cabezal, caudal estimado por el modelo ni cruce por manómetro. '+
+      'Las velocidades, la velocidad de filtración y el tiempo de recirculación de abajo se calculan directo sobre el caudal medido/instrumento y los tramos declarados (CHK-078) — que es justo lo que este vaso necesita para verificar el criterio de cumplimiento.</div>';
+  }
 
   /* El caudal se presenta primero como banda, no como punto: un valor único
      con dos decimales transmite una exactitud que el método no tiene. */
@@ -3211,9 +3234,10 @@ function renderResultadoV2(res, ficha){
     var qMdHi=(res.caudalModeloMax!=null)?res.caudalModeloMax:res.caudalMax;
     html += '<div class="motorFila"><span>Caudal <b>medido con caudalímetro</b> (manda sobre el modelo)</span>'+
       '<span class="motorValor">'+res.caudal.toFixed(2)+' m³/h</span></div>';
-    html += '<div class="motorNota">El modelo estimaba '+num(qMd,2,'m³/h')+
-      ' (banda '+num(qMdLo,1)+'–'+num(qMdHi,1)+'). '+
-      'Todas las velocidades, tiempos y veredictos de abajo están calculados sobre el dato medido, no sobre la estimación.</div>';
+    html += '<div class="motorNota">'+(res.sinCurvaBomba
+      ? 'Sin curva de bomba cargada, así que no hay estimación del modelo con qué contrastar.'
+      : 'El modelo estimaba '+num(qMd,2,'m³/h')+' (banda '+num(qMdLo,1)+'–'+num(qMdHi,1)+').')+
+      ' Todas las velocidades, tiempos y veredictos de abajo están calculados sobre el dato medido, no sobre la estimación.</div>';
   } else if(res.fuenteCaudal==='manometro'){
     html += '<div class="motorFila"><span>Caudal <b>despejado del manómetro</b> (reemplaza al modelo)</span>'+
       '<span class="motorValor alerta">'+res.caudal.toFixed(2)+' m³/h</span></div>';

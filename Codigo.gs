@@ -1802,11 +1802,13 @@ function _anexoFichaHidraulica(body, ficha){
     // caudalModelo* (motor >= 2026-09) guarda lo que estimó el modelo aunque
     // mande otra fuente; fichas viejas con 'medido' lo tenían en caudalNominal.
     var qModeloRep = (r.caudalModelo!=null) ? r.caudalModelo
-      : (r.fuenteCaudal==='medido' ? r.caudalNominal : null);
+      : (r.fuenteCaudal==='medido' && !r.sinCurvaBomba ? r.caudalNominal : null);
     if(r.fuenteCaudal==='medido' && qModeloRep!=null){
       var brecha = (qModeloRep - r.caudal)/r.caudal*100;
       filasB1.push(['Caudal que estimaba el modelo', qModeloRep.toFixed(2)+' m³/h ('+
         (brecha>=0?'+':'')+brecha.toFixed(1)+' % frente a la medición)']);
+    } else if(r.sinCurvaBomba){
+      filasB1.push(['Curva de bomba', 'No declarada — sin dato de fábrica ni curva manual con qué contrastar. El caudal del punto de operación es el medido/instrumento en sitio, sin comparación contra un modelo.']);
     }
     if(r.fuenteCaudal==='manometro' && r.caudalModelo!=null){
       var brechaM = (r.caudalModelo - r.caudal)/r.caudal*100;
