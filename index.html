@@ -260,6 +260,8 @@ input,textarea,select{font-family:inherit;}
 .tramoBtnMini.tramoBtnDel{color:var(--c-nocumple);}
 .tramoRowGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
 .tramoAyuda{font-size:10.5px;color:var(--text-faint);margin-top:5px;line-height:1.35;}
+.tramoVelLive{font-size:11px;color:var(--text-dim);margin-top:6px;}
+.tramoVelLive.alerta{color:var(--c-nocumple);font-weight:600;}
 .fichaGrupo{font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 6px;padding-top:9px;border-top:1px solid var(--border-soft);}
 .fichaGrupo:first-child{margin-top:0;padding-top:0;border-top:0;}
 .tramoRowGrid input,.tramoRowGrid select{width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 6px;font-size:11.5px;}
@@ -3046,6 +3048,24 @@ function curvaManualHtml(ficha){
 
    Se guarda en ficha.tuberiaTramos =
    [{nombre,diametro,longitud,accesorios,accesoriosAlta,lado,nLineas}]. */
+/* Velocidad en vivo por tramo, mientras se digita: SOLO se calcula si hay
+   ficha.caudalMedido (dato de instrumento en sitio — caudalímetro, o el que
+   el inspector decida confiar). No corre el modelo de curva de bomba ni
+   depende de los demás tramos, por eso puede pintarse al vuelo con cada
+   tecla en vez de esperar al botón "Calcular caudal y velocidades". Reusa
+   vTramo(), que ya reparte el caudal entre nLineas. */
+function velocidadTramoLiveHtml(ficha, t, i){
+  var q = ficha && ficha.caudalMedido>0 ? ficha.caudalMedido : null;
+  if(q==null || !(t && t.diametro>0)){
+    return '<div class="tramoVelLive" data-tramo-vel-idx="'+i+'">Velocidad: — (requiere Ø del tramo y caudal medido/instrumento en CHK-078)</div>';
+  }
+  var v = vTramo(q, t);
+  var lado = (t.lado==='succion') ? 'succion' : 'presion';
+  var limite = lado==='succion' ? 1.8 : 2.4;
+  var alerta = v > limite;
+  return '<div class="tramoVelLive'+(alerta?' alerta':'')+'" data-tramo-vel-idx="'+i+'">Velocidad con caudal medido ('+q+' m³/h): <b>'+v.toFixed(2)+' m/s</b>'+
+    (alerta ? ' ⚠ supera '+limite+' m/s ('+(lado==='succion'?'succión':'presión')+', Numeral 10.1)' : '')+'</div>';
+}
 function tramosHtml(ficha){
   var tramos = (ficha.tuberiaTramos && ficha.tuberiaTramos.length) ? ficha.tuberiaTramos : [{},{}];
   var html = '<div class="tramosWrap">'+
@@ -3072,6 +3092,7 @@ function tramosHtml(ficha){
         '<input type="number" step="1" data-tramo-idx="'+i+'" data-tramo-campo="accesoriosAlta" placeholder="Acces. alta pérdida" value="'+(t&&t.accesoriosAlta!=null?t.accesoriosAlta:'')+'">'+
         '<input type="number" step="1" min="1" data-tramo-idx="'+i+'" data-tramo-campo="nLineas" placeholder="Líneas paralelas" value="'+(t&&t.nLineas!=null?t.nLineas:'')+'">'+
       '</div>'+
+      velocidadTramoLiveHtml(ficha, t, i)+
       '<label class="tramoManometroChk"><input type="checkbox" data-tramo-idx="'+i+'" data-tramo-campo="manometro"'+(t&&t.manometro?' checked':'')+'> El manómetro del filtro se lee justo después de este tramo</label>'+
       (alerta ? '<div class="fichaAlertaMsg">⚠ Supera el máximo de 8 pulgadas de diámetro permitido (Numeral 10.1).</div>' : '')+
     '</div>';
@@ -3407,6 +3428,22 @@ function renderResultadoV2(res, ficha){
 /* Repinta el color naranja/verde de cada campo de ficha dentro de UNA
    tarjeta ya renderizada, sin reconstruir su HTML (para no perder el foco
    mientras el inspector está escribiendo). Se llama tras cada cambio. */
+/* Repinta la velocidad en vivo de un tramo (o de todos, con idx=null) sin
+   rerenderizar la tarjeta completa — así no se pierde el foco mientras el
+   inspector sigue digitando. Ver velocidadTramoLiveHtml(): solo calcula si
+   hay ficha.caudalMedido, nunca corre el modelo de curva de bomba. */
+function actualizarVelocidadTramoLive(itemEl, idx, ficha){
+  var tramos = ficha.tuberiaTramos || [];
+  var spans = idx==null ? itemEl.querySelectorAll('[data-tramo-vel-idx]') : itemEl.querySelectorAll('[data-tramo-vel-idx="'+idx+'"]');
+  spans.forEach(function(span){
+    var i = parseInt(span.getAttribute('data-tramo-vel-idx'),10);
+    var t = tramos[i];
+    var html = velocidadTramoLiveHtml(ficha, t, i);
+    var tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    span.replaceWith(tmp.firstChild);
+  });
+}
 function refrescarAlertasFicha(itemEl, sess){
   var ficha = getFicha(sess);
   itemEl.querySelectorAll('[data-ficha]').forEach(function(input){
@@ -4054,6 +4091,9 @@ function wireSingleItem(itemEl, it){
         pintarMiniaturas(itemEl);
       } else {
         refrescarAlertasFicha(itemEl, sess);
+        if(key==='caudalMedido'){
+          actualizarVelocidadTramoLive(itemEl, null, ficha);
+        }
         /* tanqueEquilibrio vive en la tarjeta de CHK-102, pero condiciona un
            campo de la tarjeta de CHK-078 (desnivelSuccionDescarga se oculta
            cuando hay tanque). Si esa otra tarjeta ya está expandida y visible
@@ -4135,6 +4175,9 @@ function wireSingleItem(itemEl, it){
             msg.remove();
           }
         }
+      }
+      if(campo==='diametro' || campo==='lado' || campo==='nLineas'){
+        actualizarVelocidadTramoLive(itemEl, idx, ficha);
       }
       maybeAutoSyncFicha();
     });
